@@ -1,0 +1,41 @@
+# 生产环境 Docker Compose 配置
+# 使用方法: docker-compose -f docker-compose.prod.yml up -d
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "80:80"
+    environment:
+      # 必填：PostgreSQL 连接串
+      DATABASE_URL: ${DATABASE_URL}
+      # 必填：JWT 签名密钥
+      JWT_SECRET: ${JWT_SECRET}
+      # 可选：Gin 运行模式
+      GIN_MODE: ${GIN_MODE:-release}
+      # 可选：后端 API 端口
+      SERVER_PORT: ${SERVER_PORT:-8080}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-basegoapp}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
