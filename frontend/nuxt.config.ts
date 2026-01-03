@@ -5,13 +5,13 @@ export default defineNuxtConfig({
 
   modules: ['@nuxt/ui'],
 
-  // SSG 模式
+  // 启用预渲染（SSG 使用 `npm run generate`，SSR 使用 `npm run build`）
   ssr: true,
 
-  // 运行时配置
+  // 运行时配置（自动从环境变量 NUXT_PUBLIC_API_BASE 读取）
   runtimeConfig: {
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api'
+      apiBase: '/api'
     }
   },
 
