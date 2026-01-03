@@ -22,7 +22,6 @@ const USER_KEY = 'auth_user'
 
 export const useAuth = () => {
     const config = useRuntimeConfig()
-    const router = useRouter()
 
     const token = useState<string | null>('auth_token', () => {
         if (import.meta.client) {
@@ -119,7 +118,7 @@ export const useAuth = () => {
             // 忽略错误
         }
         clearAuth()
-        router.push('/login')
+        navigateTo('/login')
     }
 
     const changePassword = async (oldPassword: string, newPassword: string) => {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 const { user, changePassword, logout } = useAuth()
-const router = useRouter()
 
 const passwordForm = reactive({
   oldPassword: '',

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 const { register, login } = useAuth()
-const router = useRouter()
 
 const form = reactive({
   username: '',
@@ -30,7 +29,7 @@ const handleSubmit = async () => {
     await register(form.username, form.password)
     // 注册成功后自动登录
     await login(form.username, form.password)
-    router.push('/')
+    navigateTo('/')
   } catch (e: any) {
     error.value = e.message || '注册失败'
   } finally {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 const { login } = useAuth()
-const router = useRouter()
 
 const form = reactive({
   username: '',
@@ -16,7 +15,7 @@ const handleSubmit = async () => {
   
   try {
     await login(form.username, form.password)
-    router.push('/')
+    navigateTo('/')
   } catch (e: any) {
     error.value = e.message || '登录失败'
   } finally {
