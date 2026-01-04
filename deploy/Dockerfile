@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run generate
 
 # 阶段 2: 构建后端
-FROM golang:1.21-alpine AS backend-builder
+FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app/backend
 # 安装依赖
 RUN apk add --no-cache git
