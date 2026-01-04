@@ -167,12 +167,14 @@ docker-compose -f $ComposeFile -p $ProjectName ps
 Write-Host ""
 if ($Prod) {
     Write-Success "应用已在生产模式下启动"
-    Write-Host "  - 前端: http://localhost" -ForegroundColor Cyan
+    Write-Host "  - 应用: http://localhost" -ForegroundColor Cyan
     Write-Host "  - API: http://localhost/api" -ForegroundColor Cyan
+    Write-Host "  - Swagger: http://localhost/swagger/index.html" -ForegroundColor Cyan
 } else {
     Write-Success "应用已在开发模式下启动"
-    Write-Host "  - 前端: http://localhost:3000" -ForegroundColor Cyan
-    Write-Host "  - API: http://localhost:8080/api" -ForegroundColor Cyan
+    Write-Host "  - 应用: http://localhost" -ForegroundColor Cyan
+    Write-Host "  - API: http://localhost/api" -ForegroundColor Cyan
+    Write-Host "  - Swagger: http://localhost/swagger/index.html" -ForegroundColor Cyan
     Write-Host "  - 数据库: localhost:5432" -ForegroundColor Cyan
 }
 

@@ -1,11 +1,35 @@
+# 开发环境 Docker Compose 配置
+# 使用方法: docker-compose up -d
+
 services:
+  # 应用服务（前后端统一容器）
+  app:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "80:80"
+    environment:
+      # 必填：PostgreSQL 连接串
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable}
+      # 必填：JWT 签名密钥
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      # 可选：Gin 运行模式
+      GIN_MODE: ${GIN_MODE:-debug}
+      # 可选：后端 API 端口
+      SERVER_PORT: ${SERVER_PORT:-8080}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+
   # PostgreSQL 数据库
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: basegoapp
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-basegoapp}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -15,38 +39,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  # 后端 API（开发模式）
-  backend:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile.dev
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable
-      JWT_SECRET: dev-secret-key-change-in-production
-      GIN_MODE: debug
-      SERVER_PORT: "8080"
-    ports:
-      - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app
-    working_dir: /app
-    command: go run main.go
-
-  # 前端（开发模式）
-  frontend:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    ports:
-      - "3000:3000"
-    environment:
-      NUXT_PUBLIC_API_BASE: http://localhost:8080/api
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
