@@ -4,6 +4,9 @@ const colorMode = useColorMode()
 
 <template>
   <UApp>
-    <NuxtPage />
+    <div class="min-h-screen flex flex-col">
+      <NuxtPage />
+      <AppFooter />
+    </div>
   </UApp>
 </template>

@@ -3,7 +3,7 @@ const { isAuthenticated, user, logout } = useAuth()
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+  <div class="flex-1 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
     <!-- 导航栏 -->
     <header class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -180,12 +180,5 @@ const { isAuthenticated, user, logout } = useAuth()
         </UCard>
       </div>
     </main>
-    
-    <!-- Footer -->
-    <footer class="border-t border-gray-200 dark:border-gray-700 mt-16">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center text-gray-500 dark:text-gray-400">
-        <p>© 2025 BaseGoApp. 使用 Nuxt 3 + Go Gin 构建</p>
-      </div>
-    </footer>
   </div>
 </template>
