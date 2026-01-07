@@ -1,5 +1,10 @@
 basePath: /
 definitions:
+  handler.SetUserRoleRequest:
+    properties:
+      is_admin:
+        type: boolean
+    type: object
   response.Response:
     properties:
       code:
@@ -42,6 +47,11 @@ definitions:
     - password
     - username
     type: object
+  service.SystemSettingsResponse:
+    properties:
+      allow_register:
+        type: boolean
+    type: object
   service.TokenResponse:
     properties:
       expires_at:
@@ -49,12 +59,19 @@ definitions:
       token:
         type: string
     type: object
+  service.UpdateSystemSettingsRequest:
+    properties:
+      allow_register:
+        type: boolean
+    type: object
   service.UserResponse:
     properties:
       created_at:
         type: string
       id:
         type: integer
+      is_admin:
+        type: boolean
       username:
         type: string
     type: object
@@ -65,6 +82,69 @@ info:
   title: BaseGoApp API
   version: "1.0"
 paths:
+  /api/admin/users:
+    get:
+      description: 获取所有用户列表（需要管理员权限）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/service.UserResponse'
+                  type: array
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取用户列表
+      tags:
+      - 管理
+  /api/admin/users/{id}/role:
+    put:
+      consumes:
+      - application/json
+      description: 将用户提升或降级管理员权限（需要管理员权限）
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 角色信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.SetUserRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 设置用户角色
+      tags:
+      - 管理
   /api/auth/login:
     post:
       consumes:
@@ -142,6 +222,81 @@ paths:
       summary: 用户注册
       tags:
       - 认证
+  /api/settings/registration-status:
+    get:
+      description: 检查系统是否允许注册（公开接口）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: boolean
+                  type: object
+              type: object
+      summary: 获取注册状态
+      tags:
+      - 设置
+  /api/settings/system:
+    get:
+      description: 获取所有系统设置（需要管理员权限）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.SystemSettingsResponse'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取系统设置
+      tags:
+      - 设置
+    put:
+      consumes:
+      - application/json
+      description: 更新系统设置（需要管理员权限）
+      parameters:
+      - description: 系统设置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.UpdateSystemSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新系统设置
+      tags:
+      - 设置
   /api/user/password:
     put:
       consumes:

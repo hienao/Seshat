@@ -60,3 +60,16 @@ func (r *UserRepository) ExistsByUsername(username string) (bool, error) {
 	err := r.db.Model(&model.User{}).Where("username = ?", username).Count(&count).Error
 	return count > 0, err
 }
+
+// FindAll 获取所有用户
+func (r *UserRepository) FindAll() ([]model.User, error) {
+	var users []model.User
+	err := r.db.Find(&users).Error
+	return users, err
+}
+
+// SetAdmin 设置用户管理员状态
+func (r *UserRepository) SetAdmin(userID uint, isAdmin bool) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Update("is_admin", isAdmin).Error
+}
+

@@ -3,12 +3,17 @@ import type { UseFetchOptions } from 'nuxt/app'
 export interface User {
     id: number
     username: string
+    is_admin: boolean
     created_at: string
 }
 
 export interface TokenResponse {
     token: string
     expires_at: number
+}
+
+export interface SystemSettings {
+    allow_register: boolean
 }
 
 export interface ApiResponse<T = any> {
@@ -39,6 +44,7 @@ export const useAuth = () => {
     })
 
     const isAuthenticated = computed(() => !!token.value)
+    const isAdmin = computed(() => user.value?.is_admin ?? false)
 
     const setAuth = (tokenValue: string, userValue: User) => {
         token.value = tokenValue
@@ -156,15 +162,81 @@ export const useAuth = () => {
         return data.data!
     }
 
+    // 检查是否允许注册
+    const checkRegistrationAllowed = async () => {
+        const data = await $fetch<ApiResponse<{ allowed: boolean }>>(`${config.public.apiBase}/settings/registration-status`)
+        return data?.data?.allowed ?? false
+    }
+
+    // 获取系统设置（管理员）
+    const getSystemSettings = async () => {
+        const data = await $fetch<ApiResponse<SystemSettings>>(`${config.public.apiBase}/settings/system`, {
+            headers: {
+                'Authorization': `Bearer ${token.value}`
+            }
+        })
+        if (!data || data.code !== 0) {
+            throw new Error(data?.message || '获取系统设置失败')
+        }
+        return data.data!
+    }
+
+    // 更新系统设置（管理员）
+    const updateSystemSettings = async (settings: Partial<SystemSettings>) => {
+        const data = await $fetch<ApiResponse<void>>(`${config.public.apiBase}/settings/system`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token.value}`
+            },
+            body: settings
+        })
+        if (!data || data.code !== 0) {
+            throw new Error(data?.message || '更新系统设置失败')
+        }
+    }
+
+    // 获取用户列表（管理员）
+    const listUsers = async () => {
+        const data = await $fetch<ApiResponse<User[]>>(`${config.public.apiBase}/admin/users`, {
+            headers: {
+                'Authorization': `Bearer ${token.value}`
+            }
+        })
+        if (!data || data.code !== 0) {
+            throw new Error(data?.message || '获取用户列表失败')
+        }
+        return data.data!
+    }
+
+    // 设置用户角色（管理员）
+    const setUserRole = async (userId: number, isAdmin: boolean) => {
+        const data = await $fetch<ApiResponse<void>>(`${config.public.apiBase}/admin/users/${userId}/role`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token.value}`
+            },
+            body: { is_admin: isAdmin }
+        })
+        if (!data || data.code !== 0) {
+            throw new Error(data?.message || '设置用户角色失败')
+        }
+    }
+
     return {
         token,
         user,
         isAuthenticated,
+        isAdmin,
         login,
         register,
         logout,
         changePassword,
         fetchProfile,
-        apiFetch
+        apiFetch,
+        checkRegistrationAllowed,
+        getSystemSettings,
+        updateSystemSettings,
+        listUsers,
+        setUserRole
     }
 }

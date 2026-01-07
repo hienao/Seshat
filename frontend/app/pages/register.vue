@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { register, login } = useAuth()
+const { register, login, checkRegistrationAllowed } = useAuth()
 
 const form = reactive({
   username: '',
@@ -9,6 +9,19 @@ const form = reactive({
 
 const loading = ref(false)
 const error = ref('')
+const registrationAllowed = ref(true)
+const checkingStatus = ref(true)
+
+// 检查是否允许注册
+onMounted(async () => {
+  try {
+    registrationAllowed.value = await checkRegistrationAllowed()
+  } catch (e) {
+    registrationAllowed.value = false
+  } finally {
+    checkingStatus.value = false
+  }
+})
 
 const handleSubmit = async () => {
   error.value = ''
@@ -51,7 +64,26 @@ const handleSubmit = async () => {
         </div>
       </template>
 
-      <form @submit.prevent="handleSubmit" class="space-y-5">
+      <!-- 加载状态 -->
+      <div v-if="checkingStatus" class="flex justify-center py-8">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-primary-500 animate-spin" />
+      </div>
+
+      <!-- 不允许注册提示 -->
+      <div v-else-if="!registrationAllowed" class="text-center py-8">
+        <UIcon name="i-heroicons-lock-closed" class="w-16 h-16 mx-auto text-gray-400 mb-4" />
+        <h2 class="text-lg font-medium text-gray-900 dark:text-white mb-2">注册功能已关闭</h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-6">系统当前不允许新用户注册，请联系管理员。</p>
+        <NuxtLink to="/login">
+          <UButton color="primary" size="lg">
+            <UIcon name="i-heroicons-arrow-left" class="w-4 h-4 mr-2" />
+            返回登录
+          </UButton>
+        </NuxtLink>
+      </div>
+
+      <!-- 注册表单 -->
+      <form v-else @submit.prevent="handleSubmit" class="space-y-5">
         <UAlert v-if="error" color="error" :title="error" icon="i-heroicons-exclamation-circle" />
         
         <UFormField label="用户名" name="username" size="lg">

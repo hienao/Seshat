@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const { isAuthenticated, user, logout } = useAuth()
+const { isAuthenticated, user, logout, isAdmin } = useAuth()
 </script>
 
 <template>
@@ -28,6 +28,12 @@ const { isAuthenticated, user, logout } = useAuth()
                 <UButton color="neutral" variant="ghost">
                   <UIcon name="i-heroicons-cog-6-tooth" class="w-4 h-4 mr-1" />
                   个人中心
+                </UButton>
+              </NuxtLink>
+              <NuxtLink v-if="isAdmin" to="/admin">
+                <UButton color="primary" variant="ghost">
+                  <UIcon name="i-heroicons-shield-check" class="w-4 h-4 mr-1" />
+                  系统管理
                 </UButton>
               </NuxtLink>
               <UButton color="error" variant="soft" @click="logout">

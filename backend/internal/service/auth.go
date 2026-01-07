@@ -54,6 +54,7 @@ type TokenResponse struct {
 type UserResponse struct {
 	ID        uint   `json:"id"`
 	Username  string `json:"username"`
+	IsAdmin   bool   `json:"is_admin"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -86,6 +87,7 @@ func (s *AuthService) Register(req *RegisterRequest) (*UserResponse, error) {
 	return &UserResponse{
 		ID:        user.ID,
 		Username:  user.Username,
+		IsAdmin:   user.IsAdmin,
 		CreatedAt: user.CreatedAt.Format(time.RFC3339),
 	}, nil
 }
@@ -107,6 +109,7 @@ func (s *AuthService) Login(req *LoginRequest) (*TokenResponse, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id":  user.ID,
 		"username": user.Username,
+		"is_admin": user.IsAdmin,
 		"exp":      expiresAt.Unix(),
 	})
 
@@ -131,6 +134,7 @@ func (s *AuthService) GetProfile(userID uint) (*UserResponse, error) {
 	return &UserResponse{
 		ID:        user.ID,
 		Username:  user.Username,
+		IsAdmin:   user.IsAdmin,
 		CreatedAt: user.CreatedAt.Format(time.RFC3339),
 	}, nil
 }
@@ -165,7 +169,7 @@ func (s *AuthService) InitDefaultAdmin() error {
 	}
 
 	if count == 0 {
-		_, err := s.Register(&RegisterRequest{
+		_, err := s.RegisterAdmin(&RegisterRequest{
 			Username: "admin",
 			Password: "admin",
 		})
@@ -176,3 +180,63 @@ func (s *AuthService) InitDefaultAdmin() error {
 
 	return nil
 }
+
+// RegisterAdmin 注册管理员用户（内部使用）
+func (s *AuthService) RegisterAdmin(req *RegisterRequest) (*UserResponse, error) {
+	// 检查用户名是否已存在
+	exists, err := s.userRepo.ExistsByUsername(req.Username)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, errors.New("用户名已存在")
+	}
+
+	// 密码加密
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+
+	user := &model.User{
+		Username: req.Username,
+		Password: string(hashedPassword),
+		IsAdmin:  true,
+	}
+
+	if err := s.userRepo.Create(user); err != nil {
+		return nil, err
+	}
+
+	return &UserResponse{
+		ID:        user.ID,
+		Username:  user.Username,
+		IsAdmin:   user.IsAdmin,
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+// ListUsers 获取用户列表
+func (s *AuthService) ListUsers() ([]UserResponse, error) {
+	users, err := s.userRepo.FindAll()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []UserResponse
+	for _, user := range users {
+		result = append(result, UserResponse{
+			ID:        user.ID,
+			Username:  user.Username,
+			IsAdmin:   user.IsAdmin,
+			CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return result, nil
+}
+
+// SetUserRole 设置用户角色
+func (s *AuthService) SetUserRole(userID uint, isAdmin bool) error {
+	return s.userRepo.SetAdmin(userID, isAdmin)
+}
+

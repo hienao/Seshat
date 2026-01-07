@@ -10,13 +10,15 @@ import (
 
 // AuthHandler 认证处理器
 type AuthHandler struct {
-	authService *service.AuthService
+	authService    *service.AuthService
+	settingService *service.SettingService
 }
 
 // NewAuthHandler 创建认证处理器
 func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	return &AuthHandler{
-		authService: service.NewAuthService(cfg),
+		authService:    service.NewAuthService(cfg),
+		settingService: service.NewSettingService(),
 	}
 }
 
@@ -31,6 +33,12 @@ func NewAuthHandler(cfg *config.Config) *AuthHandler {
 // @Failure 400 {object} response.Response
 // @Router /api/auth/register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
+	// 检查是否允许注册
+	if !h.settingService.IsRegistrationAllowed() {
+		response.BadRequest(c, "系统当前不允许注册")
+		return
+	}
+
 	var req service.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "请求参数错误: "+err.Error())

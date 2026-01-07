@@ -27,10 +27,15 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// 创建处理器
 	authHandler := handler.NewAuthHandler(cfg)
 	userHandler := handler.NewUserHandler(cfg)
+	settingHandler := handler.NewSettingHandler()
+	adminHandler := handler.NewAdminHandler(authHandler.GetAuthService())
 
-	// 初始化默认管理员
+	// 初始化默认管理员和系统设置
 	if err := authHandler.GetAuthService().InitDefaultAdmin(); err != nil {
 		panic("Failed to init default admin: " + err.Error())
+	}
+	if err := settingHandler.GetSettingService().InitDefaultSettings(); err != nil {
+		panic("Failed to init default settings: " + err.Error())
 	}
 
 	// API 路由组
@@ -44,12 +49,34 @@ func Setup(cfg *config.Config) *gin.Engine {
 			auth.POST("/logout", middleware.JWTAuth(cfg), authHandler.Logout)
 		}
 
+		// 公开设置路由
+		settings := api.Group("/settings")
+		{
+			settings.GET("/registration-status", settingHandler.GetRegistrationStatus)
+		}
+
 		// 需要认证的路由
 		user := api.Group("/user")
 		user.Use(middleware.JWTAuth(cfg))
 		{
 			user.GET("/profile", userHandler.GetProfile)
 			user.PUT("/password", userHandler.ChangePassword)
+		}
+
+		// 需要管理员权限的设置路由
+		adminSettings := api.Group("/settings")
+		adminSettings.Use(middleware.JWTAuth(cfg), middleware.AdminAuth())
+		{
+			adminSettings.GET("/system", settingHandler.GetSystemSettings)
+			adminSettings.PUT("/system", settingHandler.UpdateSystemSettings)
+		}
+
+		// 管理员路由
+		admin := api.Group("/admin")
+		admin.Use(middleware.JWTAuth(cfg), middleware.AdminAuth())
+		{
+			admin.GET("/users", adminHandler.ListUsers)
+			admin.PUT("/users/:id/role", adminHandler.SetUserRole)
 		}
 	}
 

@@ -30,7 +30,7 @@ func Init(cfg *config.Config) {
 	}
 
 	// 自动迁移
-	if err := DB.AutoMigrate(&model.User{}); err != nil {
+	if err := DB.AutoMigrate(&model.User{}, &model.SystemSetting{}, &model.UserSetting{}); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 

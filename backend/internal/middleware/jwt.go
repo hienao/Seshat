@@ -58,8 +58,13 @@ func JWTAuth(cfg *config.Config) gin.HandlerFunc {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
 			userID := uint(claims["user_id"].(float64))
 			username := claims["username"].(string)
+			isAdmin := false
+			if v, ok := claims["is_admin"].(bool); ok {
+				isAdmin = v
+			}
 			c.Set("user_id", userID)
 			c.Set("username", username)
+			c.Set("is_admin", isAdmin)
 		}
 
 		c.Next()

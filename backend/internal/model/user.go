@@ -11,6 +11,7 @@ type User struct {
 	ID        uint           `gorm:"primarykey" json:"id"`
 	Username  string         `gorm:"uniqueIndex;size:50;not null" json:"username"`
 	Password  string         `gorm:"size:255;not null" json:"-"`
+	IsAdmin   bool           `gorm:"default:false" json:"is_admin"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
