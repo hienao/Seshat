@@ -5,6 +5,8 @@ export default defineNuxtConfig({
 
   modules: ['@nuxt/ui'],
 
+  css: ['~/assets/css/main.css'],
+
   // 启用预渲染（SSG 使用 `npm run generate`，SSR 使用 `npm run build`）
   ssr: true,
 

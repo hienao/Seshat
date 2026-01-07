@@ -39,46 +39,55 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-    <UCard class="w-full max-w-md">
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 dark:from-gray-900 dark:to-gray-800 p-4">
+    <UCard class="w-full max-w-md shadow-xl">
       <template #header>
-        <div class="text-center">
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">注册</h1>
-          <p class="mt-2 text-gray-600 dark:text-gray-400">创建新账户</p>
+        <div class="text-center py-2">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+            <UIcon name="i-heroicons-user-plus" class="w-10 h-10 text-primary-500" />
+          </div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">创建账户</h1>
+          <p class="mt-2 text-gray-600 dark:text-gray-400">注册新账户以开始使用</p>
         </div>
       </template>
 
-      <form @submit.prevent="handleSubmit" class="space-y-6">
-        <UAlert v-if="error" color="error" :title="error" />
+      <form @submit.prevent="handleSubmit" class="space-y-5">
+        <UAlert v-if="error" color="error" :title="error" icon="i-heroicons-exclamation-circle" />
         
-        <UFormField label="用户名" name="username">
+        <UFormField label="用户名" name="username" size="lg">
           <UInput
             v-model="form.username"
             placeholder="请输入用户名（3-50 个字符）"
+            icon="i-heroicons-user"
             size="lg"
+            class="w-full"
             required
             minlength="3"
             maxlength="50"
           />
         </UFormField>
 
-        <UFormField label="密码" name="password">
+        <UFormField label="密码" name="password" size="lg">
           <UInput
             v-model="form.password"
             type="password"
             placeholder="请输入密码（至少 6 位）"
+            icon="i-heroicons-lock-closed"
             size="lg"
+            class="w-full"
             required
             minlength="6"
           />
         </UFormField>
 
-        <UFormField label="确认密码" name="confirmPassword">
+        <UFormField label="确认密码" name="confirmPassword" size="lg">
           <UInput
             v-model="form.confirmPassword"
             type="password"
             placeholder="请再次输入密码"
+            icon="i-heroicons-lock-closed"
             size="lg"
+            class="w-full"
             required
           />
         </UFormField>
@@ -86,21 +95,25 @@ const handleSubmit = async () => {
         <UButton
           type="submit"
           color="primary"
-          size="lg"
+          size="xl"
           block
           :loading="loading"
+          class="mt-6"
         >
+          <UIcon name="i-heroicons-user-plus" class="w-5 h-5 mr-2" />
           注册
         </UButton>
       </form>
 
       <template #footer>
-        <p class="text-center text-gray-600 dark:text-gray-400">
-          已有账户？
-          <NuxtLink to="/login" class="text-primary hover:underline">
-            立即登录
-          </NuxtLink>
-        </p>
+        <div class="text-center py-2">
+          <p class="text-gray-600 dark:text-gray-400">
+            已有账户？
+            <NuxtLink to="/login" class="text-primary-500 hover:text-primary-600 font-medium hover:underline transition-colors">
+              立即登录
+            </NuxtLink>
+          </p>
+        </div>
       </template>
     </UCard>
   </div>
