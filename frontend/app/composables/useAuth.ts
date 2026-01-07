@@ -88,14 +88,19 @@ export const useAuth = () => {
             localStorage.setItem(TOKEN_KEY, tokenValue)
         }
 
-        const { data: profileData, error: profileError } = await apiFetch<User>('/user/profile')
+        // 使用 $fetch 避免缓存问题，确保获取当前登录用户的信息
+        const profileData = await $fetch<ApiResponse<User>>(`${config.public.apiBase}/user/profile`, {
+            headers: {
+                'Authorization': `Bearer ${tokenValue}`
+            }
+        })
 
-        if (profileError.value || !profileData.value || profileData.value.code !== 0) {
+        if (!profileData || profileData.code !== 0) {
             throw new Error('获取用户信息失败')
         }
 
-        setAuth(tokenValue, profileData.value.data!)
-        return profileData.value.data!
+        setAuth(tokenValue, profileData.data!)
+        return profileData.data!
     }
 
     const register = async (username: string, password: string) => {
@@ -133,17 +138,22 @@ export const useAuth = () => {
     }
 
     const fetchProfile = async () => {
-        const { data, error } = await apiFetch<User>('/user/profile')
+        // 使用 $fetch 避免缓存问题
+        const data = await $fetch<ApiResponse<User>>(`${config.public.apiBase}/user/profile`, {
+            headers: {
+                'Authorization': `Bearer ${token.value}`
+            }
+        })
 
-        if (error.value || !data.value || data.value.code !== 0) {
-            throw new Error(data.value?.message || '获取用户信息失败')
+        if (!data || data.code !== 0) {
+            throw new Error(data?.message || '获取用户信息失败')
         }
 
-        user.value = data.value.data!
+        user.value = data.data!
         if (import.meta.client) {
-            localStorage.setItem(USER_KEY, JSON.stringify(data.value.data!))
+            localStorage.setItem(USER_KEY, JSON.stringify(data.data!))
         }
-        return data.value.data!
+        return data.data!
     }
 
     return {
