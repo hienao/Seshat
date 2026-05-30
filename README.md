@@ -22,7 +22,7 @@ cd backend
 go run main.go
 ```
 
-> 默认 SQLite 数据库路径会自动使用 `APP_DATA_DIR/db/basegoapp.db`（无需单独配置 `SQLITE_PATH`）。
+> 默认 SQLite 数据库路径固定为 `/data/db/basegoapp.db`（由容器内部固定目录派生）。
 
 2. **启动前端**
 ```bash
@@ -45,8 +45,6 @@ npm run dev
 | `DB_DRIVER` | ❌ | 数据库类型，默认 `sqlite` | `sqlite` / `postgres` |
 | `HOST_DATA_DIR` | ❌ | 宿主机数据目录（bind mount 源） | `./runtime/data` |
 | `HOST_CACHE_DIR` | ❌ | 宿主机缓存目录（bind mount 源） | `./runtime/cache` |
-| `APP_DATA_DIR` | ❌ | 容器内数据目录（bind mount 目标） | `/data` |
-| `APP_CACHE_DIR` | ❌ | 容器内缓存目录（bind mount 目标） | `/cache` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
 | `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost,http://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000` |
@@ -55,7 +53,6 @@ npm run dev
 | `DEFAULT_ADMIN_USERNAME` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员用户名 | `admin` |
 | `DEFAULT_ADMIN_PASSWORD` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员密码（至少 12 位） | `ChangeMe123456` |
 | `GIN_MODE` | ❌ | Gin 运行模式，默认 `debug` | `release` |
-| `SERVER_PORT` | ❌ | 后端 API 端口，默认 `8080` | `8080` |
 
 #### 挂载目录
 
@@ -67,8 +64,8 @@ npm run dev
 | `/cache/tmp` | 临时文件和运行时缓存 |
 
 其中：
-- `SQLite` 路径固定派生为 `APP_DATA_DIR/db/basegoapp.db`
-- 应用日志目录固定派生为 `APP_CACHE_DIR/logs/app`
+- `SQLite` 路径固定派生为 `/data/db/basegoapp.db`
+- 应用日志目录固定派生为 `/cache/logs/app`
 
 #### DATABASE_URL 格式
 

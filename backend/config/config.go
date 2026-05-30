@@ -27,8 +27,9 @@ type Config struct {
 
 // Load 加载配置
 func Load() *Config {
-	appDataDir := getEnv("APP_DATA_DIR", "/data")
-	appCacheDir := getEnv("APP_CACHE_DIR", "/cache")
+	const appDataDir = "/data"
+	const appCacheDir = "/cache"
+	const serverPort = "8080"
 
 	return &Config{
 		DatabaseURL:          getEnv("DATABASE_URL", ""),
@@ -38,7 +39,7 @@ func Load() *Config {
 		AppCacheDir:          appCacheDir,
 		LogDir:               filepath.Join(appCacheDir, "logs", "app"),
 		JWTSecret:            getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
-		ServerPort:           getEnv("SERVER_PORT", "8080"),
+		ServerPort:           serverPort,
 		GinMode:              getEnv("GIN_MODE", "debug"),
 		CORSAllowedOrigins:   parseCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost,http://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000")),
 		AuthCookieName:       getEnv("AUTH_COOKIE_NAME", "auth_token"),
