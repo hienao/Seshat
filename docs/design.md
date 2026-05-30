@@ -20,7 +20,7 @@
 | **UI 框架** | @nuxt/ui | Nuxt 官方 UI 组件库 |
 | **后端框架** | Go + Gin | 高性能 HTTP 框架 |
 | **API 文档** | Swaggo/swag | 从代码注释自动生成 Swagger 文档 |
-| **数据库** | PostgreSQL | 关系型数据库 |
+| **数据库** | SQLite（默认）/ PostgreSQL（可选） | 默认开箱即用，可切换到 PostgreSQL |
 | **ORM** | GORM | Go 语言 ORM 框架 |
 | **认证** | JWT | Token 存储于 LocalStorage |
 | **容器化** | Docker + Nginx | 静态文件 + API 反向代理 |
@@ -70,7 +70,7 @@ basegoapp/
 │   │       └── router.go       # 路由配置
 │   ├── pkg/
 │   │   ├── database/
-│   │   │   └── postgres.go     # 数据库连接
+│   │   │   └── postgres.go     # 数据库连接（SQLite/PostgreSQL）
 │   │   └── response/
 │   │       └── response.go     # 统一响应格式
 │   └── docs/                   # Swagger 生成的文档
@@ -121,13 +121,17 @@ graph LR
     subgraph Docker Container
         N["Nginx:80 (静态文件+反向代理)"]
         B[Gin API:8080]
+        D[("/data/db/basegoapp.db")]
+        L[("/cache/logs/*")]
     end
     
     C[客户端] --> N
     N -->|"/ (静态文件)"| N
     N -->|/api/*| B
     N -->|/swagger/*| B
-    B --> P[(PostgreSQL)]
+    B --> D
+    B -. optional .-> P[(PostgreSQL)]
+    N --> L
 ```
 
 ### Nginx 路由规则
@@ -135,3 +139,15 @@ graph LR
 - `/` → 静态文件（Nuxt SSG 生成）
 - `/api/*` → 后端 Gin API
 - `/swagger/*` → Swagger 文档
+
+### 数据与缓存目录
+
+- `/data/db/basegoapp.db` → 默认 SQLite 数据库文件
+- `/cache/logs/nginx/` → Nginx 日志
+- `/cache/logs/app/` → 应用日志预留目录
+- `/cache/tmp/` → 临时文件和运行时缓存
+
+### 数据库模式
+
+- 默认模式：`DB_DRIVER=sqlite`，无需 PostgreSQL，数据库文件位于 `/data/db/basegoapp.db`
+- PostgreSQL 模式：设置 `DB_DRIVER=postgres` 和 `DATABASE_URL`，可使用外部数据库或 `docker compose --profile postgres up -d`

@@ -8,7 +8,7 @@
 |------|------|
 | 前端 | Nuxt 3 (SSG) + @nuxt/ui |
 | 后端 | Go + Gin + GORM |
-| 数据库 | PostgreSQL |
+| 数据库 | SQLite（默认）/ PostgreSQL（可选） |
 | 认证 | JWT |
 | 部署 | Docker + Nginx |
 
@@ -16,18 +16,15 @@
 
 ### 本地开发
 
-1. **启动数据库**
-```bash
-docker-compose up db -d
-```
-
-2. **启动后端**
+1. **启动后端**
 ```bash
 cd backend
 go run main.go
 ```
 
-3. **启动前端**
+> 默认 SQLite 数据库路径为 `/data/db/basegoapp.db`。本地开发如需自定义路径，可设置 `SQLITE_PATH=./data/db/basegoapp.db`。
+
+2. **启动前端**
 ```bash
 cd frontend
 npm install
@@ -45,12 +42,28 @@ npm run dev
 
 | 变量名 | 必填 | 说明 | 示例 |
 |--------|------|------|------|
-| `DATABASE_URL` | ✅ | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
+| `DB_DRIVER` | ❌ | 数据库类型，默认 `sqlite` | `sqlite` / `postgres` |
+| `SQLITE_PATH` | ❌ | SQLite 文件路径，默认 `/data/db/basegoapp.db` | `/data/db/basegoapp.db` |
+| `DATA_DIR` | ❌ | 业务持久数据目录，默认 `/data` | `/data` |
+| `CACHE_DIR` | ❌ | 日志/缓存目录，默认 `/cache` | `/cache` |
+| `LOG_DIR` | ❌ | 应用日志目录，默认 `/cache/logs/app` | `/cache/logs/app` |
+| `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
 | `GIN_MODE` | ❌ | Gin 运行模式，默认 `debug` | `release` |
 | `SERVER_PORT` | ❌ | 后端 API 端口，默认 `8080` | `8080` |
 
+#### 挂载目录
+
+| 容器目录 | 用途 |
+|----------|------|
+| `/data/db` | SQLite 数据库文件目录 |
+| `/cache/logs/nginx` | Nginx access/error 日志 |
+| `/cache/logs/app` | 应用日志预留目录 |
+| `/cache/tmp` | 临时文件和运行时缓存 |
+
 #### DATABASE_URL 格式
+
+仅当 `DB_DRIVER=postgres` 时需要配置。
 
 ```
 postgres://用户名:密码@主机:端口/数据库名?sslmode=disable
@@ -71,7 +84,8 @@ docker build -f deploy/Dockerfile -t basegoapp .
 # 运行（替换为实际的数据库连接信息）
 docker run -d \
   -p 80:80 \
-  -e DATABASE_URL="postgres://user:pass@host:5432/dbname?sslmode=disable" \
+  -v basegoapp_data:/data \
+  -v basegoapp_cache:/cache \
   -e JWT_SECRET="your-secret-key-at-least-32-chars" \
   -e GIN_MODE="release" \
   basegoapp
@@ -85,6 +99,13 @@ cp .env.example .env
 # 编辑 .env 文件，配置数据库连接等信息
 # 然后启动
 docker-compose -f docker-compose.prod.yml up -d
+```
+
+如需使用内置 PostgreSQL 服务：
+```bash
+DB_DRIVER=postgres \
+DATABASE_URL="postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable" \
+docker-compose --profile postgres up -d
 ```
 
 ## 项目结构
