@@ -22,7 +22,7 @@ cd backend
 go run main.go
 ```
 
-> 默认 SQLite 数据库路径为 `/data/db/basegoapp.db`。本地开发如需自定义路径，可设置 `SQLITE_PATH=./data/db/basegoapp.db`。
+> 默认 SQLite 数据库路径会自动使用 `APP_DATA_DIR/db/basegoapp.db`（无需单独配置 `SQLITE_PATH`）。
 
 2. **启动前端**
 ```bash
@@ -43,13 +43,13 @@ npm run dev
 | 变量名 | 必填 | 说明 | 示例 |
 |--------|------|------|------|
 | `DB_DRIVER` | ❌ | 数据库类型，默认 `sqlite` | `sqlite` / `postgres` |
-| `SQLITE_PATH` | ❌ | SQLite 文件路径，默认 `/data/db/basegoapp.db` | `/data/db/basegoapp.db` |
-| `DATA_DIR` | ❌ | 业务持久数据目录，默认 `/data` | `/data` |
-| `CACHE_DIR` | ❌ | 日志/缓存目录，默认 `/cache` | `/cache` |
-| `LOG_DIR` | ❌ | 应用日志目录，默认 `/cache/logs/app` | `/cache/logs/app` |
+| `HOST_DATA_DIR` | ❌ | 宿主机数据目录（bind mount 源） | `./runtime/data` |
+| `HOST_CACHE_DIR` | ❌ | 宿主机缓存目录（bind mount 源） | `./runtime/cache` |
+| `APP_DATA_DIR` | ❌ | 容器内数据目录（bind mount 目标） | `/data` |
+| `APP_CACHE_DIR` | ❌ | 容器内缓存目录（bind mount 目标） | `/cache` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
-| `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost:3000,http://127.0.0.1:3000` |
+| `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost,http://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000` |
 | `AUTH_COOKIE_NAME` | ❌ | 认证 Cookie 名称 | `auth_token` |
 | `AUTH_COOKIE_SECURE` | ❌ | 是否仅 HTTPS 发送 Cookie | `false` |
 | `DEFAULT_ADMIN_USERNAME` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员用户名 | `admin` |
@@ -65,6 +65,10 @@ npm run dev
 | `/cache/logs/nginx` | Nginx access/error 日志 |
 | `/cache/logs/app` | 应用日志预留目录 |
 | `/cache/tmp` | 临时文件和运行时缓存 |
+
+其中：
+- `SQLite` 路径固定派生为 `APP_DATA_DIR/db/basegoapp.db`
+- 应用日志目录固定派生为 `APP_CACHE_DIR/logs/app`
 
 #### DATABASE_URL 格式
 
@@ -111,6 +115,19 @@ docker-compose -f docker-compose.prod.yml up -d
 DB_DRIVER=postgres \
 DATABASE_URL="postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable" \
 docker-compose --profile postgres up -d
+```
+
+### 一键部署脚本（macOS/Linux）
+
+```bash
+# 开发环境部署
+./deploy.sh
+
+# 生产环境部署
+./deploy.sh --prod
+
+# 强制无缓存重建
+./deploy.sh --force
 ```
 
 ## 安全基线说明
