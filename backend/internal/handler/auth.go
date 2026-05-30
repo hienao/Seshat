@@ -4,6 +4,7 @@ import (
 	"basegoapp/config"
 	"basegoapp/internal/service"
 	"basegoapp/pkg/response"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,6 +13,7 @@ import (
 type AuthHandler struct {
 	authService    *service.AuthService
 	settingService *service.SettingService
+	cfg            *config.Config
 }
 
 // NewAuthHandler 创建认证处理器
@@ -19,6 +21,7 @@ func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	return &AuthHandler{
 		authService:    service.NewAuthService(cfg),
 		settingService: service.NewSettingService(),
+		cfg:            cfg,
 	}
 }
 
@@ -77,6 +80,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(h.cfg.AuthCookieName, token.Token, 24*60*60, "/", "", h.cfg.AuthCookieSecure, true)
+
 	response.Success(c, token)
 }
 
@@ -89,7 +95,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Success 200 {object} response.Response
 // @Router /api/auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// JWT 无状态，退出由前端清除 LocalStorage 中的 Token
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(h.cfg.AuthCookieName, "", -1, "/", "", h.cfg.AuthCookieSecure, true)
 	response.Success(c, nil)
 }
 

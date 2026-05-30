@@ -22,7 +22,7 @@
 | **API 文档** | Swaggo/swag | 从代码注释自动生成 Swagger 文档 |
 | **数据库** | SQLite（默认）/ PostgreSQL（可选） | 默认开箱即用，可切换到 PostgreSQL |
 | **ORM** | GORM | Go 语言 ORM 框架 |
-| **认证** | JWT | Token 存储于 LocalStorage |
+| **认证** | JWT + HttpOnly Cookie | 令牌存于 HttpOnly Cookie，后端校验 token_version |
 | **容器化** | Docker + Nginx | 静态文件 + API 反向代理 |
 
 ---
@@ -103,14 +103,19 @@ basegoapp/
 
 ### 默认用户
 
-- 用户名: `admin`
-- 密码: `admin`
-- 仅在数据库无用户时自动创建
+- 数据库为空时，通过 `DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD` 初始化管理员
+- 默认管理员密码要求至少 12 位，禁止弱口令 `admin/admin`
 
 ### 密码策略
 
 - 最小长度：6 位
 - 无复杂度要求
+
+### 安全增强
+
+- CORS 使用白名单：`CORS_ALLOWED_ORIGINS`
+- 登录令牌写入 HttpOnly Cookie，前端不再依赖 LocalStorage token
+- 用户改密和角色变更时递增 `token_version`，使旧 JWT 立即失效
 
 ---
 

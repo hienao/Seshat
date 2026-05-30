@@ -7,7 +7,7 @@ export default defineNuxtRouteMiddleware((to) => {
     const { isAuthenticated } = useAuth()
 
     // 需要认证的页面
-    const protectedRoutes = ['/profile']
+    const protectedRoutes = ['/profile', '/admin']
 
     if (protectedRoutes.includes(to.path) && !isAuthenticated.value) {
         return navigateTo('/login')

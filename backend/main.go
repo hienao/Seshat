@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strings"
 
 	"basegoapp/config"
 	_ "basegoapp/docs"
@@ -24,6 +25,7 @@ import (
 func main() {
 	// 加载配置
 	cfg := config.Load()
+	validateSecurityConfig(cfg)
 
 	// 初始化数据库
 	database.Init(cfg)
@@ -35,5 +37,15 @@ func main() {
 	log.Printf("Server starting on port %s", cfg.ServerPort)
 	if err := r.Run(":" + cfg.ServerPort); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
+	}
+}
+
+func validateSecurityConfig(cfg *config.Config) {
+	if strings.ToLower(cfg.GinMode) != "release" {
+		return
+	}
+
+	if len(cfg.JWTSecret) < 32 || cfg.JWTSecret == "your-secret-key-change-in-production" {
+		log.Fatal("In release mode, JWT_SECRET must be at least 32 chars and cannot use default value")
 	}
 }

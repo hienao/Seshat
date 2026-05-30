@@ -70,6 +70,18 @@ func (r *UserRepository) FindAll() ([]model.User, error) {
 
 // SetAdmin 设置用户管理员状态
 func (r *UserRepository) SetAdmin(userID uint, isAdmin bool) error {
-	return r.db.Model(&model.User{}).Where("id = ?", userID).Update("is_admin", isAdmin).Error
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"is_admin":      isAdmin,
+		"token_version": gorm.Expr("token_version + 1"),
+	}).Error
 }
 
+// FindAuthVersionByID 查询用户认证版本和角色信息
+func (r *UserRepository) FindAuthVersionByID(id uint) (*model.User, error) {
+	var user model.User
+	err := r.db.Select("id", "username", "is_admin", "token_version").First(&user, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}

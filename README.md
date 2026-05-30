@@ -49,6 +49,11 @@ npm run dev
 | `LOG_DIR` | ❌ | 应用日志目录，默认 `/cache/logs/app` | `/cache/logs/app` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
+| `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost:3000,http://127.0.0.1:3000` |
+| `AUTH_COOKIE_NAME` | ❌ | 认证 Cookie 名称 | `auth_token` |
+| `AUTH_COOKIE_SECURE` | ❌ | 是否仅 HTTPS 发送 Cookie | `false` |
+| `DEFAULT_ADMIN_USERNAME` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员用户名 | `admin` |
+| `DEFAULT_ADMIN_PASSWORD` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员密码（至少 12 位） | `ChangeMe123456` |
 | `GIN_MODE` | ❌ | Gin 运行模式，默认 `debug` | `release` |
 | `SERVER_PORT` | ❌ | 后端 API 端口，默认 `8080` | `8080` |
 
@@ -107,6 +112,14 @@ DB_DRIVER=postgres \
 DATABASE_URL="postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable" \
 docker-compose --profile postgres up -d
 ```
+
+## 安全基线说明
+
+- CORS 默认使用白名单模式，`Origin` 不在 `CORS_ALLOWED_ORIGINS` 中会被拒绝。
+- 登录后令牌写入 HttpOnly Cookie，前端不再依赖 LocalStorage 保存 token。
+- 用户改密或角色变更后，旧 JWT 会立即失效（基于 `token_version` 校验）。
+- 生产模式（`GIN_MODE=release`）下，`JWT_SECRET` 必须为非默认值且长度至少 32 位。
+- 当数据库为空时，必须通过 `DEFAULT_ADMIN_USERNAME` 和 `DEFAULT_ADMIN_PASSWORD` 初始化管理员；弱口令 `admin/admin` 被禁止。
 
 ## 项目结构
 
