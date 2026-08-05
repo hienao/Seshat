@@ -4,6 +4,7 @@ import (
 	"basegoapp/config"
 	"basegoapp/internal/handler"
 	"basegoapp/internal/middleware"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -19,7 +20,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	r := gin.Default()
 
 	// CORS 中间件
-	r.Use(corsMiddleware())
+	r.Use(corsMiddleware(cfg))
 
 	// Swagger 文档
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -84,10 +85,27 @@ func Setup(cfg *config.Config) *gin.Engine {
 }
 
 // corsMiddleware CORS 中间件
-func corsMiddleware() gin.HandlerFunc {
+func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
+	allowedOrigins := make(map[string]struct{}, len(cfg.CORSAllowedOrigins))
+	for _, origin := range cfg.CORSAllowedOrigins {
+		allowedOrigins[origin] = struct{}{}
+	}
+
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			if _, ok := allowedOrigins[origin]; !ok {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"code":    -1,
+					"message": "Origin 不在 CORS 白名单中",
+				})
+				return
+			}
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Vary", "Origin")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 

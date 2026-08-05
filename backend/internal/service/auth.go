@@ -2,6 +2,8 @@ package service
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"basegoapp/config"
@@ -14,15 +16,19 @@ import (
 
 // AuthService 认证服务
 type AuthService struct {
-	userRepo  *repository.UserRepository
-	jwtSecret string
+	userRepo             *repository.UserRepository
+	jwtSecret            string
+	defaultAdminUsername string
+	defaultAdminPassword string
 }
 
 // NewAuthService 创建认证服务实例
 func NewAuthService(cfg *config.Config) *AuthService {
 	return &AuthService{
-		userRepo:  repository.NewUserRepository(),
-		jwtSecret: cfg.JWTSecret,
+		userRepo:             repository.NewUserRepository(),
+		jwtSecret:            cfg.JWTSecret,
+		defaultAdminUsername: strings.TrimSpace(cfg.DefaultAdminUsername),
+		defaultAdminPassword: strings.TrimSpace(cfg.DefaultAdminPassword),
 	}
 }
 
@@ -107,10 +113,11 @@ func (s *AuthService) Login(req *LoginRequest) (*TokenResponse, error) {
 	// 生成 JWT Token
 	expiresAt := time.Now().Add(24 * time.Hour)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id":  user.ID,
-		"username": user.Username,
-		"is_admin": user.IsAdmin,
-		"exp":      expiresAt.Unix(),
+		"user_id":       user.ID,
+		"username":      user.Username,
+		"is_admin":      user.IsAdmin,
+		"token_version": user.TokenVersion,
+		"exp":           expiresAt.Unix(),
 	})
 
 	tokenString, err := token.SignedString([]byte(s.jwtSecret))
@@ -158,6 +165,7 @@ func (s *AuthService) ChangePassword(userID uint, req *ChangePasswordRequest) er
 	}
 
 	user.Password = string(hashedPassword)
+	user.TokenVersion++
 	return s.userRepo.Update(user)
 }
 
@@ -169,12 +177,22 @@ func (s *AuthService) InitDefaultAdmin() error {
 	}
 
 	if count == 0 {
+		if s.defaultAdminUsername == "" || s.defaultAdminPassword == "" {
+			return errors.New("首次启动未检测到用户，请设置 DEFAULT_ADMIN_USERNAME 和 DEFAULT_ADMIN_PASSWORD 初始化管理员")
+		}
+		if len(s.defaultAdminPassword) < 12 {
+			return errors.New("DEFAULT_ADMIN_PASSWORD 长度至少 12 位")
+		}
+		if strings.EqualFold(s.defaultAdminUsername, "admin") && strings.EqualFold(s.defaultAdminPassword, "admin") {
+			return errors.New("禁止使用弱口令 admin/admin 初始化管理员")
+		}
+
 		_, err := s.RegisterAdmin(&RegisterRequest{
-			Username: "admin",
-			Password: "admin",
+			Username: s.defaultAdminUsername,
+			Password: s.defaultAdminPassword,
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("初始化默认管理员失败: %w", err)
 		}
 	}
 
@@ -239,4 +257,3 @@ func (s *AuthService) ListUsers() ([]UserResponse, error) {
 func (s *AuthService) SetUserRole(userID uint, isAdmin bool) error {
 	return s.userRepo.SetAdmin(userID, isAdmin)
 }
-

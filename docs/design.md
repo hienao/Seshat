@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-创建一个全栈模板工程，前端使用 Nuxt + @nuxt/ui，后端使用 Go + Gin，最终打包为单一 Docker 镜像部署。
+创建一个全栈模板工程，前端使用 React + Vite + Appica UI，后端使用 Go + Gin，最终打包为单一 Docker 镜像部署。
 
 > [!IMPORTANT]
 > 工程名 `basegoapp` 仅在以下位置声明，便于后期修改：
@@ -16,13 +16,14 @@
 
 | 层级 | 技术选型 | 说明 |
 |------|----------|------|
-| **前端框架** | Nuxt 3 (SSG) | Vue 3 框架，静态生成模式 |
-| **UI 框架** | @nuxt/ui | Nuxt 官方 UI 组件库 |
+| **前端框架** | React 19 + Vite | SPA 静态构建，路由页面按需加载 |
+| **UI 框架** | Appica UI + Tailwind CSS 4 | 可访问的 React 组件与原子化样式 |
+| **前端状态** | TanStack Query + Zustand | 分离服务端缓存与客户端会话状态 |
 | **后端框架** | Go + Gin | 高性能 HTTP 框架 |
 | **API 文档** | Swaggo/swag | 从代码注释自动生成 Swagger 文档 |
-| **数据库** | PostgreSQL | 关系型数据库 |
+| **数据库** | SQLite（默认）/ PostgreSQL（可选） | 默认开箱即用，可切换到 PostgreSQL |
 | **ORM** | GORM | Go 语言 ORM 框架 |
-| **认证** | JWT | Token 存储于 LocalStorage |
+| **认证** | JWT + HttpOnly Cookie | 令牌存于 HttpOnly Cookie，后端校验 token_version |
 | **容器化** | Docker + Nginx | 静态文件 + API 反向代理 |
 
 ---
@@ -31,21 +32,16 @@
 
 ```
 basegoapp/
-├── frontend/                    # 前端 Nuxt 项目
-│   ├── nuxt.config.ts
+├── frontend/                    # 前端 React + Vite 项目
+│   ├── vite.config.ts
 │   ├── package.json
-│   ├── app.vue
-│   ├── pages/
-│   │   ├── index.vue           # 首页
-│   │   ├── login.vue           # 登录页
-│   │   ├── register.vue        # 注册页
-│   │   └── profile.vue         # 个人中心（修改密码）
-│   ├── components/
-│   │   └── ...
-│   ├── composables/
-│   │   └── useAuth.ts          # 认证组合式函数
-│   ├── middleware/
-│   │   └── auth.ts             # 路由认证中间件
+│   ├── src/
+│   │   ├── api/                # API 封装与 Swagger 生成客户端
+│   │   ├── components/         # 通用组件、布局与数据表格
+│   │   ├── features/           # 业务 hooks
+│   │   ├── pages/              # 首页、认证、个人中心、管理页
+│   │   ├── router/             # React Router 与权限守卫
+│   │   └── stores/             # Zustand 状态
 │   └── public/
 │
 ├── backend/                     # 后端 Go 项目
@@ -70,7 +66,7 @@ basegoapp/
 │   │       └── router.go       # 路由配置
 │   ├── pkg/
 │   │   ├── database/
-│   │   │   └── postgres.go     # 数据库连接
+│   │   │   └── postgres.go     # 数据库连接（SQLite/PostgreSQL）
 │   │   └── response/
 │   │       └── response.go     # 统一响应格式
 │   └── docs/                   # Swagger 生成的文档
@@ -103,14 +99,19 @@ basegoapp/
 
 ### 默认用户
 
-- 用户名: `admin`
-- 密码: `admin`
-- 仅在数据库无用户时自动创建
+- 数据库为空时，通过 `DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD` 初始化管理员
+- 默认管理员密码要求至少 12 位，禁止弱口令 `admin/admin`
 
 ### 密码策略
 
 - 最小长度：6 位
 - 无复杂度要求
+
+### 安全增强
+
+- CORS 使用白名单：`CORS_ALLOWED_ORIGINS`
+- 登录令牌写入 HttpOnly Cookie，前端不再依赖 LocalStorage token
+- 用户改密和角色变更时递增 `token_version`，使旧 JWT 立即失效
 
 ---
 
@@ -121,17 +122,33 @@ graph LR
     subgraph Docker Container
         N["Nginx:80 (静态文件+反向代理)"]
         B[Gin API:8080]
+        D[("/data/db/basegoapp.db")]
+        L[("/cache/logs/*")]
     end
     
     C[客户端] --> N
     N -->|"/ (静态文件)"| N
     N -->|/api/*| B
     N -->|/swagger/*| B
-    B --> P[(PostgreSQL)]
+    B --> D
+    B -. optional .-> P[(PostgreSQL)]
+    N --> L
 ```
 
 ### Nginx 路由规则
 
-- `/` → 静态文件（Nuxt SSG 生成）
+- `/` → 静态文件（Vite SPA 构建，未命中路由回退到 `index.html`）
 - `/api/*` → 后端 Gin API
 - `/swagger/*` → Swagger 文档
+
+### 数据与缓存目录
+
+- `/data/db/basegoapp.db` → 默认 SQLite 数据库文件
+- `/cache/logs/nginx/` → Nginx 日志
+- `/cache/logs/app/` → 应用日志预留目录
+- `/cache/tmp/` → 临时文件和运行时缓存
+
+### 数据库模式
+
+- 默认模式：`DB_DRIVER=sqlite`，无需 PostgreSQL，数据库文件位于 `/data/db/basegoapp.db`
+- PostgreSQL 模式：设置 `DB_DRIVER=postgres` 和 `DATABASE_URL`，可使用外部数据库或 `docker compose --profile postgres up -d`
