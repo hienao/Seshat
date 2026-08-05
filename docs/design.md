@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-创建一个全栈模板工程，前端使用 Nuxt + @nuxt/ui，后端使用 Go + Gin，最终打包为单一 Docker 镜像部署。
+创建一个全栈模板工程，前端使用 React + Vite + Appica UI，后端使用 Go + Gin，最终打包为单一 Docker 镜像部署。
 
 > [!IMPORTANT]
 > 工程名 `basegoapp` 仅在以下位置声明，便于后期修改：
@@ -16,8 +16,9 @@
 
 | 层级 | 技术选型 | 说明 |
 |------|----------|------|
-| **前端框架** | Nuxt 3 (SSG) | Vue 3 框架，静态生成模式 |
-| **UI 框架** | @nuxt/ui | Nuxt 官方 UI 组件库 |
+| **前端框架** | React 19 + Vite | SPA 静态构建，路由页面按需加载 |
+| **UI 框架** | Appica UI + Tailwind CSS 4 | 可访问的 React 组件与原子化样式 |
+| **前端状态** | TanStack Query + Zustand | 分离服务端缓存与客户端会话状态 |
 | **后端框架** | Go + Gin | 高性能 HTTP 框架 |
 | **API 文档** | Swaggo/swag | 从代码注释自动生成 Swagger 文档 |
 | **数据库** | SQLite（默认）/ PostgreSQL（可选） | 默认开箱即用，可切换到 PostgreSQL |
@@ -31,21 +32,16 @@
 
 ```
 basegoapp/
-├── frontend/                    # 前端 Nuxt 项目
-│   ├── nuxt.config.ts
+├── frontend/                    # 前端 React + Vite 项目
+│   ├── vite.config.ts
 │   ├── package.json
-│   ├── app.vue
-│   ├── pages/
-│   │   ├── index.vue           # 首页
-│   │   ├── login.vue           # 登录页
-│   │   ├── register.vue        # 注册页
-│   │   └── profile.vue         # 个人中心（修改密码）
-│   ├── components/
-│   │   └── ...
-│   ├── composables/
-│   │   └── useAuth.ts          # 认证组合式函数
-│   ├── middleware/
-│   │   └── auth.ts             # 路由认证中间件
+│   ├── src/
+│   │   ├── api/                # API 封装与 Swagger 生成客户端
+│   │   ├── components/         # 通用组件、布局与数据表格
+│   │   ├── features/           # 业务 hooks
+│   │   ├── pages/              # 首页、认证、个人中心、管理页
+│   │   ├── router/             # React Router 与权限守卫
+│   │   └── stores/             # Zustand 状态
 │   └── public/
 │
 ├── backend/                     # 后端 Go 项目
@@ -141,7 +137,7 @@ graph LR
 
 ### Nginx 路由规则
 
-- `/` → 静态文件（Nuxt SSG 生成）
+- `/` → 静态文件（Vite SPA 构建，未命中路由回退到 `index.html`）
 - `/api/*` → 后端 Gin API
 - `/swagger/*` → Swagger 文档
 

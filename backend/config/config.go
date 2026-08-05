@@ -41,7 +41,7 @@ func Load() *Config {
 		JWTSecret:            getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
 		ServerPort:           serverPort,
 		GinMode:              getEnv("GIN_MODE", "debug"),
-		CORSAllowedOrigins:   parseCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost,http://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000")),
+		CORSAllowedOrigins:   parseCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173")),
 		AuthCookieName:       getEnv("AUTH_COOKIE_NAME", "auth_token"),
 		AuthCookieSecure:     getEnvBool("AUTH_COOKIE_SECURE", false),
 		DefaultAdminUsername: getEnv("DEFAULT_ADMIN_USERNAME", ""),

@@ -1,12 +1,12 @@
 # BaseGoApp
 
-基于 Nuxt 3 + Go Gin 的全栈模板工程。
+基于 React 19 + Go Gin 的全栈模板工程。
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Nuxt 3 (SSG) + @nuxt/ui |
+| 前端 | React 19 + Vite + Appica UI + Tailwind CSS 4 |
 | 后端 | Go + Gin + GORM |
 | 数据库 | SQLite（默认）/ PostgreSQL（可选） |
 | 认证 | JWT |
@@ -32,9 +32,9 @@ npm run dev
 ```
 
 4. **访问应用**
-- 前端: http://localhost:3000
+- 前端: http://localhost:5173
 - API 文档: http://localhost:8080/swagger/index.html
-- 默认用户: admin / admin
+- 首次启动管理员由 `DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD` 初始化
 
 ### Docker 部署
 
@@ -47,7 +47,7 @@ npm run dev
 | `HOST_CACHE_DIR` | ❌ | 宿主机缓存目录（bind mount 源） | `./runtime/cache` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
-| `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost,http://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000` |
+| `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173` |
 | `AUTH_COOKIE_NAME` | ❌ | 认证 Cookie 名称 | `auth_token` |
 | `AUTH_COOKIE_SECURE` | ❌ | 是否仅 HTTPS 发送 Cookie | `false` |
 | `DEFAULT_ADMIN_USERNAME` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员用户名 | `admin` |
@@ -139,12 +139,14 @@ docker-compose --profile postgres up -d
 
 ```
 basegoapp/
-├── frontend/          # Nuxt 前端
-│   ├── app/
-│   │   ├── pages/     # 页面
-│   │   ├── composables/ # 组合式函数
-│   │   └── middleware/  # 路由中间件
-│   └── nuxt.config.ts
+├── frontend/          # React + Vite 前端
+│   ├── src/
+│   │   ├── api/       # API 封装与生成客户端
+│   │   ├── components/# Appica UI 业务组件
+│   │   ├── pages/     # 路由页面
+│   │   ├── router/    # 路由与权限守卫
+│   │   └── stores/    # Zustand 状态
+│   └── vite.config.ts
 ├── backend/           # Go 后端
 │   ├── internal/      # 内部模块
 │   ├── pkg/           # 公共包

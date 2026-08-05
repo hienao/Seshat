@@ -4,7 +4,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run generate
+RUN npm run build
 
 # 阶段 2: 构建后端
 FROM golang:1.25-alpine AS backend-builder
@@ -31,7 +31,7 @@ WORKDIR /app
 COPY --from=backend-builder /app/backend/main .
 
 # 复制前端静态文件
-COPY --from=frontend-builder /app/frontend/.output/public /usr/share/nginx/html
+COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
 # 复制 Nginx 配置
 COPY deploy/nginx.conf /etc/nginx/nginx.conf
