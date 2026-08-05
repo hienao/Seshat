@@ -20,7 +20,7 @@ export function HomePage() {
         <h1 className="mx-auto mt-7 max-w-4xl text-5xl font-black tracking-[-0.055em] text-neutral-950 dark:text-white sm:text-7xl">
           从可靠的基础出发，<span className="text-emerald-700 dark:text-emerald-400">更快交付产品</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-neutral-600 dark:text-neutral-400">BaseGoApp 已准备好认证、用户管理、数据库持久化和容器部署，让业务代码成为项目的第一优先级。</p>
+        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-neutral-600 dark:text-neutral-400">Seshat 已准备好认证、用户管理、数据库持久化和容器部署，让业务代码成为项目的第一优先级。</p>
         <div className="mt-9 flex flex-wrap justify-center gap-3">
           {user ? <AppButton render={<Link to="/profile" />} size="lg">进入个人中心</AppButton> : <AppButton render={<Link to="/register" />} size="lg"><Rocket size={18} />立即开始</AppButton>}
           <AppButton render={<a href="/swagger/index.html" target="_blank" rel="noreferrer" />} variant="outline" size="lg"><FileText size={18} />API 文档</AppButton>

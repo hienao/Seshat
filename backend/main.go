@@ -10,9 +10,9 @@ import (
 	"basegoapp/pkg/database"
 )
 
-// @title BaseGoApp API
+// @title Seshat API
 // @version 1.0
-// @description BaseGoApp 模板工程 API 文档
+// @description Seshat 模板工程 API 文档
 
 // @host localhost:8080
 // @BasePath /

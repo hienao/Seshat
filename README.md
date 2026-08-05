@@ -1,4 +1,4 @@
-# BaseGoApp
+# Seshat
 
 基于 React 19 + Go Gin 的全栈模板工程。
 

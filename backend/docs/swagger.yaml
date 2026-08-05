@@ -78,8 +78,8 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: BaseGoApp 模板工程 API 文档
-  title: BaseGoApp API
+  description: Seshat 模板工程 API 文档
+  title: Seshat API
   version: "1.0"
 paths:
   /api/admin/users:

@@ -19,7 +19,7 @@ for arg in "$@"; do
       ;;
     -h|--help)
       cat <<'EOF'
-BaseGoApp 一键部署脚本 (macOS/Linux)
+Seshat 一键部署脚本 (macOS/Linux)
 
 用法:
   ./deploy.sh [--prod] [--force] [--skip-env-check]
@@ -117,7 +117,7 @@ compose() {
 
 echo
 echo "========================================"
-echo "   BaseGoApp 一键部署脚本"
+echo "   Seshat 一键部署脚本"
 echo "========================================"
 echo
 
