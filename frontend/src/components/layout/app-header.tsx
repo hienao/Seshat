@@ -21,8 +21,8 @@ export function AppHeader() {
     <header className="sticky top-0 z-40 border-b border-neutral-200/70 bg-white/82 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/82">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="group flex items-center gap-2.5" onClick={() => setOpen(false)}>
-          <span className="grid size-9 place-items-center rounded-xl bg-emerald-700 font-mono text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition group-hover:-rotate-3">BG</span>
-          <span className="font-bold tracking-tight text-neutral-950 dark:text-white">BaseGoApp</span>
+          <span className="grid size-9 place-items-center rounded-xl bg-emerald-700 font-mono text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition group-hover:-rotate-3">S</span>
+          <span className="font-bold tracking-tight text-neutral-950 dark:text-white">Seshat</span>
         </Link>
         <nav className="hidden items-center gap-1 md:flex">
           {links.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} className={navClass}><Icon size={17} />{label}</NavLink>)}

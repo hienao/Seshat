@@ -1,4 +1,4 @@
-# BaseGoApp Frontend
+# Seshat Frontend
 
 React 19 + Vite + Appica UI 前端。服务端状态由 TanStack Query 管理，当前用户由 Zustand 管理，路由使用 React Router。
 

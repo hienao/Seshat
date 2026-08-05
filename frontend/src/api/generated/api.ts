@@ -317,12 +317,12 @@ export class HttpClient<SecurityDataType = unknown> {
 }
 
 /**
- * @title BaseGoApp API
+ * @title Seshat API
  * @version 1.0
  * @baseUrl //localhost:8080
  * @contact
  *
- * BaseGoApp 模板工程 API 文档
+ * Seshat 模板工程 API 文档
  */
 export class Api<
   SecurityDataType extends unknown,

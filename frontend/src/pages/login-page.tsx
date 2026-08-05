@@ -26,7 +26,7 @@ export function LoginPage() {
   return (
     <div className="grid min-h-[calc(100vh-8rem)] place-items-center px-4 py-12">
       <Panel className="rise-in w-full max-w-md">
-        <div className="mb-7 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><Login size={28} /></span><h1 className="mt-4 text-2xl font-bold tracking-tight">欢迎回来</h1><p className="mt-1 text-sm text-neutral-500">登录账户以继续使用 BaseGoApp</p></div>
+        <div className="mb-7 text-center"><span className="mx-auto grid size-14 place-items-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"><Login size={28} /></span><h1 className="mt-4 text-2xl font-bold tracking-tight">欢迎回来</h1><p className="mt-1 text-sm text-neutral-500">登录账户以继续使用 Seshat</p></div>
         <form className="space-y-5" onSubmit={(event) => void submit(event)}>
           {login.error && <Message variant="error" title={errorMessage(login.error, '登录失败')} />}
           <FormField label="用户名"><Input value={username} onChange={(event) => setUsername(event.target.value)} startSlot={<User size={17} />} placeholder="请输入用户名" autoComplete="username" required minLength={3} /></FormField>
