@@ -1,0 +1,171 @@
+name: Build and publish Docker image
+
+on:
+  pull_request:
+    branches:
+      - beta
+      - main
+    types:
+      - closed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-publish-${{ github.event.pull_request.base.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ github.event.pull_request.base.ref }} image
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Resolve image metadata
+        id: metadata
+        shell: bash
+        env:
+          TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DOCKERHUB_USERNAME}" ]]; then
+            echo "::error::GitHub Secret DOCKERHUB_USERNAME is not configured"
+            exit 1
+          fi
+
+          image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
+          if [[ "${image}" != "${image,,}" ]]; then
+            echo "::error::Docker image name must be lowercase: ${image}"
+            exit 1
+          fi
+
+          case "${TARGET_BRANCH}" in
+            beta)
+              version_file="VERSION_BETA"
+              channel="beta"
+              ;;
+            main)
+              version_file="VERSION_RELEASE"
+              channel="release"
+              ;;
+            *)
+              echo "::error::Unsupported target branch: ${TARGET_BRANCH}"
+              exit 1
+              ;;
+          esac
+
+          if [[ ! -f "${version_file}" ]]; then
+            echo "::error::${version_file} file is missing"
+            exit 1
+          fi
+
+          app_version="$(tr -d '[:space:]' < "${version_file}")"
+          if [[ ! "${app_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::${version_file} must use semantic version format such as v0.0.1: ${app_version}"
+            exit 1
+          fi
+
+          if [[ "${TARGET_BRANCH}" == "beta" ]]; then
+            version="beta-${app_version}"
+          else
+            version="${app_version}"
+          fi
+
+          {
+            echo "image=${image}"
+            echo "version=${version}"
+            echo "version_file=${version_file}"
+            echo "channel=${channel}"
+            echo "tags<<EOF"
+            echo "${image}:${version}"
+            echo "${image}:${channel}"
+            if [[ "${TARGET_BRANCH}" == "main" ]]; then
+              echo "${image}:latest"
+            fi
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check whether version exists
+        id: image
+        shell: bash
+        env:
+          IMAGE: ${{ steps.metadata.outputs.image }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          inspect_output="$(mktemp)"
+          if docker buildx imagetools inspect "${IMAGE}:${VERSION}" >"${inspect_output}" 2>&1; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+            echo "Image ${IMAGE}:${VERSION} already exists; skipping build."
+          elif grep -Eiq "manifest unknown|not found|no such manifest" "${inspect_output}"; then
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+            echo "Image ${IMAGE}:${VERSION} does not exist; starting build."
+          else
+            cat "${inspect_output}"
+            echo "::error::Unable to determine whether ${IMAGE}:${VERSION} exists"
+            exit 1
+          fi
+
+      - name: Build and push image
+        id: publish
+        if: steps.image.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Seshat
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.event.pull_request.merge_commit_sha }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
+          cache-from: type=gha,scope=${{ github.event.pull_request.base.ref }}
+          cache-to: type=gha,mode=max,scope=${{ github.event.pull_request.base.ref }}
+
+      - name: Write job summary
+        if: always() && steps.metadata.outcome == 'success'
+        shell: bash
+        env:
+          IMAGE: ${{ steps.metadata.outputs.image }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+          CHANNEL: ${{ steps.metadata.outputs.channel }}
+          VERSION_FILE: ${{ steps.metadata.outputs.version_file }}
+          EXISTS: ${{ steps.image.outputs.exists }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          {
+            echo "## Docker publish"
+            echo
+            echo "- Image: \`${IMAGE}\`"
+            echo "- Version: \`${VERSION}\`"
+            echo "- Version source: \`${VERSION_FILE}\`"
+            echo "- Channel: \`${CHANNEL}\`"
+            if [[ "${EXISTS}" == "true" ]]; then
+              echo "- Result: skipped because this version already exists"
+            elif [[ "${PUBLISH_OUTCOME}" == "success" ]]; then
+              echo "- Result: published successfully"
+            else
+              echo "- Result: publish failed or was interrupted"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"

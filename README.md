@@ -127,6 +127,32 @@ docker-compose --profile postgres up -d
 ./deploy.sh --force
 ```
 
+## Docker Hub 自动构建
+
+GitHub Actions 在 Pull Request 真正合并后触发 Docker 镜像发布，直接 push 到目标分支不会触发：
+
+Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版本.次版本.修订版本`，例如 `v0.0.1`：
+
+- `VERSION_BETA`：仅控制合并到 `beta` 分支时发布的版本。
+- `VERSION_RELEASE`：仅控制合并到 `main` 分支时发布的版本。
+
+| 合并目标 | 版本来源 | 文件内容为 `v0.0.1` 时的不可变标签 | 滚动标签 |
+|----------|----------|--------------------------------------|----------|
+| `beta` | `VERSION_BETA` | `beta-v0.0.1` | `beta` |
+| `main` | `VERSION_RELEASE` | `v0.0.1` | `release`、`latest` |
+
+工作流在构建前使用 Docker Hub 查询不可变版本标签；如果该标签已存在，则跳过构建和推送，避免重复发布同一合并提交。
+
+需要在 GitHub 仓库中配置：
+
+| 类型 | 名称 | 说明 |
+|------|------|------|
+| Secret | `DOCKERHUB_USERNAME` | Docker Hub 用户名 |
+| Secret | `DOCKERHUB_TOKEN` | 具有目标仓库读写权限的 Access Token |
+| Variable（可选） | `DOCKERHUB_REPOSITORY` | Docker Hub 仓库名，默认 `seshat` |
+
+默认发布地址为 `DOCKERHUB_USERNAME/seshat`。工作流仅构建 `linux/amd64` 镜像，并通过 GitHub Actions Cache 复用对应分支的构建缓存。
+
 ## 安全基线说明
 
 - CORS 默认使用白名单模式，`Origin` 不在 `CORS_ALLOWED_ORIGINS` 中会被拒绝。
