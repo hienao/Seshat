@@ -24,6 +24,8 @@ func Success(c *gin.Context, data interface{}) {
 
 // Error 错误响应
 func Error(c *gin.Context, httpCode int, message string) {
+	c.Set("error_code", http.StatusText(httpCode))
+	c.Set("error_message", message)
 	c.JSON(httpCode, Response{
 		Code:    -1,
 		Message: message,

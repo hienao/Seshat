@@ -13,6 +13,8 @@
 - 功能分支应先合并到 `dev`。
 - 禁止通过直接 push 到 `beta` 或 `main` 发版。发布工作流只监听真正合并的 MR/PR。
 - `beta` 和 `main` 应配置为受保护分支并要求通过 MR/PR 合并。
+- Beta 发版完成并验证镜像后，必须通过 MR/PR 将 `beta` 合回 `dev`。
+- Release 发版完成并验证镜像后，必须依次通过 MR/PR 将 `main` 合回 `beta`，再将最新的 `beta` 合回 `dev`。
 - 当前仓库首次启用此流程前，需要由仓库管理员创建 `beta` 分支。
 
 ## Version Sources
@@ -51,6 +53,7 @@ Beta 发版标准流程：
 7. MR/PR 合并后，GitHub Actions 检查 Docker Hub 中的 `beta-v0.0.2`。
 8. 标签不存在时构建并推送 `beta-v0.0.2`，同时更新滚动标签 `beta`；标签存在时跳过构建。
 9. 在 Beta 环境完成验证，记录对应的不可变镜像标签。
+10. Beta 镜像验证完成后，创建源分支为 `beta`、目标分支为 `dev` 的 MR/PR，将已发布代码同步回 `dev`。同步时不得为了同步额外修改版本文件。
 
 不要通过 `dev -> main` 直接完成正式发版，正式版本应基于已经验证的 Beta 代码准备。
 
@@ -67,6 +70,7 @@ Release 发版标准流程：
 7. MR/PR 合并后，GitHub Actions 检查 Docker Hub 中的 `v0.0.2`。
 8. 标签不存在时构建并推送 `v0.0.2`，同时更新滚动标签 `release` 和 `latest`；标签存在时跳过构建。
 9. 正式部署和回滚必须优先使用 `vX.Y.Z` 不可变标签，不要只记录 `latest`。
+10. Release 镜像验证完成后，先创建源分支为 `main`、目标分支为 `beta` 的 MR/PR；合并后再创建源分支为最新 `beta`、目标分支为 `dev` 的 MR/PR，将正式代码同步回两个分支。同步时不得为了同步额外修改版本文件。
 
 ## Hotfix
 
@@ -75,7 +79,7 @@ Release 发版标准流程：
 1. 从最新 `main` 创建 `hotfix/<description>` 分支。
 2. 完成最小修复并只升级 `VERSION_RELEASE`。
 3. 校验后创建目标为 `main` 的 MR/PR。
-4. 合并并验证正式镜像后，将修复同步回 `beta` 和 `dev`，避免后续版本重新引入问题。
+4. 合并并验证正式镜像后，先通过 MR/PR 将 `main` 合回 `beta`，再通过 MR/PR 将最新 `beta` 合回 `dev`，避免后续版本重新引入问题。
 5. 同步分支时不要为了同步而修改版本文件；如果不可变标签已经存在，发布工作流会自动跳过重复构建。
 
 ## Pre-release Checks

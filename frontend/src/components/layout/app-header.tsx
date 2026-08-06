@@ -1,5 +1,5 @@
 import { Button } from '@appica/ui-react/button'
-import { Home, Logout, Menu, Settings, ShieldCheck, User, X } from '@appica/icons-react'
+import { Bell, FileText, Home, Logout, Menu, Settings, ShieldCheck, User, X } from '@appica/icons-react'
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '@/features/auth/use-auth'
@@ -13,8 +13,10 @@ export function AppHeader() {
   const { user, isAdmin, logout } = useAuth()
   const links = user ? [
     { to: '/', label: '首页', icon: Home },
+    { to: '/events', label: '消息流', icon: Bell },
+    { to: '/integrations', label: '接入实例', icon: Settings },
     { to: '/profile', label: '个人中心', icon: Settings },
-    ...(isAdmin ? [{ to: '/admin', label: '系统管理', icon: ShieldCheck }] : []),
+    ...(isAdmin ? [{ to: '/admin', label: '系统管理', icon: ShieldCheck }, { to: '/admin/logs', label: '接口日志', icon: FileText }] : []),
   ] : []
 
   return (

@@ -1,11 +1,18 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"basegoapp/config"
 	_ "basegoapp/docs"
+	"basegoapp/internal/logging"
 	"basegoapp/internal/router"
 	"basegoapp/pkg/database"
 )
@@ -30,13 +37,33 @@ func main() {
 	// 初始化数据库
 	database.Init(cfg)
 
-	// 设置路由
-	r := router.Setup(cfg)
+	// 设置日志管理器和路由
+	logManager, err := logging.NewManager(cfg)
+	if err != nil {
+		log.Fatalf("Failed to init API log manager: %v", err)
+	}
+	defer logManager.Close()
+	r := router.SetupWithLogManager(cfg, logManager)
 
 	// 启动服务器
 	log.Printf("Server starting on port %s", cfg.ServerPort)
-	if err := r.Run(":" + cfg.ServerPort); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	server := &http.Server{Addr: ":" + cfg.ServerPort, Handler: r}
+	serverErrors := make(chan error, 1)
+	go func() { serverErrors <- server.ListenAndServe() }()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	case <-stop:
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("Failed to gracefully shutdown server: %v", err)
+		}
 	}
 }
 

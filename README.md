@@ -45,8 +45,13 @@ npm run dev
 | `DB_DRIVER` | ❌ | 数据库类型，默认 `sqlite` | `sqlite` / `postgres` |
 | `HOST_DATA_DIR` | ❌ | 宿主机数据目录（bind mount 源） | `./runtime/data` |
 | `HOST_CACHE_DIR` | ❌ | 宿主机缓存目录（bind mount 源） | `./runtime/cache` |
+| `SQLITE_PATH` | ❌ | SQLite 数据库文件路径，开发环境可覆盖 | `/data/db/basegoapp.db` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
+| `WEBHOOK_ENCRYPTION_KEY` | ✅（生产） | 加密保存 Webhook Secret 的独立密钥 | `random-key-at-least-32-chars` |
+| `API_LOG_ENABLED` | ❌ | 是否启用后端接口日志 | `true` |
+| `API_LOG_PATH` | ❌ | 独立接口日志 SQLite 文件 | `/cache/logs/app/api-logs.db` |
+| `API_LOG_RETENTION_DAYS` | ❌ | 接口日志保留天数 | `30` |
 | `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173` |
 | `AUTH_COOKIE_NAME` | ❌ | 认证 Cookie 名称 | `auth_token` |
 | `AUTH_COOKIE_SECURE` | ❌ | 是否仅 HTTPS 发送 Cookie | `false` |
@@ -190,6 +195,15 @@ basegoapp/
 | POST | /api/auth/logout | 用户退出 |
 | GET | /api/user/profile | 获取用户信息 |
 | PUT | /api/user/password | 修改密码 |
+| GET | /api/webhooks/apps | 获取可用 App 类型 |
+| GET/POST | /api/webhooks/integrations | 查询/创建 Webhook 接入实例 |
+| GET | /api/webhooks/events | 查询收到的 Webhook 消息 |
+| GET | /api/webhooks/events/:id | 查看消息详情和原始内容 |
+| POST | /hooks/v1/:endpointKey | 外部 App Webhook 接收入口（无需登录） |
+| GET | /api/admin/logs | 查询后端接口日志（管理员） |
+| GET | /api/admin/logs/:id | 查看接口日志详情（管理员） |
+| GET | /api/admin/logs/export | 导出接口日志 CSV/JSONL（管理员） |
+| POST | /api/admin/logs/clear | 按条件清空接口日志（管理员） |
 
 ## 更换项目名
 
