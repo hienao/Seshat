@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { RegistrationStatus, SystemSettings, TokenResponse, User } from './types'
+import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, CreatedIntegration, EventListResponse, Integration, RegistrationStatus, SystemSettings, TokenResponse, User, WebhookEvent } from './types'
 
 export const api = {
   login: (username: string, password: string) =>
@@ -23,4 +23,57 @@ export const api = {
       method: 'PUT',
       body: { is_admin: isAdmin },
     }),
+  webhookApps: () => apiRequest<AppDefinition[]>('/api/webhooks/apps'),
+  integrations: () => apiRequest<Integration[]>('/api/webhooks/integrations'),
+  createIntegration: (appCode: string, name: string) =>
+    apiRequest<CreatedIntegration>('/api/webhooks/integrations', { method: 'POST', body: { app_code: appCode, name } }),
+  rotateIntegrationSecret: (id: number) =>
+    apiRequest<CreatedIntegration>(`/api/webhooks/integrations/${id}/rotate-secret`, { method: 'POST' }),
+  events: (params: { appCode?: string; eventType?: string; offset?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.appCode) query.set('app_code', params.appCode)
+    if (params.eventType) query.set('event_type', params.eventType)
+    if (params.offset) query.set('offset', String(params.offset))
+    return apiRequest<EventListResponse>(`/api/webhooks/events${query.size ? `?${query.toString()}` : ''}`)
+  },
+  event: (id: number) => apiRequest<WebhookEvent>(`/api/webhooks/events/${id}`),
+  apiLogs: (params: { startAt?: string; endAt?: string; method?: string; route?: string; statusGroup?: string; requestId?: string; keyword?: string; cursor?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.startAt) query.set('start_at', params.startAt)
+    if (params.endAt) query.set('end_at', params.endAt)
+    if (params.method) query.set('method', params.method)
+    if (params.route) query.set('route', params.route)
+    if (params.statusGroup) query.set('status_group', params.statusGroup)
+    if (params.requestId) query.set('request_id', params.requestId)
+    if (params.keyword) query.set('keyword', params.keyword)
+    if (params.cursor) query.set('cursor', String(params.cursor))
+    return apiRequest<ApiLogListResponse>(`/api/admin/logs${query.size ? `?${query.toString()}` : ''}`)
+  },
+  apiLogSummary: (params: { startAt?: string; endAt?: string; method?: string; route?: string; statusGroup?: string; requestId?: string; keyword?: string } = {}) => {
+    const query = new URLSearchParams()
+    if (params.startAt) query.set('start_at', params.startAt)
+    if (params.endAt) query.set('end_at', params.endAt)
+    if (params.method) query.set('method', params.method)
+    if (params.route) query.set('route', params.route)
+    if (params.statusGroup) query.set('status_group', params.statusGroup)
+    if (params.requestId) query.set('request_id', params.requestId)
+    if (params.keyword) query.set('keyword', params.keyword)
+    return apiRequest<ApiLogSummary>(`/api/admin/logs/summary${query.size ? `?${query.toString()}` : ''}`)
+  },
+  apiLog: (id: number) => apiRequest<ApiRequestLog>(`/api/admin/logs/${id}`),
+  clearApiLogs: (body: { start_at?: string; end_at?: string; method?: string; route?: string; status_group?: string; confirmation: string }) =>
+    apiRequest<{ deleted_count: number }>('/api/admin/logs/clear', { method: 'POST', body }),
+  exportApiLogs: async (params: { format: 'csv' | 'jsonl'; startAt?: string; endAt?: string; method?: string; route?: string; statusGroup?: string; requestId?: string; keyword?: string }) => {
+    const query = new URLSearchParams({ format: params.format })
+    if (params.startAt) query.set('start_at', params.startAt)
+    if (params.endAt) query.set('end_at', params.endAt)
+    if (params.method) query.set('method', params.method)
+    if (params.route) query.set('route', params.route)
+    if (params.statusGroup) query.set('status_group', params.statusGroup)
+    if (params.requestId) query.set('request_id', params.requestId)
+    if (params.keyword) query.set('keyword', params.keyword)
+    const response = await fetch(`/api/admin/logs/export?${query.toString()}`, { credentials: 'include' })
+    if (!response.ok) throw new Error(`导出失败 (${response.status})`)
+    return { blob: await response.blob(), filename: response.headers.get('Content-Disposition')?.match(/filename=([^;]+)/)?.[1] ?? `seshat-api-logs.${params.format}` }
+  },
 }
