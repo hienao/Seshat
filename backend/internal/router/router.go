@@ -3,6 +3,7 @@ package router
 import (
 	"basegoapp/config"
 	"basegoapp/internal/handler"
+	"basegoapp/internal/logging"
 	"basegoapp/internal/middleware"
 	"net/http"
 
@@ -17,7 +18,21 @@ func Setup(cfg *config.Config) *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	r := gin.Default()
+	logManager, err := logging.NewManager(cfg)
+	if err != nil {
+		panic("Failed to init API log manager: " + err.Error())
+	}
+	return SetupWithLogManager(cfg, logManager)
+}
+
+// SetupWithLogManager 使用调用方创建的日志管理器组装路由，便于主程序优雅退出时刷新日志队列。
+func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.Engine {
+	if cfg.GinMode == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	r := gin.New()
+	r.Use(logging.RequestIDMiddleware(), logging.AccessLogMiddleware(logManager), gin.Recovery())
 
 	// CORS 中间件
 	r.Use(corsMiddleware(cfg))
@@ -30,6 +45,8 @@ func Setup(cfg *config.Config) *gin.Engine {
 	userHandler := handler.NewUserHandler(cfg)
 	settingHandler := handler.NewSettingHandler()
 	adminHandler := handler.NewAdminHandler(authHandler.GetAuthService())
+	webhookHandler := handler.NewWebhookHandler(cfg)
+	adminLogHandler := handler.NewAdminLogHandler(logManager)
 
 	// 初始化默认管理员和系统设置
 	if err := authHandler.GetAuthService().InitDefaultAdmin(); err != nil {
@@ -42,6 +59,17 @@ func Setup(cfg *config.Config) *gin.Engine {
 	// API 路由组
 	api := r.Group("/api")
 	{
+		// Webhook 管理接口需要认证，实际接收接口在 /hooks 下公开提供。
+		webhookAPI := api.Group("/webhooks")
+		webhookAPI.Use(middleware.JWTAuth(cfg))
+		{
+			webhookAPI.GET("/apps", webhookHandler.Catalog)
+			webhookAPI.GET("/integrations", webhookHandler.ListIntegrations)
+			webhookAPI.POST("/integrations", webhookHandler.CreateIntegration)
+			webhookAPI.POST("/integrations/:id/rotate-secret", webhookHandler.RotateSecret)
+			webhookAPI.GET("/events", webhookHandler.ListEvents)
+			webhookAPI.GET("/events/:id", webhookHandler.GetEvent)
+		}
 		// 公开路由
 		auth := api.Group("/auth")
 		{
@@ -72,6 +100,17 @@ func Setup(cfg *config.Config) *gin.Engine {
 			adminSettings.PUT("/system", settingHandler.UpdateSystemSettings)
 		}
 
+		// 管理员接口日志，不记录日志管理接口自身，清空操作写入审计表。
+		adminLogs := api.Group("/admin/logs")
+		adminLogs.Use(middleware.JWTAuth(cfg), middleware.AdminAuth())
+		{
+			adminLogs.GET("", adminLogHandler.List)
+			adminLogs.GET("/summary", adminLogHandler.Summary)
+			adminLogs.GET("/export", adminLogHandler.Export)
+			adminLogs.POST("/clear", adminLogHandler.Clear)
+			adminLogs.GET("/:id", adminLogHandler.Get)
+		}
+
 		// 管理员路由
 		admin := api.Group("/admin")
 		admin.Use(middleware.JWTAuth(cfg), middleware.AdminAuth())
@@ -80,6 +119,9 @@ func Setup(cfg *config.Config) *gin.Engine {
 			admin.PUT("/users/:id/role", adminHandler.SetUserRole)
 		}
 	}
+
+	// 外部 App 调用的公开 Webhook 接收接口，不使用 JWT。
+	r.POST("/hooks/v1/:endpointKey", webhookHandler.Receive)
 
 	return r
 }
