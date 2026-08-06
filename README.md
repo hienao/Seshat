@@ -119,6 +119,62 @@ DATABASE_URL="postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable" \
 docker-compose --profile postgres up -d
 ```
 
+#### 从 Docker Hub 镜像部署
+
+如果不需要在部署机器上构建镜像，可以使用仓库中的 `docker-compose.dockerhub.yml`，它只会拉取 Docker Hub 镜像，不会执行本地构建：
+
+```bash
+# 下载项目配置（或在已有项目目录中执行）
+git clone https://github.com/hienao/Seshat.git
+cd Seshat
+
+# 创建并编辑生产环境配置
+cp .env.example .env
+```
+
+至少修改 `.env` 中的以下配置：
+
+```dotenv
+JWT_SECRET=请替换为至少32位的随机字符串
+WEBHOOK_ENCRYPTION_KEY=请替换为另一个至少32位的随机字符串
+DEFAULT_ADMIN_PASSWORD=请替换为至少12位的初始管理员密码
+```
+
+默认使用 Beta 滚动标签 `hienao/seshat:beta`。启动前可通过 `SESHAT_IMAGE` 指定其他 Docker Hub 镜像或版本：
+
+```bash
+# Beta 最新镜像
+SESHAT_IMAGE=hienao/seshat:beta \
+docker compose -f docker-compose.dockerhub.yml pull
+SESHAT_IMAGE=hienao/seshat:beta \
+docker compose -f docker-compose.dockerhub.yml up -d
+
+# Release 最新镜像
+SESHAT_IMAGE=hienao/seshat:latest \
+docker compose -f docker-compose.dockerhub.yml up -d
+
+# 使用不可变版本镜像（推荐用于可追溯部署）
+SESHAT_IMAGE=hienao/seshat:beta-v0.0.4 \
+docker compose -f docker-compose.dockerhub.yml up -d
+```
+
+如果 Docker Hub 用户名或仓库名不同，请将镜像改为 `<用户名>/<仓库名>:<标签>`。首次部署建议先拉取并检查配置：
+
+```bash
+docker compose -f docker-compose.dockerhub.yml config
+docker compose -f docker-compose.dockerhub.yml up -d
+docker compose -f docker-compose.dockerhub.yml ps
+```
+
+默认端口为 `80`，SQLite 数据保存在 `./runtime/data`，应用和 Nginx 日志保存在 `./runtime/cache`。如需使用内置 PostgreSQL：
+
+```bash
+SESHAT_IMAGE=hienao/seshat:beta \
+DB_DRIVER=postgres \
+DATABASE_URL="postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable" \
+docker compose --profile postgres -f docker-compose.dockerhub.yml up -d
+```
+
 ### 一键部署脚本（macOS/Linux）
 
 ```bash
