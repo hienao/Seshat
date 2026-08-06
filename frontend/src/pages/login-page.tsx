@@ -20,7 +20,7 @@ export function LoginPage() {
     event.preventDefault()
     const profile = await login.mutateAsync({ username: username.trim(), password })
     const requested = (location.state as { from?: string } | null)?.from
-    navigate(requested || (profile.is_admin ? '/admin' : '/'), { replace: true })
+    navigate(profile.requires_admin_setup ? '/' : requested || (profile.is_admin ? '/admin' : '/'), { replace: true })
   }
 
   return (
@@ -33,6 +33,7 @@ export function LoginPage() {
           <FormField label="密码"><Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} startSlot={<Lock size={17} />} placeholder="请输入密码" autoComplete="current-password" required /></FormField>
           <AppButton className="w-full justify-center" type="submit" size="lg" disabled={login.isPending}>{login.isPending ? '正在登录…' : <><Login size={18} />登录</>}</AppButton>
         </form>
+        <p className="mt-5 rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">首次部署请使用 admin / admin 登录，并按提示设置正式管理员。</p>
         <p className="mt-6 text-center text-sm text-neutral-500">还没有账户？ <Link className="font-semibold text-emerald-700 hover:underline dark:text-emerald-400" to="/register">立即注册</Link></p>
         <p className="sr-only"><AlertCircle />登录失败时页面会显示错误原因</p>
       </Panel>

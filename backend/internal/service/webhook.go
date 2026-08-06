@@ -1,8 +1,6 @@
 package service
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -12,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"basegoapp/config"
 	"basegoapp/internal/model"
 	"basegoapp/internal/webhook"
 	"basegoapp/pkg/database"
@@ -22,13 +19,11 @@ import (
 const maxWebhookBody = 2 << 20
 
 type WebhookService struct {
-	registry      *webhook.Registry
-	encryptionKey []byte
+	registry *webhook.Registry
 }
 
-func NewWebhookService(cfg *config.Config) *WebhookService {
-	key := sha256.Sum256([]byte(cfg.WebhookEncryptionKey))
-	return &WebhookService{registry: webhook.NewRegistry(), encryptionKey: key[:]}
+func NewWebhookService() *WebhookService {
+	return &WebhookService{registry: webhook.NewRegistry()}
 }
 
 type CreateIntegrationRequest struct {
@@ -67,11 +62,7 @@ func (s *WebhookService) CreateIntegration(ownerID uint, req *CreateIntegrationR
 	if err != nil {
 		return nil, err
 	}
-	ciphertext, err := encryptSecret(s.encryptionKey, secret)
-	if err != nil {
-		return nil, err
-	}
-	item := &model.AppIntegration{OwnerID: ownerID, AppCode: provider.Code(), Name: strings.TrimSpace(req.Name), EndpointKey: randomEndpointKey(), SecretCiphertext: ciphertext, Config: datatypes.JSON([]byte("{}")), Enabled: true}
+	item := &model.AppIntegration{OwnerID: ownerID, AppCode: provider.Code(), Name: strings.TrimSpace(req.Name), EndpointKey: randomEndpointKey(), Secret: secret, Config: datatypes.JSON([]byte("{}")), Enabled: true}
 	if item.Name == "" {
 		return nil, errors.New("接入名称不能为空")
 	}
@@ -102,10 +93,7 @@ func (s *WebhookService) RotateSecret(ownerID, id uint) (*IntegrationCreatedResp
 	if err != nil {
 		return nil, err
 	}
-	item.SecretCiphertext, err = encryptSecret(s.encryptionKey, secret)
-	if err != nil {
-		return nil, err
-	}
+	item.Secret = secret
 	if err := database.GetDB().Save(&item).Error; err != nil {
 		return nil, err
 	}
@@ -125,8 +113,7 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 		return errors.New("Webhook App 类型不可用")
 	}
 	request := webhook.IncomingRequest{Headers: headers, Body: body}
-	secret, err := decryptSecret(s.encryptionKey, integration.SecretCiphertext)
-	if err != nil || !provider.Verify(secret, request) {
+	if !provider.Verify(integration.Secret, request) {
 		return errors.New("Webhook 签名验证失败")
 	}
 
@@ -212,44 +199,4 @@ func containsEventType(items []webhook.EventTypeDefinition, code string) bool {
 		}
 	}
 	return false
-}
-
-func encryptSecret(key []byte, value string) (string, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-	return base64.RawStdEncoding.EncodeToString(gcm.Seal(nonce, nonce, []byte(value), nil)), nil
-}
-
-func decryptSecret(key []byte, value string) (string, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	encoded, err := base64.RawStdEncoding.DecodeString(value)
-	if err != nil {
-		return "", err
-	}
-	nonceSize := gcm.NonceSize()
-	if len(encoded) < nonceSize {
-		return "", errors.New("密钥数据无效")
-	}
-	plain, err := gcm.Open(nil, encoded[:nonceSize], encoded[nonceSize:], nil)
-	if err != nil {
-		return "", err
-	}
-	return string(plain), nil
 }

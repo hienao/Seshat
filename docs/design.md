@@ -23,7 +23,7 @@
 | **API 文档** | Swaggo/swag | 从代码注释自动生成 Swagger 文档 |
 | **数据库** | SQLite（默认）/ PostgreSQL（可选） | 默认开箱即用，可切换到 PostgreSQL |
 | **ORM** | GORM | Go 语言 ORM 框架 |
-| **认证** | JWT + HttpOnly Cookie | 令牌存于 HttpOnly Cookie，后端校验 token_version |
+| **认证** | JWT Bearer Token | 令牌存于前端 LocalStorage，通过 Authorization 头发送，后端校验 token_version |
 | **容器化** | Docker + Nginx | 静态文件 + API 反向代理 |
 
 ---
@@ -92,15 +92,17 @@ basegoapp/
 |------|------|------|------|
 | 注册 | POST | `/api/auth/register` | 用户注册 |
 | 登录 | POST | `/api/auth/login` | 用户登录，返回 JWT |
+| 初始化管理员 | POST | `/api/auth/setup-admin` | 使用一次性账户设置正式管理员凭据 |
 | 退出 | POST | `/api/auth/logout` | 用户退出 |
 | 修改密码 | PUT | `/api/user/password` | 修改当前用户密码 |
 | 获取用户信息 | GET | `/api/user/profile` | 获取当前用户信息 |
 | API 文档 | GET | `/swagger/*` | Swagger UI 文档 |
 
-### 默认用户
+### 初始管理员
 
-- 数据库为空时，通过 `DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD` 初始化管理员
-- 默认管理员密码要求至少 12 位，禁止弱口令 `admin/admin`
+- 数据库为空时自动创建一次性 `admin/admin` 引导账户
+- 引导账户登录后必须设置至少 12 位的正式管理员密码
+- 初始化完成后默认密码立即失效，引导账户不能在初始化前访问业务和管理接口
 
 ### 密码策略
 
@@ -109,9 +111,10 @@ basegoapp/
 
 ### 安全增强
 
-- CORS 使用白名单：`CORS_ALLOWED_ORIGINS`
-- 登录令牌写入 HttpOnly Cookie，前端不再依赖 LocalStorage token
-- 用户改密和角色变更时递增 `token_version`，使旧 JWT 立即失效
+- CORS 默认允许任意 Origin，返回 `Access-Control-Allow-Origin: *`，不启用跨域凭据
+- 登录令牌保存到前端 LocalStorage，并通过 `Authorization: Bearer <token>` 显式发送
+- LocalStorage Token 需配合 XSS 防护和严格的 Content Security Policy
+- 用户退出、改密和角色变更时递增 `token_version`，使旧 JWT 立即失效
 
 ---
 
@@ -122,7 +125,7 @@ graph LR
     subgraph Docker Container
         N["Nginx:80 (静态文件+反向代理)"]
         B[Gin API:8080]
-        D[("/data/db/basegoapp.db")]
+        D[("/data/db/seshat.db")]
         L[("/cache/logs/*")]
     end
     
@@ -143,12 +146,12 @@ graph LR
 
 ### 数据与缓存目录
 
-- `/data/db/basegoapp.db` → 默认 SQLite 数据库文件
+- `/data/db/seshat.db` → 默认 SQLite 数据库文件
 - `/cache/logs/nginx/` → Nginx 日志
 - `/cache/logs/app/` → 应用日志预留目录
 - `/cache/tmp/` → 临时文件和运行时缓存
 
 ### 数据库模式
 
-- 默认模式：`DB_DRIVER=sqlite`，无需 PostgreSQL，数据库文件位于 `/data/db/basegoapp.db`
+- 默认模式：`DB_DRIVER=sqlite`，无需 PostgreSQL，数据库文件位于 `/data/db/seshat.db`
 - PostgreSQL 模式：设置 `DB_DRIVER=postgres` 和 `DATABASE_URL`，可使用外部数据库或 `docker compose --profile postgres up -d`

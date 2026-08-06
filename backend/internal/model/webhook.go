@@ -8,16 +8,16 @@ import (
 
 // AppIntegration 是用户配置的一个 Webhook 接入实例。
 type AppIntegration struct {
-	ID               uint           `gorm:"primarykey" json:"id"`
-	OwnerID          uint           `gorm:"index;not null" json:"owner_id"`
-	AppCode          string         `gorm:"size:50;index;not null" json:"app_code"`
-	Name             string         `gorm:"size:100;not null" json:"name"`
-	EndpointKey      string         `gorm:"uniqueIndex;size:100;not null" json:"endpoint_key"`
-	SecretCiphertext string         `gorm:"size:500;not null" json:"-"`
-	Config           datatypes.JSON `gorm:"type:json" json:"config"`
-	Enabled          bool           `gorm:"default:true;not null" json:"enabled"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
+	ID          uint           `gorm:"primarykey" json:"id"`
+	OwnerID     uint           `gorm:"index;not null" json:"owner_id"`
+	AppCode     string         `gorm:"size:50;index;not null" json:"app_code"`
+	Name        string         `gorm:"size:100;not null" json:"name"`
+	EndpointKey string         `gorm:"uniqueIndex;size:100;not null" json:"endpoint_key"`
+	Secret      string         `gorm:"size:100;not null" json:"-"`
+	Config      datatypes.JSON `gorm:"type:json" json:"config"`
+	Enabled     bool           `gorm:"default:true;not null" json:"enabled"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 func (AppIntegration) TableName() string { return "app_integrations" }

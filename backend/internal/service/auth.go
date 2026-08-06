@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -16,19 +15,18 @@ import (
 
 // AuthService 认证服务
 type AuthService struct {
-	userRepo             *repository.UserRepository
-	jwtSecret            string
-	defaultAdminUsername string
-	defaultAdminPassword string
+	userRepo  *repository.UserRepository
+	jwtSecret string
 }
+
+const bootstrapAdminUsername = "admin"
+const bootstrapAdminPassword = "admin"
 
 // NewAuthService 创建认证服务实例
 func NewAuthService(cfg *config.Config) *AuthService {
 	return &AuthService{
-		userRepo:             repository.NewUserRepository(),
-		jwtSecret:            cfg.JWTSecret,
-		defaultAdminUsername: strings.TrimSpace(cfg.DefaultAdminUsername),
-		defaultAdminPassword: strings.TrimSpace(cfg.DefaultAdminPassword),
+		userRepo:  repository.NewUserRepository(),
+		jwtSecret: cfg.JWTSecret,
 	}
 }
 
@@ -50,6 +48,12 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required,min=6"`
 }
 
+// SetupAdminRequest 首次登录后设置正式管理员凭据。
+type SetupAdminRequest struct {
+	Username string `json:"username" binding:"required,min=3,max=50"`
+	Password string `json:"password" binding:"required,min=12"`
+}
+
 // TokenResponse Token 响应
 type TokenResponse struct {
 	Token     string `json:"token"`
@@ -58,10 +62,11 @@ type TokenResponse struct {
 
 // UserResponse 用户响应
 type UserResponse struct {
-	ID        uint   `json:"id"`
-	Username  string `json:"username"`
-	IsAdmin   bool   `json:"is_admin"`
-	CreatedAt string `json:"created_at"`
+	ID                 uint   `json:"id"`
+	Username           string `json:"username"`
+	IsAdmin            bool   `json:"is_admin"`
+	RequiresAdminSetup bool   `json:"requires_admin_setup"`
+	CreatedAt          string `json:"created_at"`
 }
 
 // Register 用户注册
@@ -90,12 +95,7 @@ func (s *AuthService) Register(req *RegisterRequest) (*UserResponse, error) {
 		return nil, err
 	}
 
-	return &UserResponse{
-		ID:        user.ID,
-		Username:  user.Username,
-		IsAdmin:   user.IsAdmin,
-		CreatedAt: user.CreatedAt.Format(time.RFC3339),
-	}, nil
+	return userResponse(user), nil
 }
 
 // Login 用户登录
@@ -110,7 +110,10 @@ func (s *AuthService) Login(req *LoginRequest) (*TokenResponse, error) {
 		return nil, errors.New("用户名或密码错误")
 	}
 
-	// 生成 JWT Token
+	return s.issueToken(user)
+}
+
+func (s *AuthService) issueToken(user *model.User) (*TokenResponse, error) {
 	expiresAt := time.Now().Add(24 * time.Hour)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id":       user.ID,
@@ -138,12 +141,48 @@ func (s *AuthService) GetProfile(userID uint) (*UserResponse, error) {
 		return nil, errors.New("用户不存在")
 	}
 
-	return &UserResponse{
-		ID:        user.ID,
-		Username:  user.Username,
-		IsAdmin:   user.IsAdmin,
-		CreatedAt: user.CreatedAt.Format(time.RFC3339),
-	}, nil
+	return userResponse(user), nil
+}
+
+// SetupAdmin 将一次性引导管理员更新为正式管理员，并签发新 Token。
+func (s *AuthService) SetupAdmin(userID uint, req *SetupAdminRequest) (*TokenResponse, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+	if !user.IsAdmin || !user.RequiresAdminSetup {
+		return nil, errors.New("管理员初始化已完成")
+	}
+
+	username := strings.TrimSpace(req.Username)
+	if len(username) < 3 || len(username) > 50 {
+		return nil, errors.New("管理员用户名长度必须在 3 到 50 位之间")
+	}
+	if len(req.Password) < 12 {
+		return nil, errors.New("管理员密码长度至少 12 位")
+	}
+	if username != user.Username {
+		exists, existsErr := s.userRepo.ExistsByUsername(username)
+		if existsErr != nil {
+			return nil, existsErr
+		}
+		if exists {
+			return nil, errors.New("用户名已存在")
+		}
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	user.Username = username
+	user.Password = string(hashedPassword)
+	user.RequiresAdminSetup = false
+	user.TokenVersion++
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, err
+	}
+	return s.issueToken(user)
 }
 
 // ChangePassword 修改密码
@@ -169,69 +208,32 @@ func (s *AuthService) ChangePassword(userID uint, req *ChangePasswordRequest) er
 	return s.userRepo.Update(user)
 }
 
-// InitDefaultAdmin 初始化默认管理员（无用户时创建）
-func (s *AuthService) InitDefaultAdmin() error {
-	count, err := s.userRepo.Count()
+// Logout 递增认证版本，使当前 Bearer Token 及同版本 Token 立即失效。
+func (s *AuthService) Logout(userID uint) error {
+	return s.userRepo.IncrementTokenVersion(userID)
+}
+
+// InitBootstrapAdmin 在空数据库中创建一次性引导管理员 admin/admin。
+func (s *AuthService) InitBootstrapAdmin() error {
+	count, err := s.userRepo.CountAdmins()
 	if err != nil {
 		return err
 	}
 
-	if count == 0 {
-		if s.defaultAdminUsername == "" || s.defaultAdminPassword == "" {
-			return errors.New("首次启动未检测到用户，请设置 DEFAULT_ADMIN_USERNAME 和 DEFAULT_ADMIN_PASSWORD 初始化管理员")
-		}
-		if len(s.defaultAdminPassword) < 12 {
-			return errors.New("DEFAULT_ADMIN_PASSWORD 长度至少 12 位")
-		}
-		if strings.EqualFold(s.defaultAdminUsername, "admin") && strings.EqualFold(s.defaultAdminPassword, "admin") {
-			return errors.New("禁止使用弱口令 admin/admin 初始化管理员")
-		}
-
-		_, err := s.RegisterAdmin(&RegisterRequest{
-			Username: s.defaultAdminUsername,
-			Password: s.defaultAdminPassword,
-		})
-		if err != nil {
-			return fmt.Errorf("初始化默认管理员失败: %w", err)
-		}
+	if count > 0 {
+		return nil
 	}
-
-	return nil
-}
-
-// RegisterAdmin 注册管理员用户（内部使用）
-func (s *AuthService) RegisterAdmin(req *RegisterRequest) (*UserResponse, error) {
-	// 检查用户名是否已存在
-	exists, err := s.userRepo.ExistsByUsername(req.Username)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(bootstrapAdminPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if exists {
-		return nil, errors.New("用户名已存在")
-	}
-
-	// 密码加密
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-
 	user := &model.User{
-		Username: req.Username,
-		Password: string(hashedPassword),
-		IsAdmin:  true,
+		Username:           bootstrapAdminUsername,
+		Password:           string(hashedPassword),
+		IsAdmin:            true,
+		RequiresAdminSetup: true,
 	}
-
-	if err := s.userRepo.Create(user); err != nil {
-		return nil, err
-	}
-
-	return &UserResponse{
-		ID:        user.ID,
-		Username:  user.Username,
-		IsAdmin:   user.IsAdmin,
-		CreatedAt: user.CreatedAt.Format(time.RFC3339),
-	}, nil
+	return s.userRepo.Create(user)
 }
 
 // ListUsers 获取用户列表
@@ -243,14 +245,19 @@ func (s *AuthService) ListUsers() ([]UserResponse, error) {
 
 	var result []UserResponse
 	for _, user := range users {
-		result = append(result, UserResponse{
-			ID:        user.ID,
-			Username:  user.Username,
-			IsAdmin:   user.IsAdmin,
-			CreatedAt: user.CreatedAt.Format(time.RFC3339),
-		})
+		result = append(result, *userResponse(&user))
 	}
 	return result, nil
+}
+
+func userResponse(user *model.User) *UserResponse {
+	return &UserResponse{
+		ID:                 user.ID,
+		Username:           user.Username,
+		IsAdmin:            user.IsAdmin,
+		RequiresAdminSetup: user.RequiresAdminSetup,
+		CreatedAt:          user.CreatedAt.Format(time.RFC3339),
+	}
 }
 
 // SetUserRole 设置用户角色

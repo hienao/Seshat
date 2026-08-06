@@ -178,7 +178,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "用户退出登录（前端清除 Token）",
+                "description": "使当前用户已签发的 Bearer Token 立即失效",
                 "produces": [
                     "application/json"
                 ],
@@ -233,6 +233,63 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/service.UserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/setup-admin": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "使用一次性 admin/admin 登录后设置正式管理员用户名和密码",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "设置正式管理员凭据",
+                "parameters": [
+                    {
+                        "description": "管理员凭据",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.SetupAdminRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/service.TokenResponse"
                                         }
                                     }
                                 }
@@ -534,11 +591,32 @@ const docTemplate = `{
                 }
             }
         },
+        "service.SetupAdminRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "minLength": 12
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 3
+                }
+            }
+        },
         "service.SystemSettingsResponse": {
             "type": "object",
             "properties": {
                 "allow_register": {
                     "type": "boolean"
+                },
+                "api_log_retention_days": {
+                    "type": "integer"
                 }
             }
         },
@@ -558,6 +636,9 @@ const docTemplate = `{
             "properties": {
                 "allow_register": {
                     "type": "boolean"
+                },
+                "api_log_retention_days": {
+                    "type": "integer"
                 }
             }
         },
@@ -571,6 +652,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "is_admin": {
+                    "type": "boolean"
+                },
+                "requires_admin_setup": {
                     "type": "boolean"
                 },
                 "username": {

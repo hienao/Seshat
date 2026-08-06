@@ -1,24 +1,46 @@
 package service
 
 import (
+	"errors"
+	"strconv"
+
 	"basegoapp/internal/repository"
 )
 
+const (
+	DefaultAPILogRetentionDays = 30
+	MinAPILogRetentionDays     = 1
+	MaxAPILogRetentionDays     = 3650
+)
+
+var ErrInvalidAPILogRetentionDays = errors.New("接口日志保留天数必须在 1 到 3650 天之间")
+
+// APILogRetentionUpdater 由接口日志管理器实现，用于让设置立即生效。
+type APILogRetentionUpdater interface {
+	SetRetentionDays(days int)
+}
+
 // SettingService 设置服务
 type SettingService struct {
-	settingRepo *repository.SettingRepository
+	settingRepo      *repository.SettingRepository
+	retentionUpdater APILogRetentionUpdater
 }
 
 // NewSettingService 创建设置服务实例
-func NewSettingService() *SettingService {
-	return &SettingService{
+func NewSettingService(retentionUpdaters ...APILogRetentionUpdater) *SettingService {
+	service := &SettingService{
 		settingRepo: repository.NewSettingRepository(),
 	}
+	if len(retentionUpdaters) > 0 {
+		service.retentionUpdater = retentionUpdaters[0]
+	}
+	return service
 }
 
 // SystemSettingsResponse 系统设置响应
 type SystemSettingsResponse struct {
-	AllowRegister bool `json:"allow_register"`
+	AllowRegister       bool `json:"allow_register"`
+	APILogRetentionDays int  `json:"api_log_retention_days"`
 }
 
 // GetSystemSettings 获取系统设置
@@ -28,11 +50,15 @@ func (s *SettingService) GetSystemSettings() (*SystemSettingsResponse, error) {
 		return nil, err
 	}
 
-	response := &SystemSettingsResponse{}
+	response := &SystemSettingsResponse{APILogRetentionDays: DefaultAPILogRetentionDays}
 	for _, setting := range settings {
 		switch setting.Key {
 		case "allow_register":
 			response.AllowRegister = setting.Value == "true"
+		case "api_log_retention_days":
+			if days, parseErr := strconv.Atoi(setting.Value); parseErr == nil && validAPILogRetentionDays(days) {
+				response.APILogRetentionDays = days
+			}
 		}
 	}
 	return response, nil
@@ -40,11 +66,15 @@ func (s *SettingService) GetSystemSettings() (*SystemSettingsResponse, error) {
 
 // UpdateSystemSettingsRequest 更新系统设置请求
 type UpdateSystemSettingsRequest struct {
-	AllowRegister *bool `json:"allow_register"`
+	AllowRegister       *bool `json:"allow_register"`
+	APILogRetentionDays *int  `json:"api_log_retention_days"`
 }
 
 // UpdateSystemSettings 更新系统设置
 func (s *SettingService) UpdateSystemSettings(req *UpdateSystemSettingsRequest) error {
+	if req.APILogRetentionDays != nil && !validAPILogRetentionDays(*req.APILogRetentionDays) {
+		return ErrInvalidAPILogRetentionDays
+	}
 	if req.AllowRegister != nil {
 		value := "false"
 		if *req.AllowRegister {
@@ -52,6 +82,15 @@ func (s *SettingService) UpdateSystemSettings(req *UpdateSystemSettingsRequest) 
 		}
 		if err := s.settingRepo.SetSystemSetting("allow_register", value); err != nil {
 			return err
+		}
+	}
+	if req.APILogRetentionDays != nil {
+		days := *req.APILogRetentionDays
+		if err := s.settingRepo.SetSystemSetting("api_log_retention_days", strconv.Itoa(days)); err != nil {
+			return err
+		}
+		if s.retentionUpdater != nil {
+			s.retentionUpdater.SetRetentionDays(days)
 		}
 	}
 	return nil
@@ -68,5 +107,19 @@ func (s *SettingService) IsRegistrationAllowed() bool {
 
 // InitDefaultSettings 初始化默认设置
 func (s *SettingService) InitDefaultSettings() error {
-	return s.settingRepo.InitDefaultSettings()
+	if err := s.settingRepo.InitDefaultSettings(); err != nil {
+		return err
+	}
+	settings, err := s.GetSystemSettings()
+	if err != nil {
+		return err
+	}
+	if s.retentionUpdater != nil {
+		s.retentionUpdater.SetRetentionDays(settings.APILogRetentionDays)
+	}
+	return nil
+}
+
+func validAPILogRetentionDays(days int) bool {
+	return days >= MinAPILogRetentionDays && days <= MaxAPILogRetentionDays
 }

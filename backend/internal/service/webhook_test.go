@@ -1,13 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"testing"
 
-	"basegoapp/config"
 	"basegoapp/internal/model"
 	"basegoapp/pkg/database"
 	"gorm.io/driver/sqlite"
@@ -41,11 +41,24 @@ func setupWebhookTestDB(t *testing.T) {
 
 func TestWebhookUsesAppDefaultEventType(t *testing.T) {
 	setupWebhookTestDB(t)
-	cfg := &config.Config{WebhookEncryptionKey: "test-encryption-key"}
-	service := NewWebhookService(cfg)
+	service := NewWebhookService()
 	created, err := service.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "generic", Name: "测试接入"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	var integration model.AppIntegration
+	if err := database.GetDB().First(&integration, created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if integration.Secret != created.Secret {
+		t.Fatal("webhook secret was not stored as plaintext")
+	}
+	integrationJSON, err := json.Marshal(integration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(integrationJSON, []byte(integration.Secret)) {
+		t.Fatal("webhook secret was exposed by integration JSON")
 	}
 	body := []byte(`{"event_type":"not-registered","message":"hello"}`)
 	if err := service.Ingest(created.EndpointKey, map[string]string{"X-Webhook-Secret": created.Secret}, body, "application/json"); err != nil {
@@ -75,7 +88,7 @@ func TestWebhookUsesAppDefaultEventType(t *testing.T) {
 
 func TestWebhookDeduplicatesExternalEventID(t *testing.T) {
 	setupWebhookTestDB(t)
-	service := NewWebhookService(&config.Config{WebhookEncryptionKey: "test-encryption-key"})
+	service := NewWebhookService()
 	created, err := service.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "github", Name: "GitHub"})
 	if err != nil {
 		t.Fatal(err)

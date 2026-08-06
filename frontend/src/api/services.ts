@@ -1,9 +1,12 @@
 import { apiRequest } from './client'
 import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, CreatedIntegration, EventListResponse, Integration, RegistrationStatus, SystemSettings, TokenResponse, User, WebhookEvent } from './types'
+import { readAccessToken } from '@/lib/auth-token'
 
 export const api = {
   login: (username: string, password: string) =>
     apiRequest<TokenResponse>('/api/auth/login', { method: 'POST', body: { username, password } }),
+  setupAdmin: (username: string, password: string) =>
+    apiRequest<TokenResponse>('/api/auth/setup-admin', { method: 'POST', body: { username, password } }),
   register: (username: string, password: string) =>
     apiRequest<User>('/api/auth/register', { method: 'POST', body: { username, password } }),
   logout: () => apiRequest<void>('/api/auth/logout', { method: 'POST' }),
@@ -15,7 +18,7 @@ export const api = {
     }),
   registrationStatus: () => apiRequest<RegistrationStatus>('/api/settings/registration-status'),
   systemSettings: () => apiRequest<SystemSettings>('/api/settings/system'),
-  updateSystemSettings: (settings: SystemSettings) =>
+  updateSystemSettings: (settings: Partial<SystemSettings>) =>
     apiRequest<void>('/api/settings/system', { method: 'PUT', body: settings }),
   users: () => apiRequest<User[]>('/api/admin/users'),
   setUserRole: (userId: number, isAdmin: boolean) =>
@@ -72,7 +75,11 @@ export const api = {
     if (params.statusGroup) query.set('status_group', params.statusGroup)
     if (params.requestId) query.set('request_id', params.requestId)
     if (params.keyword) query.set('keyword', params.keyword)
-    const response = await fetch(`/api/admin/logs/export?${query.toString()}`, { credentials: 'include' })
+    const accessToken = readAccessToken()
+    const response = await fetch(`/api/admin/logs/export?${query.toString()}`, {
+      credentials: 'omit',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    })
     if (!response.ok) throw new Error(`导出失败 (${response.status})`)
     return { blob: await response.blob(), filename: response.headers.get('Content-Disposition')?.match(/filename=([^;]+)/)?.[1] ?? `seshat-api-logs.${params.format}` }
   },

@@ -52,7 +52,8 @@ func (r *SettingRepository) GetAllSystemSettings() ([]model.SystemSetting, error
 // InitDefaultSettings 初始化默认设置
 func (r *SettingRepository) InitDefaultSettings() error {
 	defaults := map[string]string{
-		"allow_register": "false",
+		"allow_register":         "false",
+		"api_log_retention_days": "30",
 	}
 
 	for key, value := range defaults {

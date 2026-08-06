@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"basegoapp/config"
 	"basegoapp/internal/service"
 	"basegoapp/pkg/response"
 
@@ -14,8 +13,8 @@ import (
 
 type WebhookHandler struct{ service *service.WebhookService }
 
-func NewWebhookHandler(cfg *config.Config) *WebhookHandler {
-	return &WebhookHandler{service: service.NewWebhookService(cfg)}
+func NewWebhookHandler() *WebhookHandler {
+	return &WebhookHandler{service: service.NewWebhookService()}
 }
 
 func (h *WebhookHandler) Catalog(c *gin.Context) { response.Success(c, h.service.Catalog()) }

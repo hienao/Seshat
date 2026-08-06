@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 const stacks = [
   { icon: BrandReact, title: 'React 前端', color: 'text-sky-600', items: ['React 19 + Vite', 'Appica UI + Tailwind CSS 4', 'TanStack Query / Table', 'TypeScript 类型检查'] },
   { icon: BrandGolang, title: 'Go 后端', color: 'text-cyan-700', items: ['Go + Gin', 'GORM 数据访问', 'Swagger API 文档', '统一响应结构'] },
-  { icon: Database, title: '部署与数据', color: 'text-emerald-700', items: ['默认 SQLite 持久化', '可选 PostgreSQL', 'HttpOnly Cookie 认证', 'Docker 一键部署'] },
+  { icon: Database, title: '部署与数据', color: 'text-emerald-700', items: ['默认 SQLite 持久化', '可选 PostgreSQL', 'Bearer Token 认证', 'Docker 一键部署'] },
 ]
 
 export function HomePage() {
@@ -43,7 +43,7 @@ export function HomePage() {
       </section>
 
       <section className="mx-auto mt-16 flex max-w-6xl flex-col items-start justify-between gap-5 rounded-3xl bg-neutral-950 px-7 py-8 text-white shadow-2xl sm:flex-row sm:items-center sm:px-10 dark:bg-emerald-950">
-        <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-300"><Lock size={22} /></span><div><h2 className="text-xl font-bold">安全默认值已经就位</h2><p className="mt-1 text-sm text-neutral-300">CORS 白名单、强 JWT 密钥、HttpOnly Cookie 与管理员初始化检查。</p></div></div>
+        <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-300"><Lock size={22} /></span><div><h2 className="text-xl font-bold">基础安全机制已经就位</h2><p className="mt-1 text-sm text-neutral-300">强 JWT 密钥、Bearer Token、令牌版本校验与管理员初始化检查。</p></div></div>
         <a href="/swagger/index.html" className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-300 hover:text-emerald-200"><Server size={17} />查看接口</a>
       </section>
     </div>

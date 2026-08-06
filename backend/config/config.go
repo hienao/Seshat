@@ -9,27 +9,20 @@ import (
 
 // Config 应用配置
 type Config struct {
-	DatabaseURL          string
-	DBDriver             string
-	SQLitePath           string
-	AppDataDir           string
-	AppCacheDir          string
-	LogDir               string
-	JWTSecret            string
-	WebhookEncryptionKey string
-	APILogEnabled        bool
-	APILogPath           string
-	APILogRetentionDays  int
-	APILogQueueSize      int
-	APILogBatchSize      int
-	APILogExportLimit    int
-	ServerPort           string
-	GinMode              string
-	CORSAllowedOrigins   []string
-	AuthCookieName       string
-	AuthCookieSecure     bool
-	DefaultAdminUsername string
-	DefaultAdminPassword string
+	DatabaseURL       string
+	DBDriver          string
+	SQLitePath        string
+	AppDataDir        string
+	AppCacheDir       string
+	LogDir            string
+	JWTSecret         string
+	APILogEnabled     bool
+	APILogPath        string
+	APILogQueueSize   int
+	APILogBatchSize   int
+	APILogExportLimit int
+	ServerPort        string
+	GinMode           string
 }
 
 // Load 加载配置
@@ -39,27 +32,20 @@ func Load() *Config {
 	const serverPort = "8080"
 
 	return &Config{
-		DatabaseURL:          getEnv("DATABASE_URL", ""),
-		DBDriver:             getEnv("DB_DRIVER", "sqlite"),
-		SQLitePath:           getEnv("SQLITE_PATH", filepath.Join(appDataDir, "db", "basegoapp.db")),
-		AppDataDir:           appDataDir,
-		AppCacheDir:          appCacheDir,
-		LogDir:               filepath.Join(appCacheDir, "logs", "app"),
-		JWTSecret:            getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
-		WebhookEncryptionKey: getEnv("WEBHOOK_ENCRYPTION_KEY", getEnv("JWT_SECRET", "your-secret-key-change-in-production")),
-		APILogEnabled:        getEnvBool("API_LOG_ENABLED", true),
-		APILogPath:           getEnv("API_LOG_PATH", filepath.Join(appCacheDir, "logs", "app", "api-logs.db")),
-		APILogRetentionDays:  getEnvInt("API_LOG_RETENTION_DAYS", 30),
-		APILogQueueSize:      getEnvInt("API_LOG_QUEUE_SIZE", 5000),
-		APILogBatchSize:      getEnvInt("API_LOG_BATCH_SIZE", 100),
-		APILogExportLimit:    getEnvInt("API_LOG_EXPORT_LIMIT", 100000),
-		ServerPort:           serverPort,
-		GinMode:              getEnv("GIN_MODE", "debug"),
-		CORSAllowedOrigins:   parseCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173")),
-		AuthCookieName:       getEnv("AUTH_COOKIE_NAME", "auth_token"),
-		AuthCookieSecure:     getEnvBool("AUTH_COOKIE_SECURE", false),
-		DefaultAdminUsername: getEnv("DEFAULT_ADMIN_USERNAME", ""),
-		DefaultAdminPassword: getEnv("DEFAULT_ADMIN_PASSWORD", ""),
+		DatabaseURL:       getEnv("DATABASE_URL", ""),
+		DBDriver:          getEnv("DB_DRIVER", "sqlite"),
+		SQLitePath:        getEnv("SQLITE_PATH", filepath.Join(appDataDir, "db", "seshat.db")),
+		AppDataDir:        appDataDir,
+		AppCacheDir:       appCacheDir,
+		LogDir:            filepath.Join(appCacheDir, "logs", "app"),
+		JWTSecret:         getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+		APILogEnabled:     true,
+		APILogPath:        filepath.Join(appCacheDir, "logs", "app", "api-logs.db"),
+		APILogQueueSize:   getEnvInt("API_LOG_QUEUE_SIZE", 5000),
+		APILogBatchSize:   getEnvInt("API_LOG_BATCH_SIZE", 100),
+		APILogExportLimit: getEnvInt("API_LOG_EXPORT_LIMIT", 100000),
+		ServerPort:        serverPort,
+		GinMode:           "release",
 	}
 }
 
@@ -68,18 +54,6 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
-}
-
-func getEnvBool(key string, defaultValue bool) bool {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return defaultValue
-	}
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return defaultValue
-	}
-	return parsed
 }
 
 func getEnvInt(key string, defaultValue int) int {
@@ -92,16 +66,4 @@ func getEnvInt(key string, defaultValue int) int {
 		return defaultValue
 	}
 	return parsed
-}
-
-func parseCSV(value string) []string {
-	parts := strings.Split(value, ",")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
 }

@@ -22,7 +22,7 @@ cd backend
 go run main.go
 ```
 
-> 默认 SQLite 数据库路径固定为 `/data/db/basegoapp.db`（由容器内部固定目录派生）。
+> 默认 SQLite 数据库路径固定为 `/data/db/seshat.db`（由容器内部固定目录派生）。
 
 2. **启动前端**
 ```bash
@@ -34,7 +34,7 @@ npm run dev
 4. **访问应用**
 - 前端: http://localhost:5173
 - API 文档: http://localhost:8080/swagger/index.html
-- 首次启动管理员由 `DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD` 初始化
+- 空数据库首次启动会创建一次性 `admin/admin` 引导账户，登录后必须设置正式管理员凭据
 
 ### Docker 部署
 
@@ -45,19 +45,9 @@ npm run dev
 | `DB_DRIVER` | ❌ | 数据库类型，默认 `sqlite` | `sqlite` / `postgres` |
 | `HOST_DATA_DIR` | ❌ | 宿主机数据目录（bind mount 源） | `./runtime/data` |
 | `HOST_CACHE_DIR` | ❌ | 宿主机缓存目录（bind mount 源） | `./runtime/cache` |
-| `SQLITE_PATH` | ❌ | SQLite 数据库文件路径，开发环境可覆盖 | `/data/db/basegoapp.db` |
+| `SQLITE_PATH` | ❌ | SQLite 数据库文件路径，开发环境可覆盖 | `/data/db/seshat.db` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
-| `WEBHOOK_ENCRYPTION_KEY` | ✅（生产） | 加密保存 Webhook Secret 的独立密钥 | `random-key-at-least-32-chars` |
-| `API_LOG_ENABLED` | ❌ | 是否启用后端接口日志 | `true` |
-| `API_LOG_PATH` | ❌ | 独立接口日志 SQLite 文件 | `/cache/logs/app/api-logs.db` |
-| `API_LOG_RETENTION_DAYS` | ❌ | 接口日志保留天数 | `30` |
-| `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173` |
-| `AUTH_COOKIE_NAME` | ❌ | 认证 Cookie 名称 | `auth_token` |
-| `AUTH_COOKIE_SECURE` | ❌ | 是否仅 HTTPS 发送 Cookie | `false` |
-| `DEFAULT_ADMIN_USERNAME` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员用户名 | `admin` |
-| `DEFAULT_ADMIN_PASSWORD` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员密码（至少 12 位） | `ChangeMe123456` |
-| `GIN_MODE` | ❌ | Gin 运行模式，默认 `debug` | `release` |
 
 #### 挂载目录
 
@@ -69,8 +59,12 @@ npm run dev
 | `/cache/tmp` | 临时文件和运行时缓存 |
 
 其中：
-- `SQLite` 路径固定派生为 `/data/db/basegoapp.db`
+- `SQLite` 路径固定派生为 `/data/db/seshat.db`
 - 应用日志目录固定派生为 `/cache/logs/app`
+- 接口日志固定启用并保存到 `/cache/logs/app/api-logs.db`
+- 接口日志默认保留 30 天，管理员可在“系统管理 → 系统设置”中调整为 1–3650 天，保存后立即生效
+- 登录令牌由前端保存到 LocalStorage，并通过 `Authorization: Bearer <token>` 请求头发送
+- Webhook Secret 以明文保存在业务数据库中；接入列表和详情接口不返回该字段，仅在创建或轮换时返回一次
 
 #### DATABASE_URL 格式
 
@@ -98,7 +92,6 @@ docker run -d \
   -v basegoapp_data:/data \
   -v basegoapp_cache:/cache \
   -e JWT_SECRET="your-secret-key-at-least-32-chars" \
-  -e GIN_MODE="release" \
   basegoapp
 ```
 
@@ -136,8 +129,6 @@ cp .env.example .env
 
 ```dotenv
 JWT_SECRET=请替换为至少32位的随机字符串
-WEBHOOK_ENCRYPTION_KEY=请替换为另一个至少32位的随机字符串
-DEFAULT_ADMIN_PASSWORD=请替换为至少12位的初始管理员密码
 ```
 
 默认使用 Beta 滚动标签 `hienao/seshat:beta`。启动前可通过 `SESHAT_IMAGE` 指定其他 Docker Hub 镜像或版本：
@@ -216,11 +207,12 @@ Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版
 
 ## 安全基线说明
 
-- CORS 默认使用白名单模式，`Origin` 不在 `CORS_ALLOWED_ORIGINS` 中会被拒绝。
-- 登录后令牌写入 HttpOnly Cookie，前端不再依赖 LocalStorage 保存 token。
-- 用户改密或角色变更后，旧 JWT 会立即失效（基于 `token_version` 校验）。
-- 生产模式（`GIN_MODE=release`）下，`JWT_SECRET` 必须为非默认值且长度至少 32 位。
-- 当数据库为空时，必须通过 `DEFAULT_ADMIN_USERNAME` 和 `DEFAULT_ADMIN_PASSWORD` 初始化管理员；弱口令 `admin/admin` 被禁止。
+- CORS 默认允许任意 Origin，返回 `Access-Control-Allow-Origin: *`，且不允许跨域 Cookie 凭据。
+- 登录后令牌保存到浏览器 LocalStorage，前端通过 `Authorization: Bearer <token>` 显式发送。
+- LocalStorage 可被页面 JavaScript 读取，因此部署时仍需防范 XSS，并建议配置严格的 Content Security Policy。
+- 用户退出、改密或角色变更后，旧 JWT 会立即失效（基于 `token_version` 校验）；退出会同时使该用户当前版本的其他令牌失效。
+- 服务固定使用 Gin `release` 模式，`JWT_SECRET` 必须为非默认值且长度至少 32 位。
+- 空数据库首次启动会创建受限的一次性 `admin/admin` 账户；该账户只能访问管理员初始化、个人信息和退出接口，设置正式凭据后立即失效。
 
 ## 项目结构
 

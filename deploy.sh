@@ -73,16 +73,6 @@ is_weak_jwt_secret() {
   [[ -z "$secret" || "${#secret}" -lt 32 || "$secret" == "your-secret-key-change-in-production" ]]
 }
 
-is_weak_admin_password() {
-  local username="$1"
-  local password="$2"
-  local username_lower
-  local password_lower
-  username_lower="$(printf '%s' "$username" | tr '[:upper:]' '[:lower:]')"
-  password_lower="$(printf '%s' "$password" | tr '[:upper:]' '[:lower:]')"
-  [[ -z "$password" || "${#password}" -lt 12 || ( "$username_lower" == "admin" && "$password_lower" == "admin" ) ]]
-}
-
 if command -v docker >/dev/null 2>&1; then
   DOCKER_CMD=(docker)
 elif [[ -x /Applications/Docker.app/Contents/Resources/bin/docker ]]; then
@@ -130,14 +120,10 @@ if ! "${SKIP_ENV_CHECK}"; then
       ok "已创建 .env 文件"
 
       jwt_secret="$(generate_secret)"
-      admin_password="$(generate_secret | cut -c1-20)"
-      set_env_value "DEFAULT_ADMIN_USERNAME" "admin" ".env"
       set_env_value "JWT_SECRET" "$jwt_secret" ".env"
-      set_env_value "DEFAULT_ADMIN_PASSWORD" "$admin_password" ".env"
       rm -f .env.bak
 
       ok "已自动生成强随机 JWT_SECRET"
-      ok "已自动生成初始管理员密码 DEFAULT_ADMIN_PASSWORD"
       warn "请妥善保存并按需修改 .env 中的安全配置"
 
       read -r -p "是否继续部署？(y/N) " answer
@@ -159,23 +145,6 @@ if ! "${SKIP_ENV_CHECK}"; then
       ok "已自动更新 JWT_SECRET（满足 release 模式要求）"
     fi
 
-    current_admin_username="$(get_env_value "DEFAULT_ADMIN_USERNAME" ".env")"
-    current_admin_password="$(get_env_value "DEFAULT_ADMIN_PASSWORD" ".env")"
-
-    if [[ -z "$current_admin_username" ]]; then
-      warn "检测到 DEFAULT_ADMIN_USERNAME 为空，正在自动设置为 admin..."
-      set_env_value "DEFAULT_ADMIN_USERNAME" "admin" ".env"
-      rm -f .env.bak
-      ok "已自动更新 DEFAULT_ADMIN_USERNAME=admin"
-      current_admin_username="admin"
-    fi
-
-    if is_weak_admin_password "$current_admin_username" "$current_admin_password"; then
-      warn "检测到 DEFAULT_ADMIN_PASSWORD 过弱，正在自动修复..."
-      set_env_value "DEFAULT_ADMIN_PASSWORD" "$(generate_secret | cut -c1-20)" ".env"
-      rm -f .env.bak
-      ok "已自动更新 DEFAULT_ADMIN_PASSWORD（满足安全要求）"
-    fi
   fi
 else
   warn "已跳过环境变量文件检查"
@@ -228,6 +197,7 @@ echo
 ok "应用访问地址:"
 echo "  - 应用: http://localhost"
 echo "  - API: http://localhost/api"
+echo "  - 首次登录: admin / admin（登录后必须设置正式管理员凭据）"
 echo "  - Swagger: http://localhost/swagger/index.html"
 echo
 info "查看日志: docker compose -f ${COMPOSE_FILE} -p ${PROJECT_NAME} logs -f"

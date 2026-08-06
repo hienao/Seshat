@@ -8,6 +8,7 @@ export interface User {
   id: number
   username: string
   is_admin: boolean
+  requires_admin_setup: boolean
   created_at: string
 }
 
@@ -18,6 +19,7 @@ export interface TokenResponse {
 
 export interface SystemSettings {
   allow_register: boolean
+  api_log_retention_days: number
 }
 
 export interface RegistrationStatus {

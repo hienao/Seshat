@@ -1,4 +1,5 @@
 import type { ApiResponse } from './types'
+import { readAccessToken } from '@/lib/auth-token'
 
 export class ApiError extends Error {
   constructor(
@@ -15,13 +16,18 @@ type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers)
+  const accessToken = readAccessToken()
+  if (accessToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${accessToken}`)
+  }
+
   const hasBody = options.body !== undefined
   if (hasBody && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
 
   const response = await fetch(path, {
     ...options,
     headers,
-    credentials: 'include',
+    credentials: 'omit',
     body: hasBody ? JSON.stringify(options.body) : undefined,
   })
 

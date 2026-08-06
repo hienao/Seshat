@@ -108,7 +108,6 @@ docker-compose up -d
 |--------|------|------|--------|
 | `DATABASE_URL` | ✅ | PostgreSQL 连接串 | - |
 | `JWT_SECRET` | ✅ | JWT 签名密钥 | - |
-| `GIN_MODE` | ❌ | Gin 运行模式 | `debug` |
 | `SERVER_PORT` | ❌ | 后端 API 端口 | `8080` |
 
 #### DATABASE_URL 格式
@@ -129,7 +128,6 @@ docker run -d \
   -p 80:80 \
   -e DATABASE_URL="postgres://user:pass@host:5432/dbname?sslmode=disable" \
   -e JWT_SECRET="your-secret-key-at-least-32-chars" \
-  -e GIN_MODE="release" \
   basegoapp
 ```
 
