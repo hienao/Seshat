@@ -3,7 +3,7 @@
 
 services:
   app:
-    image: ${SESHAT_IMAGE:-hienao/seshat:beta}
+    image: ${SESHAT_IMAGE:-hienao6/seshat:beta}
     ports:
       - "80:80"
     environment:
@@ -21,11 +21,11 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-basegoapp}
+      POSTGRES_DB: ${POSTGRES_DB:-seshat}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 5

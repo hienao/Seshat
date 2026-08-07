@@ -101,6 +101,11 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -133,7 +138,7 @@ jobs:
           context: .
           file: deploy/Dockerfile
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.metadata.outputs.tags }}
           labels: |
             org.opencontainers.image.title=Seshat
@@ -161,6 +166,7 @@ jobs:
             echo "- Version: \`${VERSION}\`"
             echo "- Version source: \`${VERSION_FILE}\`"
             echo "- Channel: \`${CHANNEL}\`"
+            echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
             if [[ "${EXISTS}" == "true" ]]; then
               echo "- Result: skipped because this version already exists"
             elif [[ "${PUBLISH_OUTCOME}" == "success" ]]; then
