@@ -88,11 +88,11 @@ cd "$PROJECT_ROOT"
 
 if "${PROD}"; then
   COMPOSE_FILE="docker-compose.prod.yml"
-  PROJECT_NAME="basegoapp-prod"
+  PROJECT_NAME="seshat-prod"
   info "使用生产环境配置: ${COMPOSE_FILE}"
 else
   COMPOSE_FILE="docker-compose.yml"
-  PROJECT_NAME="basegoapp"
+  PROJECT_NAME="seshat"
   info "使用开发环境配置: ${COMPOSE_FILE}"
 fi
 

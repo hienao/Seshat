@@ -45,6 +45,7 @@ npm run dev
 | `DB_DRIVER` | ❌ | 数据库类型，默认 `sqlite` | `sqlite` / `postgres` |
 | `HOST_DATA_DIR` | ❌ | 宿主机数据目录（bind mount 源） | `./runtime/data` |
 | `HOST_CACHE_DIR` | ❌ | 宿主机缓存目录（bind mount 源） | `./runtime/cache` |
+| `SESHAT_IMAGE` | ❌ | Docker Hub 部署使用的镜像，默认 Beta 滚动标签 | `hienao6/seshat:beta` |
 | `SQLITE_PATH` | ❌ | SQLite 数据库文件路径，开发环境可覆盖 | `/data/db/seshat.db` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
@@ -75,24 +76,24 @@ postgres://用户名:密码@主机:端口/数据库名?sslmode=disable
 ```
 
 示例：
-- 本地开发：`postgres://postgres:postgres@localhost:5432/basegoapp?sslmode=disable`
-- Docker 网络：`postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable`
-- 云数据库：`postgres://admin:password@rds.example.com:5432/basegoapp?sslmode=require`
+- 本地开发：`postgres://postgres:postgres@localhost:5432/seshat?sslmode=disable`
+- Docker 网络：`postgres://postgres:postgres@db:5432/seshat?sslmode=disable`
+- 云数据库：`postgres://admin:password@rds.example.com:5432/seshat?sslmode=require`
 
 #### 启动命令
 
 **方式一：直接运行镜像**
 ```bash
 # 构建镜像
-docker build -f deploy/Dockerfile -t basegoapp .
+docker build -f deploy/Dockerfile -t seshat .
 
 # 运行（替换为实际的数据库连接信息）
 docker run -d \
   -p 80:80 \
-  -v basegoapp_data:/data \
-  -v basegoapp_cache:/cache \
+  -v seshat_data:/data \
+  -v seshat_cache:/cache \
   -e JWT_SECRET="your-secret-key-at-least-32-chars" \
-  basegoapp
+  seshat
 ```
 
 **方式二：使用 docker-compose（推荐）**
@@ -108,7 +109,7 @@ docker-compose -f docker-compose.prod.yml up -d
 如需使用内置 PostgreSQL 服务：
 ```bash
 DB_DRIVER=postgres \
-DATABASE_URL="postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable" \
+DATABASE_URL="postgres://postgres:postgres@db:5432/seshat?sslmode=disable" \
 docker-compose --profile postgres up -d
 ```
 
@@ -131,23 +132,23 @@ cp .env.example .env
 JWT_SECRET=请替换为至少32位的随机字符串
 ```
 
-默认使用 Beta 滚动标签 `hienao/seshat:beta`。启动前可通过 `SESHAT_IMAGE` 指定其他 Docker Hub 镜像或版本：
+默认使用 Beta 滚动标签 `hienao6/seshat:beta`。启动前可通过 `SESHAT_IMAGE` 指定其他 Docker Hub 镜像或版本：
 
 ```bash
 # Beta 最新镜像
-SESHAT_IMAGE=hienao/seshat:beta \
+SESHAT_IMAGE=hienao6/seshat:beta \
 docker compose -f docker-compose.dockerhub.yml pull
-SESHAT_IMAGE=hienao/seshat:beta \
-docker compose -f docker-compose.dockerhub.yml up -d
-
-# Release 最新镜像
-SESHAT_IMAGE=hienao/seshat:latest \
+SESHAT_IMAGE=hienao6/seshat:beta \
 docker compose -f docker-compose.dockerhub.yml up -d
 
 # 使用不可变版本镜像（推荐用于可追溯部署）
-SESHAT_IMAGE=hienao/seshat:beta-v0.0.4 \
+SESHAT_IMAGE=hienao6/seshat:beta-v0.0.4 \
 docker compose -f docker-compose.dockerhub.yml up -d
 ```
+
+当前尚未发布正式 Release，因此 `latest`、`release` 和 `v0.0.1` 标签暂不可用；首次正式版发布成功后再使用对应标签。
+
+新发布的镜像同时支持 `linux/amd64` 和 `linux/arm64`。历史标签 `beta-v0.0.4` 仅包含 `linux/amd64`，ARM64 设备需要使用更新版本；如果设备已配置 x86 模拟，也可临时使用 `DOCKER_DEFAULT_PLATFORM=linux/amd64` 运行旧镜像。
 
 如果 Docker Hub 用户名或仓库名不同，请将镜像改为 `<用户名>/<仓库名>:<标签>`。首次部署建议先拉取并检查配置：
 
@@ -160,9 +161,9 @@ docker compose -f docker-compose.dockerhub.yml ps
 默认端口为 `80`，SQLite 数据保存在 `./runtime/data`，应用和 Nginx 日志保存在 `./runtime/cache`。如需使用内置 PostgreSQL：
 
 ```bash
-SESHAT_IMAGE=hienao/seshat:beta \
+SESHAT_IMAGE=hienao6/seshat:beta \
 DB_DRIVER=postgres \
-DATABASE_URL="postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable" \
+DATABASE_URL="postgres://postgres:postgres@db:5432/seshat?sslmode=disable" \
 docker compose --profile postgres -f docker-compose.dockerhub.yml up -d
 ```
 
@@ -199,11 +200,11 @@ Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版
 
 | 类型 | 名称 | 说明 |
 |------|------|------|
-| Secret | `DOCKERHUB_USERNAME` | Docker Hub 用户名 |
+| Secret | `DOCKERHUB_USERNAME` | Docker Hub 用户名，本仓库应配置为 `hienao6` |
 | Secret | `DOCKERHUB_TOKEN` | 具有目标仓库读写权限的 Access Token |
 | Variable（可选） | `DOCKERHUB_REPOSITORY` | Docker Hub 仓库名，默认 `seshat` |
 
-默认发布地址为 `DOCKERHUB_USERNAME/seshat`。工作流仅构建 `linux/amd64` 镜像，并通过 GitHub Actions Cache 复用对应分支的构建缓存。
+当前发布地址为 `hienao6/seshat`（由 `DOCKERHUB_USERNAME/seshat` 组合生成）。工作流同时构建 `linux/amd64` 和 `linux/arm64` 镜像，并通过 GitHub Actions Cache 复用对应分支的构建缓存。
 
 ## 安全基线说明
 
@@ -217,7 +218,7 @@ Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版
 ## 项目结构
 
 ```
-basegoapp/
+Seshat/
 ├── frontend/          # React + Vite 前端
 │   ├── src/
 │   │   ├── api/       # API 封装与生成客户端
