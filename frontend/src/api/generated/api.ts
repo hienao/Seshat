@@ -42,7 +42,7 @@ export interface ServiceRegisterRequest {
 }
 
 export interface ServiceSetupAdminRequest {
-  /** @minLength 12 */
+  /** @minLength 6 */
   password: string;
   /**
    * @minLength 3

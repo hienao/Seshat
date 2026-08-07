@@ -50,7 +50,7 @@ definitions:
   service.SetupAdminRequest:
     properties:
       password:
-        minLength: 12
+        minLength: 6
         type: string
       username:
         maxLength: 50
