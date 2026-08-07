@@ -47,10 +47,10 @@ func (r *UserRepository) Update(user *model.User) error {
 	return r.db.Save(user).Error
 }
 
-// Count 统计用户数量
-func (r *UserRepository) Count() (int64, error) {
+// CountAdmins 统计管理员数量。
+func (r *UserRepository) CountAdmins() (int64, error) {
 	var count int64
-	err := r.db.Model(&model.User{}).Count(&count).Error
+	err := r.db.Model(&model.User{}).Where("is_admin = ?", true).Count(&count).Error
 	return count, err
 }
 
@@ -76,10 +76,15 @@ func (r *UserRepository) SetAdmin(userID uint, isAdmin bool) error {
 	}).Error
 }
 
+// IncrementTokenVersion 使该用户已签发的所有 Token 立即失效。
+func (r *UserRepository) IncrementTokenVersion(userID uint) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Update("token_version", gorm.Expr("token_version + 1")).Error
+}
+
 // FindAuthVersionByID 查询用户认证版本和角色信息
 func (r *UserRepository) FindAuthVersionByID(id uint) (*model.User, error) {
 	var user model.User
-	err := r.db.Select("id", "username", "is_admin", "token_version").First(&user, id).Error
+	err := r.db.Select("id", "username", "is_admin", "requires_admin_setup", "token_version").First(&user, id).Error
 	if err != nil {
 		return nil, err
 	}

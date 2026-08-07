@@ -22,7 +22,7 @@ cd backend
 go run main.go
 ```
 
-> 默认 SQLite 数据库路径固定为 `/data/db/basegoapp.db`（由容器内部固定目录派生）。
+> 默认 SQLite 数据库路径固定为 `/data/db/seshat.db`（由容器内部固定目录派生）。
 
 2. **启动前端**
 ```bash
@@ -34,7 +34,7 @@ npm run dev
 4. **访问应用**
 - 前端: http://localhost:5173
 - API 文档: http://localhost:8080/swagger/index.html
-- 首次启动管理员由 `DEFAULT_ADMIN_USERNAME` / `DEFAULT_ADMIN_PASSWORD` 初始化
+- 空数据库首次启动会创建一次性 `admin/admin` 引导账户，登录后必须设置正式管理员凭据
 
 ### Docker 部署
 
@@ -45,19 +45,10 @@ npm run dev
 | `DB_DRIVER` | ❌ | 数据库类型，默认 `sqlite` | `sqlite` / `postgres` |
 | `HOST_DATA_DIR` | ❌ | 宿主机数据目录（bind mount 源） | `./runtime/data` |
 | `HOST_CACHE_DIR` | ❌ | 宿主机缓存目录（bind mount 源） | `./runtime/cache` |
-| `SQLITE_PATH` | ❌ | SQLite 数据库文件路径，开发环境可覆盖 | `/data/db/basegoapp.db` |
+| `SESHAT_IMAGE` | ❌ | Docker Hub 部署使用的镜像，默认 Beta 滚动标签 | `hienao6/seshat:beta` |
+| `SQLITE_PATH` | ❌ | SQLite 数据库文件路径，开发环境可覆盖 | `/data/db/seshat.db` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
-| `WEBHOOK_ENCRYPTION_KEY` | ✅（生产） | 加密保存 Webhook Secret 的独立密钥 | `random-key-at-least-32-chars` |
-| `API_LOG_ENABLED` | ❌ | 是否启用后端接口日志 | `true` |
-| `API_LOG_PATH` | ❌ | 独立接口日志 SQLite 文件 | `/cache/logs/app/api-logs.db` |
-| `API_LOG_RETENTION_DAYS` | ❌ | 接口日志保留天数 | `30` |
-| `CORS_ALLOWED_ORIGINS` | ❌ | CORS 白名单（逗号分隔） | `http://localhost,http://127.0.0.1,http://localhost:5173,http://127.0.0.1:5173` |
-| `AUTH_COOKIE_NAME` | ❌ | 认证 Cookie 名称 | `auth_token` |
-| `AUTH_COOKIE_SECURE` | ❌ | 是否仅 HTTPS 发送 Cookie | `false` |
-| `DEFAULT_ADMIN_USERNAME` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员用户名 | `admin` |
-| `DEFAULT_ADMIN_PASSWORD` | ⚠️ 首次启动建议配置 | 数据库空时初始化管理员密码（至少 12 位） | `ChangeMe123456` |
-| `GIN_MODE` | ❌ | Gin 运行模式，默认 `debug` | `release` |
 
 #### 挂载目录
 
@@ -69,8 +60,12 @@ npm run dev
 | `/cache/tmp` | 临时文件和运行时缓存 |
 
 其中：
-- `SQLite` 路径固定派生为 `/data/db/basegoapp.db`
+- `SQLite` 路径固定派生为 `/data/db/seshat.db`
 - 应用日志目录固定派生为 `/cache/logs/app`
+- 接口日志固定启用并保存到 `/cache/logs/app/api-logs.db`
+- 接口日志默认保留 30 天，管理员可在“系统管理 → 系统设置”中调整为 1–3650 天，保存后立即生效
+- 登录令牌由前端保存到 LocalStorage，并通过 `Authorization: Bearer <token>` 请求头发送
+- Webhook Secret 以明文保存在业务数据库中；接入列表和详情接口不返回该字段，仅在创建或轮换时返回一次
 
 #### DATABASE_URL 格式
 
@@ -81,25 +76,24 @@ postgres://用户名:密码@主机:端口/数据库名?sslmode=disable
 ```
 
 示例：
-- 本地开发：`postgres://postgres:postgres@localhost:5432/basegoapp?sslmode=disable`
-- Docker 网络：`postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable`
-- 云数据库：`postgres://admin:password@rds.example.com:5432/basegoapp?sslmode=require`
+- 本地开发：`postgres://postgres:postgres@localhost:5432/seshat?sslmode=disable`
+- Docker 网络：`postgres://postgres:postgres@db:5432/seshat?sslmode=disable`
+- 云数据库：`postgres://admin:password@rds.example.com:5432/seshat?sslmode=require`
 
 #### 启动命令
 
 **方式一：直接运行镜像**
 ```bash
 # 构建镜像
-docker build -f deploy/Dockerfile -t basegoapp .
+docker build -f deploy/Dockerfile -t seshat .
 
 # 运行（替换为实际的数据库连接信息）
 docker run -d \
   -p 80:80 \
-  -v basegoapp_data:/data \
-  -v basegoapp_cache:/cache \
+  -v seshat_data:/data \
+  -v seshat_cache:/cache \
   -e JWT_SECRET="your-secret-key-at-least-32-chars" \
-  -e GIN_MODE="release" \
-  basegoapp
+  seshat
 ```
 
 **方式二：使用 docker-compose（推荐）**
@@ -115,8 +109,62 @@ docker-compose -f docker-compose.prod.yml up -d
 如需使用内置 PostgreSQL 服务：
 ```bash
 DB_DRIVER=postgres \
-DATABASE_URL="postgres://postgres:postgres@db:5432/basegoapp?sslmode=disable" \
+DATABASE_URL="postgres://postgres:postgres@db:5432/seshat?sslmode=disable" \
 docker-compose --profile postgres up -d
+```
+
+#### 从 Docker Hub 镜像部署
+
+如果不需要在部署机器上构建镜像，可以使用仓库中的 `docker-compose.dockerhub.yml`，它只会拉取 Docker Hub 镜像，不会执行本地构建：
+
+```bash
+# 下载项目配置（或在已有项目目录中执行）
+git clone https://github.com/hienao/Seshat.git
+cd Seshat
+
+# 创建并编辑生产环境配置
+cp .env.example .env
+```
+
+至少修改 `.env` 中的以下配置：
+
+```dotenv
+JWT_SECRET=请替换为至少32位的随机字符串
+```
+
+默认使用 Beta 滚动标签 `hienao6/seshat:beta`。启动前可通过 `SESHAT_IMAGE` 指定其他 Docker Hub 镜像或版本：
+
+```bash
+# Beta 最新镜像
+SESHAT_IMAGE=hienao6/seshat:beta \
+docker compose -f docker-compose.dockerhub.yml pull
+SESHAT_IMAGE=hienao6/seshat:beta \
+docker compose -f docker-compose.dockerhub.yml up -d
+
+# 使用不可变版本镜像（推荐用于可追溯部署）
+SESHAT_IMAGE=hienao6/seshat:beta-v0.0.4 \
+docker compose -f docker-compose.dockerhub.yml up -d
+```
+
+当前尚未发布正式 Release，因此 `latest`、`release` 和 `v0.0.1` 标签暂不可用；首次正式版发布成功后再使用对应标签。
+
+新发布的镜像同时支持 `linux/amd64` 和 `linux/arm64`。历史标签 `beta-v0.0.4` 仅包含 `linux/amd64`，ARM64 设备需要使用更新版本；如果设备已配置 x86 模拟，也可临时使用 `DOCKER_DEFAULT_PLATFORM=linux/amd64` 运行旧镜像。
+
+如果 Docker Hub 用户名或仓库名不同，请将镜像改为 `<用户名>/<仓库名>:<标签>`。首次部署建议先拉取并检查配置：
+
+```bash
+docker compose -f docker-compose.dockerhub.yml config
+docker compose -f docker-compose.dockerhub.yml up -d
+docker compose -f docker-compose.dockerhub.yml ps
+```
+
+默认端口为 `80`，SQLite 数据保存在 `./runtime/data`，应用和 Nginx 日志保存在 `./runtime/cache`。如需使用内置 PostgreSQL：
+
+```bash
+SESHAT_IMAGE=hienao6/seshat:beta \
+DB_DRIVER=postgres \
+DATABASE_URL="postgres://postgres:postgres@db:5432/seshat?sslmode=disable" \
+docker compose --profile postgres -f docker-compose.dockerhub.yml up -d
 ```
 
 ### 一键部署脚本（macOS/Linux）
@@ -152,24 +200,25 @@ Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版
 
 | 类型 | 名称 | 说明 |
 |------|------|------|
-| Secret | `DOCKERHUB_USERNAME` | Docker Hub 用户名 |
+| Secret | `DOCKERHUB_USERNAME` | Docker Hub 用户名，本仓库应配置为 `hienao6` |
 | Secret | `DOCKERHUB_TOKEN` | 具有目标仓库读写权限的 Access Token |
 | Variable（可选） | `DOCKERHUB_REPOSITORY` | Docker Hub 仓库名，默认 `seshat` |
 
-默认发布地址为 `DOCKERHUB_USERNAME/seshat`。工作流仅构建 `linux/amd64` 镜像，并通过 GitHub Actions Cache 复用对应分支的构建缓存。
+当前发布地址为 `hienao6/seshat`（由 `DOCKERHUB_USERNAME/seshat` 组合生成）。工作流同时构建 `linux/amd64` 和 `linux/arm64` 镜像，并通过 GitHub Actions Cache 复用对应分支的构建缓存。
 
 ## 安全基线说明
 
-- CORS 默认使用白名单模式，`Origin` 不在 `CORS_ALLOWED_ORIGINS` 中会被拒绝。
-- 登录后令牌写入 HttpOnly Cookie，前端不再依赖 LocalStorage 保存 token。
-- 用户改密或角色变更后，旧 JWT 会立即失效（基于 `token_version` 校验）。
-- 生产模式（`GIN_MODE=release`）下，`JWT_SECRET` 必须为非默认值且长度至少 32 位。
-- 当数据库为空时，必须通过 `DEFAULT_ADMIN_USERNAME` 和 `DEFAULT_ADMIN_PASSWORD` 初始化管理员；弱口令 `admin/admin` 被禁止。
+- CORS 默认允许任意 Origin，返回 `Access-Control-Allow-Origin: *`，且不允许跨域 Cookie 凭据。
+- 登录后令牌保存到浏览器 LocalStorage，前端通过 `Authorization: Bearer <token>` 显式发送。
+- LocalStorage 可被页面 JavaScript 读取，因此部署时仍需防范 XSS，并建议配置严格的 Content Security Policy。
+- 用户退出、改密或角色变更后，旧 JWT 会立即失效（基于 `token_version` 校验）；退出会同时使该用户当前版本的其他令牌失效。
+- 服务固定使用 Gin `release` 模式，`JWT_SECRET` 必须为非默认值且长度至少 32 位。
+- 空数据库首次启动会创建受限的一次性 `admin/admin` 账户；该账户只能访问管理员初始化、个人信息和退出接口，设置正式凭据后立即失效。
 
 ## 项目结构
 
 ```
-basegoapp/
+Seshat/
 ├── frontend/          # React + Vite 前端
 │   ├── src/
 │   │   ├── api/       # API 封装与生成客户端

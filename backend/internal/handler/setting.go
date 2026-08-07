@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+
 	"basegoapp/internal/service"
 	"basegoapp/pkg/response"
 
@@ -13,9 +15,9 @@ type SettingHandler struct {
 }
 
 // NewSettingHandler 创建设置处理器
-func NewSettingHandler() *SettingHandler {
+func NewSettingHandler(retentionUpdaters ...service.APILogRetentionUpdater) *SettingHandler {
 	return &SettingHandler{
-		settingService: service.NewSettingService(),
+		settingService: service.NewSettingService(retentionUpdaters...),
 	}
 }
 
@@ -69,6 +71,10 @@ func (h *SettingHandler) UpdateSystemSettings(c *gin.Context) {
 	}
 
 	if err := h.settingService.UpdateSystemSettings(&req); err != nil {
+		if errors.Is(err, service.ErrInvalidAPILogRetentionDays) {
+			response.BadRequest(c, err.Error())
+			return
+		}
 		response.InternalError(c, err.Error())
 		return
 	}

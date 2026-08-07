@@ -1,31 +1,20 @@
-# 开发环境 Docker Compose 配置
-# 使用方法: docker-compose up -d
+# 使用 Docker Hub 已发布镜像的生产环境配置
+# 使用方法: docker compose -f docker-compose.dockerhub.yml up -d
 
 services:
-  # 应用服务（前后端统一容器）
   app:
-    build:
-      context: .
-      dockerfile: deploy/Dockerfile
+    image: ${SESHAT_IMAGE:-hienao6/seshat:beta}
     ports:
       - "80:80"
     environment:
-      # 默认使用 SQLite，可设置为 postgres 切换到 PostgreSQL
       DB_DRIVER: ${DB_DRIVER:-sqlite}
-      # PostgreSQL 模式下必填
       DATABASE_URL: ${DATABASE_URL:-}
-      # 必填：JWT 签名密钥
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
-      # 后端接口日志高级配置
-      API_LOG_QUEUE_SIZE: ${API_LOG_QUEUE_SIZE:-5000}
-      API_LOG_BATCH_SIZE: ${API_LOG_BATCH_SIZE:-100}
-      API_LOG_EXPORT_LIMIT: ${API_LOG_EXPORT_LIMIT:-100000}
+      JWT_SECRET: ${JWT_SECRET}
     volumes:
       - ${HOST_DATA_DIR:-./runtime/data}:/data
       - ${HOST_CACHE_DIR:-./runtime/cache}:/cache
     restart: unless-stopped
 
-  # PostgreSQL 数据库（可选：docker compose --profile postgres up -d）
   db:
     profiles: ["postgres"]
     image: postgres:15-alpine
@@ -35,8 +24,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-seshat}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s

@@ -4,7 +4,6 @@ import (
 	"basegoapp/config"
 	"basegoapp/internal/service"
 	"basegoapp/pkg/response"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,7 +12,6 @@ import (
 type AuthHandler struct {
 	authService    *service.AuthService
 	settingService *service.SettingService
-	cfg            *config.Config
 }
 
 // NewAuthHandler 创建认证处理器
@@ -21,7 +19,6 @@ func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	return &AuthHandler{
 		authService:    service.NewAuthService(cfg),
 		settingService: service.NewSettingService(),
-		cfg:            cfg,
 	}
 }
 
@@ -80,27 +77,51 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(h.cfg.AuthCookieName, token.Token, 24*60*60, "/", "", h.cfg.AuthCookieSecure, true)
+	response.Success(c, token)
+}
 
+// SetupAdmin 设置正式管理员凭据
+// @Summary 设置正式管理员凭据
+// @Description 使用一次性 admin/admin 登录后设置正式管理员用户名和密码
+// @Tags 认证
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body service.SetupAdminRequest true "管理员凭据"
+// @Success 200 {object} response.Response{data=service.TokenResponse}
+// @Failure 400 {object} response.Response
+// @Router /api/auth/setup-admin [post]
+func (h *AuthHandler) SetupAdmin(c *gin.Context) {
+	var req service.SetupAdminRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请求参数错误: "+err.Error())
+		return
+	}
+	token, err := h.authService.SetupAdmin(c.GetUint("user_id"), &req)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	response.Success(c, token)
 }
 
 // Logout 用户退出
 // @Summary 用户退出
-// @Description 用户退出登录（前端清除 Token）
+// @Description 使当前用户已签发的 Bearer Token 立即失效
 // @Tags 认证
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} response.Response
 // @Router /api/auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(h.cfg.AuthCookieName, "", -1, "/", "", h.cfg.AuthCookieSecure, true)
+	if err := h.authService.Logout(c.GetUint("user_id")); err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
 	response.Success(c, nil)
 }
 
-// GetAuthService 获取认证服务（用于初始化默认管理员）
+// GetAuthService 获取认证服务（用于初始化引导管理员）
 func (h *AuthHandler) GetAuthService() *service.AuthService {
 	return h.authService
 }

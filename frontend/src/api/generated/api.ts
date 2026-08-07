@@ -41,8 +41,19 @@ export interface ServiceRegisterRequest {
   username: string;
 }
 
+export interface ServiceSetupAdminRequest {
+  /** @minLength 12 */
+  password: string;
+  /**
+   * @minLength 3
+   * @maxLength 50
+   */
+  username: string;
+}
+
 export interface ServiceSystemSettingsResponse {
   allow_register?: boolean;
+  api_log_retention_days?: number;
 }
 
 export interface ServiceTokenResponse {
@@ -52,12 +63,14 @@ export interface ServiceTokenResponse {
 
 export interface ServiceUpdateSystemSettingsRequest {
   allow_register?: boolean;
+  api_log_retention_days?: number;
 }
 
 export interface ServiceUserResponse {
   created_at?: string;
   id?: number;
   is_admin?: boolean;
+  requires_admin_setup?: boolean;
   username?: string;
 }
 
@@ -122,7 +135,7 @@ export class HttpClient<SecurityDataType = unknown> {
     fetch(...fetchParams);
 
   private baseApiParams: RequestParams = {
-    credentials: "same-origin",
+    credentials: "omit",
     headers: {},
     redirect: "follow",
     referrerPolicy: "no-referrer",
@@ -402,7 +415,7 @@ export class Api<
       }),
 
     /**
-     * @description 用户退出登录（前端清除 Token）
+     * @description 使当前用户已签发的 Bearer Token 立即失效
      *
      * @tags 认证
      * @name AuthLogoutCreate
@@ -440,6 +453,34 @@ export class Api<
         path: `/api/auth/register`,
         method: "POST",
         body: request,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description 使用一次性 admin/admin 登录后设置正式管理员用户名和密码
+     *
+     * @tags 认证
+     * @name AuthSetupAdminCreate
+     * @summary 设置正式管理员凭据
+     * @request POST:/api/auth/setup-admin
+     * @secure
+     */
+    authSetupAdminCreate: (
+      request: ServiceSetupAdminRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: ServiceTokenResponse;
+        },
+        ResponseResponse
+      >({
+        path: `/api/auth/setup-admin`,
+        method: "POST",
+        body: request,
+        secure: true,
         type: ContentType.Json,
         format: "json",
         ...params,

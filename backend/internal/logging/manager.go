@@ -18,17 +18,23 @@ import (
 
 // Manager 负责接口日志的异步写入、查询共用数据库连接和保留期清理。
 type Manager struct {
-	DB      *gorm.DB
-	enabled bool
-	queue   chan model.ApiRequestLog
-	done    chan struct{}
-	wg      sync.WaitGroup
-	dropped atomic.Uint64
-	config  *config.Config
+	DB               *gorm.DB
+	enabled          bool
+	queue            chan model.ApiRequestLog
+	done             chan struct{}
+	retentionChanged chan struct{}
+	wg               sync.WaitGroup
+	dropped          atomic.Uint64
+	retentionDays    atomic.Int64
+	config           *config.Config
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
-	manager := &Manager{enabled: cfg.APILogEnabled, config: cfg}
+	manager := &Manager{
+		enabled:          cfg.APILogEnabled,
+		config:           cfg,
+		retentionChanged: make(chan struct{}, 1),
+	}
 	if !cfg.APILogEnabled {
 		return manager, nil
 	}
@@ -91,6 +97,18 @@ func (m *Manager) ExportLimit() int {
 	return m.config.APILogExportLimit
 }
 
+// SetRetentionDays 更新日志保留天数，并立即触发一次过期日志清理。
+func (m *Manager) SetRetentionDays(days int) {
+	if m == nil {
+		return
+	}
+	m.retentionDays.Store(int64(days))
+	select {
+	case m.retentionChanged <- struct{}{}:
+	default:
+	}
+}
+
 func (m *Manager) writeLoop() {
 	defer m.wg.Done()
 	interval := time.Second
@@ -134,15 +152,12 @@ func (m *Manager) flush(max int) {
 
 func (m *Manager) retentionLoop() {
 	defer m.wg.Done()
-	if m.config.APILogRetentionDays <= 0 {
-		return
-	}
-	// 启动时先清理一次，之后每 6 小时清理一次。
-	m.cleanup()
 	ticker := time.NewTicker(6 * time.Hour)
 	defer ticker.Stop()
 	for {
 		select {
+		case <-m.retentionChanged:
+			m.cleanup()
 		case <-ticker.C:
 			m.cleanup()
 		case <-m.done:
@@ -152,10 +167,11 @@ func (m *Manager) retentionLoop() {
 }
 
 func (m *Manager) cleanup() {
-	if !m.Enabled() || m.config.APILogRetentionDays <= 0 {
+	days := int(m.retentionDays.Load())
+	if !m.Enabled() || days <= 0 {
 		return
 	}
-	cutoff := time.Now().AddDate(0, 0, -m.config.APILogRetentionDays)
+	cutoff := time.Now().AddDate(0, 0, -days)
 	if err := m.DB.Where("occurred_at < ?", cutoff).Delete(&model.ApiRequestLog{}).Error; err != nil {
 		log.Printf("failed to clean API request logs: %v", err)
 	}

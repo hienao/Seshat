@@ -1,10 +1,11 @@
 import { Badge } from '@appica/ui-react/badge'
+import { Input } from '@appica/ui-react/input'
 import { Switch } from '@appica/ui-react/switch'
 import { Spinner } from '@appica/ui-react/spinner'
 import { Refresh, Settings, ShieldCheck, User, Users } from '@appica/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api/services'
 import type { User as UserModel } from '@/api/types'
 import { AppButton } from '@/components/common/app-button'
@@ -19,16 +20,24 @@ import { useAuthStore } from '@/stores/auth'
 export function AdminPage() {
   const currentUser = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
+  const [retentionDays, setRetentionDays] = useState('30')
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: api.users })
   const settings = useQuery({ queryKey: ['admin', 'settings'], queryFn: api.systemSettings })
   const updateSettings = useMutation({
     mutationFn: api.updateSystemSettings,
-    onSuccess: (_, variables) => queryClient.setQueryData(['admin', 'settings'], variables),
+    onSuccess: (_, variables) => queryClient.setQueryData(['admin', 'settings'], (current: object | undefined) => ({ ...current, ...variables })),
   })
   const updateRole = useMutation({
     mutationFn: ({ id, isAdmin }: { id: number; isAdmin: boolean }) => api.setUserRole(id, isAdmin),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
   })
+
+  useEffect(() => {
+    if (settings.data) setRetentionDays(String(settings.data.api_log_retention_days))
+  }, [settings.data])
+
+  const parsedRetentionDays = Number(retentionDays)
+  const retentionDaysValid = Number.isInteger(parsedRetentionDays) && parsedRetentionDays >= 1 && parsedRetentionDays <= 3650
 
   const columns = useMemo<ColumnDef<UserModel, unknown>[]>(() => [
     {
@@ -60,12 +69,22 @@ export function AdminPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-7 px-4 py-10 sm:px-6">
-      <PageHeader eyebrow="Administration" title="系统管理" description="集中管理开放注册策略与用户权限。" />
-      <Panel title="系统设置" description="设置会立即应用到公开注册页面" icon={<Settings size={20} />}>
+      <PageHeader eyebrow="Administration" title="系统管理" description="集中管理系统策略、日志保留周期与用户权限。" />
+      <Panel title="系统设置" description="设置保存后立即生效" icon={<Settings size={20} />}>
         {settings.isPending ? <div className="grid min-h-28 place-items-center"><Spinner className="size-7" /></div> : settings.error ? <ErrorState message={errorMessage(settings.error)} onRetry={() => void settings.refetch()} /> : (
-          <div className="flex items-center justify-between gap-5 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900">
-            <div><h3 className="font-semibold">允许用户注册</h3><p className="mt-1 text-sm text-neutral-500">开启后，访客可以自行创建账户并登录。</p></div>
-            <Switch size="lg" aria-label="允许用户注册" checked={settings.data?.allow_register ?? false} disabled={updateSettings.isPending} onCheckedChange={(checked) => updateSettings.mutate({ allow_register: checked })} />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-5 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900">
+              <div><h3 className="font-semibold">允许用户注册</h3><p className="mt-1 text-sm text-neutral-500">开启后，访客可以自行创建账户并登录。</p></div>
+              <Switch size="lg" aria-label="允许用户注册" checked={settings.data?.allow_register ?? false} disabled={updateSettings.isPending} onCheckedChange={(checked) => updateSettings.mutate({ allow_register: checked })} />
+            </div>
+            <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
+              <label className="max-w-xs flex-1 space-y-2 text-sm font-medium">
+                <span>接口日志保留天数</span>
+                <Input type="number" min={1} max={3650} step={1} value={retentionDays} disabled={updateSettings.isPending} onChange={(event) => setRetentionDays(event.target.value)} />
+                <span className={`block text-xs ${retentionDaysValid ? 'text-neutral-500' : 'text-red-600'}`}>{retentionDaysValid ? '默认保留 30 天，可设置 1–3650 天。' : '请输入 1–3650 之间的整数。'}</span>
+              </label>
+              <AppButton disabled={updateSettings.isPending || !retentionDaysValid || parsedRetentionDays === settings.data?.api_log_retention_days} onClick={() => updateSettings.mutate({ api_log_retention_days: parsedRetentionDays })}>{updateSettings.isPending ? '正在保存…' : '保存保留周期'}</AppButton>
+            </div>
           </div>
         )}
         {updateSettings.error && <div className="mt-4"><Message variant="error" title={errorMessage(updateSettings.error, '保存设置失败')} /></div>}
