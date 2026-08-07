@@ -1,8 +1,12 @@
-# 阶段 1: 构建前端
-FROM node:20-alpine AS frontend-builder
+# 阶段 1: 前端产物与目标 CPU 架构无关，固定在构建机原生架构执行，避免 QEMU 下重复运行 npm。
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci \
+    --registry=https://registry.npmjs.org \
+    --replace-registry-host=always \
+    --fetch-retries=5 \
+    --fetch-retry-maxtimeout=120000
 COPY frontend/ ./
 RUN npm run build
 
