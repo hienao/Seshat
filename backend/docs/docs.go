@@ -600,7 +600,7 @@ const docTemplate = `{
             "properties": {
                 "password": {
                     "type": "string",
-                    "minLength": 12
+                    "minLength": 6
                 },
                 "username": {
                     "type": "string",

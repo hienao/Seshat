@@ -48,13 +48,16 @@ func TestBootstrapAdminMustSetFormalCredentials(t *testing.T) {
 		t.Fatal("bootstrap account was not marked for administrator setup")
 	}
 
-	if _, err := authService.SetupAdmin(bootstrapUser.ID, &SetupAdminRequest{Username: "owner", Password: "StrongPassword123"}); err != nil {
+	if _, err := authService.SetupAdmin(bootstrapUser.ID, &SetupAdminRequest{Username: "owner", Password: "12345"}); err == nil {
+		t.Fatal("administrator setup accepted a password shorter than 6 characters")
+	}
+	if _, err := authService.SetupAdmin(bootstrapUser.ID, &SetupAdminRequest{Username: "owner", Password: "owner6"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := authService.Login(&LoginRequest{Username: "admin", Password: "admin"}); err == nil {
 		t.Fatal("bootstrap credentials still worked after setup")
 	}
-	if _, err := authService.Login(&LoginRequest{Username: "owner", Password: "StrongPassword123"}); err != nil {
+	if _, err := authService.Login(&LoginRequest{Username: "owner", Password: "owner6"}); err != nil {
 		t.Fatalf("formal administrator login failed: %v", err)
 	}
 	formalUser, err := authService.userRepo.FindByUsername("owner")
@@ -75,7 +78,7 @@ func TestBootstrapAdminMustSetFormalCredentials(t *testing.T) {
 	if loggedOutUser.TokenVersion != versionBeforeLogout+1 {
 		t.Fatal("logout did not invalidate issued tokens")
 	}
-	if _, err := authService.SetupAdmin(formalUser.ID, &SetupAdminRequest{Username: "other", Password: "AnotherPassword123"}); err == nil {
+	if _, err := authService.SetupAdmin(formalUser.ID, &SetupAdminRequest{Username: "other", Password: "other6"}); err == nil {
 		t.Fatal("administrator setup was allowed more than once")
 	}
 }

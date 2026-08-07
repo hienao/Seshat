@@ -51,7 +51,7 @@ type ChangePasswordRequest struct {
 // SetupAdminRequest 首次登录后设置正式管理员凭据。
 type SetupAdminRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=50"`
-	Password string `json:"password" binding:"required,min=12"`
+	Password string `json:"password" binding:"required,min=6"`
 }
 
 // TokenResponse Token 响应
@@ -158,8 +158,8 @@ func (s *AuthService) SetupAdmin(userID uint, req *SetupAdminRequest) (*TokenRes
 	if len(username) < 3 || len(username) > 50 {
 		return nil, errors.New("管理员用户名长度必须在 3 到 50 位之间")
 	}
-	if len(req.Password) < 12 {
-		return nil, errors.New("管理员密码长度至少 12 位")
+	if len(req.Password) < 6 {
+		return nil, errors.New("管理员密码长度至少 6 位")
 	}
 	if username != user.Username {
 		exists, existsErr := s.userRepo.ExistsByUsername(username)

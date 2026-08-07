@@ -37,7 +37,7 @@ export function AdminSetupDialog() {
     event.preventDefault()
     setValidation('')
     if (username.trim().length < 3) return setValidation('管理员用户名至少 3 位')
-    if (password.length < 12) return setValidation('管理员密码至少 12 位')
+    if (password.length < 6) return setValidation('管理员密码至少 6 位')
     if (password !== confirmPassword) return setValidation('两次输入的密码不一致')
     try {
       await setup.mutateAsync()
@@ -56,8 +56,8 @@ export function AdminSetupDialog() {
         <form className="space-y-5" onSubmit={(event) => void submit(event)}>
           {(validation || setup.error) && <Message variant="error" title={validation || errorMessage(setup.error, '管理员设置失败')} />}
           <FormField label="管理员用户名" description="3–50 个字符"><Input value={username} onChange={(event) => setUsername(event.target.value)} startSlot={<User size={17} />} autoComplete="username" minLength={3} maxLength={50} required /></FormField>
-          <FormField label="管理员密码" description="至少 12 位"><Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} startSlot={<Lock size={17} />} autoComplete="new-password" minLength={12} required /></FormField>
-          <FormField label="确认管理员密码"><Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} startSlot={<Lock size={17} />} autoComplete="new-password" minLength={12} required /></FormField>
+          <FormField label="管理员密码" description="至少 6 位"><Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} startSlot={<Lock size={17} />} autoComplete="new-password" minLength={6} required /></FormField>
+          <FormField label="确认管理员密码"><Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} startSlot={<Lock size={17} />} autoComplete="new-password" minLength={6} required /></FormField>
           <AppButton className="w-full justify-center" type="submit" size="lg" disabled={setup.isPending}>{setup.isPending ? '正在创建…' : '创建管理员并继续'}</AppButton>
         </form>
       </div>
