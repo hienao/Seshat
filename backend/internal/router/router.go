@@ -66,6 +66,7 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 			webhookAPI.GET("/apps", webhookHandler.Catalog)
 			webhookAPI.GET("/integrations", webhookHandler.ListIntegrations)
 			webhookAPI.POST("/integrations", webhookHandler.CreateIntegration)
+			webhookAPI.GET("/integrations/:id/secret", webhookHandler.GetIntegrationSecret)
 			webhookAPI.POST("/integrations/:id/rotate-secret", webhookHandler.RotateSecret)
 			webhookAPI.GET("/integrations/:id/notification-settings", notificationHandler.GetIntegrationSettings)
 			webhookAPI.PUT("/integrations/:id/notification-settings", notificationHandler.UpdateIntegrationSettings)

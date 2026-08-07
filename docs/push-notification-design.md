@@ -13,7 +13,7 @@ Seshat 为不同 App 的 Webhook 消息提供可配置的外部通知能力：
 
 首版不支持一个实例绑定多个渠道、不支持用户自定义消息模板、不推送原始 Webhook 正文。
 
-当前 Registry 已注册通用 Webhook、GitHub 和 Jellyfin。Jellyfin 声明 `media_added`、`media_deleted`、`playback_started`、`playback_stopped` 与默认类型；通知规则本身不写死任何 App 或消息类型。
+当前 Registry 已注册通用 Webhook、GitHub、Jellyfin 和 Emby。Jellyfin 与 Emby 共用媒体库、播放、认证、用户、系统、插件和默认消息类型；不同来源事件先映射为统一的 `DisplayEventType`。通知规则本身不写死任何 App 或消息类型。
 
 ## 2. 核心规则
 

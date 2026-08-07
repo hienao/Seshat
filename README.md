@@ -2,7 +2,7 @@
 
 用于统一接收、展示和排查多种 App Webhook 消息的轻量管理工具。
 
-当前内置通用 Webhook、GitHub 和 Jellyfin App 类型。每个接入实例都可以按消息类型选择是否通过 Webhook、Telegram、Apprise、邮箱、Server酱、Bark、DingTalk、Feishu、WhatsApp 或 WxPusher 推送；未知类型统一匹配该 App 的默认消息类型，所有推送开关初始均为关闭。
+当前内置通用 Webhook、GitHub、Jellyfin 和 Emby App 类型。Jellyfin 与 Emby 的媒体库、播放、认证、用户、系统和插件事件会转换为共享的结构化卡片；未知类型统一匹配该 App 的默认消息类型并展示原始内容。每个接入实例都可以按消息类型选择是否通过 Webhook、Telegram、Apprise、邮箱、Server酱、Bark、DingTalk、Feishu、WhatsApp 或 WxPusher 推送，所有推送开关初始均为关闭。
 
 ## 技术栈
 
@@ -67,7 +67,8 @@ npm run dev
 - 接口日志和业务日志固定启用并保存到 `/cache/logs/app/api-logs.db` 的独立数据表中
 - 两类日志默认保留 30 天，管理员可在“系统管理 → 系统设置”中调整为 1–3650 天，保存后立即生效
 - 登录令牌由前端保存到 LocalStorage，并通过 `Authorization: Bearer <token>` 请求头发送
-- Webhook Secret 以明文保存在业务数据库中；接入列表和详情接口不返回该字段，仅在创建或轮换时返回一次
+- Webhook Secret 以明文保存在业务数据库中；接入列表不批量返回该字段，实例所属用户可在接入卡片中按需查看，查看接口禁止缓存
+- Emby 不支持自定义 Webhook 请求头，因此使用随机接入地址作为凭据；其他 App 按接入说明使用 Secret 请求头或签名
 - 推送渠道凭据以明文保存在业务数据库中，但 API 不返回其内容；Webhook、Apprise 和其他可配置 URL 默认只允许公网 HTTPS 目标
 - 管理员可在“系统管理 → 系统设置”中显式允许私有网络推送目标，开启后仍会阻止 link-local 和已知云元数据地址
 - 管理员可在系统设置中保存一个 HTTP/HTTPS 代理；每个推送渠道独立决定是否使用，默认不使用代理

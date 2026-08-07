@@ -43,6 +43,10 @@ type IntegrationCreatedResponse struct {
 	Secret string `json:"secret"`
 }
 
+type IntegrationSecretResponse struct {
+	Secret string `json:"secret"`
+}
+
 type EventListResponse struct {
 	Items []model.WebhookEvent `json:"items"`
 	Total int64                `json:"total"`
@@ -123,10 +127,21 @@ func (s *WebhookService) RotateSecret(ownerID, id uint) (*IntegrationCreatedResp
 		return nil, err
 	}
 	item.Secret = secret
+	if provider, ok := s.registry.Get(item.AppCode); ok && provider.Definition().AuthMode == "endpoint_url" {
+		item.EndpointKey = randomEndpointKey()
+	}
 	if err := database.GetDB().Save(&item).Error; err != nil {
 		return nil, err
 	}
 	return &IntegrationCreatedResponse{IntegrationResponse: s.integrationResponse(&item), Secret: secret}, nil
+}
+
+func (s *WebhookService) GetIntegrationSecret(ownerID, id uint) (*IntegrationSecretResponse, error) {
+	var item model.AppIntegration
+	if err := database.GetDB().Select("secret").Where("id = ? AND owner_id = ?", id, ownerID).First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &IntegrationSecretResponse{Secret: item.Secret}, nil
 }
 
 func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, body []byte, contentType string) (*WebhookIngestResult, error) {
@@ -152,7 +167,8 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 		return result, newWebhookIngestError("webhook_signature_invalid", http.StatusUnauthorized, "Webhook 签名验证失败", nil)
 	}
 
-	eventType := provider.DetectType(request)
+	sourceEventType := provider.DetectType(request)
+	eventType := provider.MapType(sourceEventType)
 	definition := provider.Definition()
 	displayType, isFallback := eventType, false
 	if !containsEventType(definition.EventTypes, eventType) {
@@ -169,12 +185,12 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 		result.EventID = existing.ID
 		return result, nil
 	}
-	presentation := provider.Normalize(eventType, request)
+	presentation := provider.Normalize(displayType, request)
 	presentation.SchemaVersion = 1
 	presentationJSON, _ := json.Marshal(presentation)
 	title, summary, severity := presentation.Title, presentation.Summary, presentation.Severity
 	now := time.Now()
-	event := &model.WebhookEvent{IntegrationID: integration.ID, AppCode: integration.AppCode, SourceEventType: eventType, DisplayEventType: displayType, ExternalEventID: externalID, DedupeKey: dedupeKey, Status: "processed", IsFallback: isFallback, Title: title, Summary: summary, Severity: severity, PresentationVersion: 1, Presentation: datatypes.JSON(presentationJSON), RawBody: string(body), ContentType: contentType, SafeHeaders: datatypes.JSON([]byte(`{}`)), ReceivedAt: now}
+	event := &model.WebhookEvent{IntegrationID: integration.ID, AppCode: integration.AppCode, SourceEventType: sourceEventType, DisplayEventType: displayType, ExternalEventID: externalID, DedupeKey: dedupeKey, Status: "processed", IsFallback: isFallback, Title: title, Summary: summary, Severity: severity, PresentationVersion: 1, Presentation: datatypes.JSON(presentationJSON), RawBody: string(body), ContentType: contentType, SafeHeaders: datatypes.JSON([]byte(`{}`)), ReceivedAt: now}
 	if err := database.GetDB().Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(event).Error; err != nil {
 			return err

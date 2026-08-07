@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, CreatedIntegration, EventListResponse, EventNotificationStatus, Integration, IntegrationNotificationSettings, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
+import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, CreatedIntegration, EventListResponse, EventNotificationStatus, Integration, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
 import { readAccessToken } from '@/lib/auth-token'
 
 export const api = {
@@ -30,6 +30,7 @@ export const api = {
   integrations: () => apiRequest<Integration[]>('/api/webhooks/integrations'),
   createIntegration: (appCode: string, name: string) =>
     apiRequest<CreatedIntegration>('/api/webhooks/integrations', { method: 'POST', body: { app_code: appCode, name } }),
+  integrationSecret: (id: number) => apiRequest<IntegrationSecret>(`/api/webhooks/integrations/${id}/secret`),
   rotateIntegrationSecret: (id: number) =>
     apiRequest<CreatedIntegration>(`/api/webhooks/integrations/${id}/rotate-secret`, { method: 'POST' }),
   integrationNotificationSettings: (id: number) => apiRequest<IntegrationNotificationSettings>(`/api/webhooks/integrations/${id}/notification-settings`),
