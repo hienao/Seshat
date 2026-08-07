@@ -44,6 +44,7 @@ export interface AppDefinition {
   code: string
   name: string
   description: string
+  auth_mode: 'secret_header' | 'github_signature' | 'endpoint_url'
   default_event_type: string
   event_types: AppEventType[]
 }
@@ -70,6 +71,10 @@ export interface CreatedIntegration {
   endpoint_key: string
   webhook_path: string
   enabled: boolean
+  secret: string
+}
+
+export interface IntegrationSecret {
   secret: string
 }
 

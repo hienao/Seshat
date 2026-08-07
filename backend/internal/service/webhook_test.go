@@ -91,6 +91,44 @@ func TestWebhookUsesAppDefaultEventType(t *testing.T) {
 	}
 }
 
+func TestIntegrationSecretCanOnlyBeReadByOwner(t *testing.T) {
+	setupWebhookTestDB(t)
+	service := NewWebhookService()
+	created, err := service.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "jellyfin", Name: "Jellyfin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, err := service.GetIntegrationSecret(7, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret.Secret != created.Secret {
+		t.Fatalf("secret = %q, want created secret", secret.Secret)
+	}
+	if _, err := service.GetIntegrationSecret(8, created.ID); err == nil {
+		t.Fatal("another owner should not be able to read the secret")
+	}
+}
+
+func TestEmbyCredentialRotationChangesTheEndpoint(t *testing.T) {
+	setupWebhookTestDB(t)
+	service := NewWebhookService()
+	created, err := service.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "emby", Name: "Emby"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, err := service.RotateSecret(7, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rotated.WebhookPath == created.WebhookPath {
+		t.Fatal("Emby endpoint URL did not change after credential rotation")
+	}
+	if _, err := service.Ingest(created.EndpointKey, nil, []byte(`{"Event":"library.new"}`), "application/json"); err == nil {
+		t.Fatal("old Emby endpoint should stop accepting messages after rotation")
+	}
+}
+
 func TestWebhookDeduplicatesExternalEventID(t *testing.T) {
 	setupWebhookTestDB(t)
 	service := NewWebhookService()
@@ -115,6 +153,34 @@ func TestWebhookDeduplicatesExternalEventID(t *testing.T) {
 	}
 	if first.EventID == 0 || second.EventID != first.EventID {
 		t.Fatalf("deduplicated event IDs = %d and %d", first.EventID, second.EventID)
+	}
+}
+
+func TestEmbyWebhookPreservesSourceTypeAndUsesNormalizedDisplayType(t *testing.T) {
+	setupWebhookTestDB(t)
+	service := NewWebhookService()
+	created, err := service.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "emby", Name: "Emby"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(`{"Event":"library.new","Item":{"Name":"Dune","Type":"Movie"}}`)
+	if _, err := service.Ingest(created.EndpointKey, map[string]string{"X-Webhook-Secret": created.Secret}, body, "application/json"); err != nil {
+		t.Fatal(err)
+	}
+	var event model.WebhookEvent
+	if err := database.GetDB().First(&event).Error; err != nil {
+		t.Fatal(err)
+	}
+	if event.SourceEventType != "library.new" || event.DisplayEventType != "media_added" || event.IsFallback {
+		t.Fatalf("unexpected event types: source=%q display=%q fallback=%v", event.SourceEventType, event.DisplayEventType, event.IsFallback)
+	}
+	var presentation map[string]interface{}
+	if err := json.Unmarshal(event.Presentation, &presentation); err != nil {
+		t.Fatal(err)
+	}
+	data := presentation["data"].(map[string]interface{})
+	if data["category"] != "media" || data["source_event_type"] != "library.new" {
+		t.Fatalf("unexpected normalized data: %+v", data)
 	}
 }
 

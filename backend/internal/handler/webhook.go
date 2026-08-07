@@ -64,6 +64,21 @@ func (h *WebhookHandler) RotateSecret(c *gin.Context) {
 	response.Success(c, item)
 }
 
+func (h *WebhookHandler) GetIntegrationSecret(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "接入 ID 无效")
+		return
+	}
+	item, err := h.service.GetIntegrationSecret(c.GetUint("user_id"), uint(id))
+	if err != nil {
+		response.NotFound(c, "接入不存在")
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, item)
+}
+
 func (h *WebhookHandler) ListEvents(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))

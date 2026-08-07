@@ -7,6 +7,7 @@ import { AppButton } from '@/components/common/app-button'
 import { ErrorState } from '@/components/common/feedback'
 import { PageHeader } from '@/components/common/page-header'
 import { Panel } from '@/components/common/panel'
+import { EventCard } from '@/components/webhook/event-card'
 import { errorMessage } from '@/lib/error-message'
 
 export function EventDetailPage() {
@@ -30,8 +31,8 @@ export function EventDetailPage() {
       <Panel title="推送状态" description="该状态按消息接收时生成的推送任务和当前实例配置计算。" icon={<Bell size={20} />}>
         {notificationStatus.isPending ? <p className="text-sm text-neutral-500">正在加载推送状态…</p> : notificationStatus.error ? <ErrorState message={errorMessage(notificationStatus.error, '推送状态不可用')} onRetry={() => void notificationStatus.refetch()} /> : notificationStatus.data && <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><Badge variant={notificationStatus.data.state === 'succeeded' ? 'success' : notificationStatus.data.state === 'failed' ? 'error' : 'outline'}>{notificationStateLabel(notificationStatus.data.state)}</Badge><p className="mt-2 text-sm text-neutral-500">{notificationStatus.data.reason || notificationStatus.data.delivery?.last_error || '推送任务已创建并进入处理流程。'}</p></div>{notificationStatus.data.delivery && <div className="text-xs text-neutral-500">尝试 {notificationStatus.data.delivery.attempt_count} 次{notificationStatus.data.delivery.sent_at ? ` · ${new Date(notificationStatus.data.delivery.sent_at).toLocaleString()}` : ''}</div>}</div>}
       </Panel>
-      <Panel title="标准化展示" description="该区域由 App 类型渲染器提供，当前默认类型展示通用摘要。">
-        <pre className="overflow-auto rounded-xl bg-neutral-950 p-5 text-sm leading-6 text-emerald-100">{JSON.stringify(item.presentation, null, 2)}</pre>
+      <Panel title="标准化展示" description="根据消息类型展示媒体、播放、用户或系统信息，缺失字段会自动省略。">
+        <EventCard event={item} detail />
       </Panel>
       <Panel title="原始消息" description="原始内容按纯文本处理，不执行其中的 HTML 或脚本。">
         <pre className="max-h-[620px] overflow-auto rounded-xl bg-neutral-950 p-5 text-sm leading-6 text-neutral-200">{item.raw_body || '消息体为空'}</pre>

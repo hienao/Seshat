@@ -53,7 +53,7 @@ func TestIntegrationNotificationRulesDefaultToDisabledAndIncludeDefaultType(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.ChannelID == nil || len(settings.EventTypes) != 5 {
+	if settings.ChannelID == nil || len(settings.EventTypes) != 25 {
 		t.Fatalf("unexpected settings: %+v", settings)
 	}
 	defaultFound := false

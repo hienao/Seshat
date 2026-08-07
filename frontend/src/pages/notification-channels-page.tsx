@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '@/api/services'
-import type { Integration, NotificationChannel, NotificationChannelInput, NotificationChannelType } from '@/api/types'
+import type { Integration, NotificationChannel, NotificationChannelInput, NotificationChannelType, NotificationEventTypeSetting } from '@/api/types'
 import { AppButton } from '@/components/common/app-button'
 import { EmptyState, ErrorState, Message } from '@/components/common/feedback'
 import { PageHeader } from '@/components/common/page-header'
@@ -845,6 +845,7 @@ function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved
   function toggle(code: string, checked: boolean) {
     setEnabledTypes((current) => (checked ? [...new Set([...current, code])] : current.filter((item) => item !== code)))
   }
+  const eventTypeGroups = groupNotificationEventTypes(settings.data?.event_types ?? [])
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
       <aside className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl dark:bg-neutral-950" onClick={(event) => event.stopPropagation()}>
@@ -883,24 +884,27 @@ function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved
             <section>
               <h3 className="font-semibold">推送消息类型</h3>
               <p className="mt-1 text-sm text-neutral-500">未开启的类型只保存在消息流中，不发送外部通知。</p>
-              <div className="mt-4 space-y-3">
-                {settings.data?.event_types.map((eventType) => (
-                  <div key={eventType.code} className="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
-                    <div>
-                      <p className="font-medium">
-                        {eventType.name}
-                        {eventType.is_default && (
-                          <Badge className="ml-2" variant="outline" size="sm">
-                            默认类型
-                          </Badge>
-                        )}
-                      </p>
-                      <p className="mt-1 font-mono text-xs text-neutral-500">
-                        {eventType.code}
-                        {eventType.is_default ? ' · 未知消息类型将匹配此规则' : ''}
-                      </p>
+              <div className="mt-4 space-y-5">
+                {eventTypeGroups.map((group) => (
+                  <div key={group.name}>
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">{group.name}</h4>
+                    <div className="space-y-2">
+                      {group.items.map((eventType) => (
+                        <div key={eventType.code} className="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+                          <div>
+                            <p className="font-medium">
+                              {eventType.name}
+                              {eventType.is_default && <Badge className="ml-2" variant="outline" size="sm">默认类型</Badge>}
+                            </p>
+                            <p className="mt-1 font-mono text-xs text-neutral-500">
+                              {eventType.code}
+                              {eventType.is_default ? ' · 未知消息类型将匹配此规则' : ''}
+                            </p>
+                          </div>
+                          <Switch checked={enabledTypes.includes(eventType.code)} onCheckedChange={(checked) => toggle(eventType.code, checked)} />
+                        </div>
+                      ))}
                     </div>
-                    <Switch checked={enabledTypes.includes(eventType.code)} onCheckedChange={(checked) => toggle(eventType.code, checked)} />
                   </div>
                 ))}
               </div>
@@ -914,4 +918,16 @@ function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved
       </aside>
     </div>
   )
+}
+
+function groupNotificationEventTypes(items: NotificationEventTypeSetting[]) {
+  const groups = [
+    { name: '媒体库', matches: (code: string) => code.startsWith('media_'), items: [] as NotificationEventTypeSetting[] },
+    { name: '播放', matches: (code: string) => code.startsWith('playback_'), items: [] as NotificationEventTypeSetting[] },
+    { name: '认证与用户', matches: (code: string) => code.startsWith('authentication_') || code.startsWith('user_') || code === 'session_started', items: [] as NotificationEventTypeSetting[] },
+    { name: '系统与插件', matches: (code: string) => code.startsWith('plugin_') || ['server_restart_required', 'task_completed', 'subtitle_download_failed'].includes(code), items: [] as NotificationEventTypeSetting[] },
+    { name: '其他', matches: () => true, items: [] as NotificationEventTypeSetting[] },
+  ]
+  for (const item of items) (groups.find((group) => group.matches(item.code)) ?? groups.at(-1))?.items.push(item)
+  return groups.filter((group) => group.items.length > 0)
 }

@@ -1,4 +1,3 @@
-import { Badge } from '@appica/ui-react/badge'
 import { Bell, Refresh } from '@appica/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
@@ -8,6 +7,7 @@ import { AppButton } from '@/components/common/app-button'
 import { EmptyState, ErrorState } from '@/components/common/feedback'
 import { PageHeader } from '@/components/common/page-header'
 import { Panel } from '@/components/common/panel'
+import { EventCard } from '@/components/webhook/event-card'
 import { errorMessage } from '@/lib/error-message'
 
 export function EventsPage() {
@@ -26,14 +26,9 @@ export function EventsPage() {
       </Panel>
       <Panel title="最近消息" description={`共 ${events.data?.total ?? 0} 条`}>
         {events.isPending ? <div className="py-12 text-center text-sm text-neutral-500">正在加载消息…</div> : events.error ? <ErrorState message={errorMessage(events.error)} onRetry={() => void events.refetch()} /> : !events.data?.items.length ? <EmptyState title="还没有 Webhook 消息" description="创建接入实例并向对应地址发送消息后，这里会显示内容。" /> : (
-          <div className="divide-y divide-neutral-200/70 dark:divide-neutral-800/80">
+          <div className="space-y-4">
             {events.data.items.map((event) => (
-              <Link key={event.id} to={`/events/${event.id}`} className="block rounded-xl px-2 py-4 transition hover:bg-neutral-50 dark:hover:bg-neutral-900/70">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-semibold">{event.title || `${event.app_code} Webhook`}</h3><Badge variant={event.is_fallback ? 'outline' : 'soft'} size="sm">{event.is_fallback ? '默认类型' : event.display_event_type}</Badge></div><p className="mt-1 text-sm text-neutral-500">{event.summary || '无摘要'} · {event.app_code}</p></div>
-                  <time className="shrink-0 text-xs text-neutral-400">{event.received_at ? new Date(event.received_at).toLocaleString() : '-'}</time>
-                </div>
-              </Link>
+              <Link key={event.id} to={`/events/${event.id}`} className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><EventCard event={event} /></Link>
             ))}
           </div>
         )}
