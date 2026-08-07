@@ -16,13 +16,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish ${{ github.event.pull_request.base.ref }} image
+  prepare:
+    name: Prepare ${{ github.event.pull_request.base.ref }} image
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      version_file: ${{ steps.metadata.outputs.version_file }}
+      channel: ${{ steps.metadata.outputs.channel }}
+      exists: ${{ steps.image.outputs.exists }}
 
     steps:
       - name: Check out merged commit
@@ -82,17 +87,9 @@ jobs:
           fi
 
           {
-            echo "image=${image}"
             echo "version=${version}"
             echo "version_file=${version_file}"
             echo "channel=${channel}"
-            echo "tags<<EOF"
-            echo "${image}:${version}"
-            echo "${image}:${channel}"
-            if [[ "${TARGET_BRANCH}" == "main" ]]; then
-              echo "${image}:latest"
-            fi
-            echo "EOF"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Log in to Docker Hub
@@ -101,11 +98,6 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-        with:
-          platforms: arm64
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -113,63 +105,201 @@ jobs:
         id: image
         shell: bash
         env:
-          IMAGE: ${{ steps.metadata.outputs.image }}
           VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           set -euo pipefail
+          image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
           inspect_output="$(mktemp)"
-          if docker buildx imagetools inspect "${IMAGE}:${VERSION}" >"${inspect_output}" 2>&1; then
+          if docker buildx imagetools inspect "${image}:${VERSION}" >"${inspect_output}" 2>&1; then
             echo "exists=true" >> "${GITHUB_OUTPUT}"
-            echo "Image ${IMAGE}:${VERSION} already exists; skipping build."
+            echo "Image ${image}:${VERSION} already exists; skipping build."
           elif grep -Eiq "manifest unknown|not found|no such manifest" "${inspect_output}"; then
             echo "exists=false" >> "${GITHUB_OUTPUT}"
-            echo "Image ${IMAGE}:${VERSION} does not exist; starting build."
+            echo "Image ${image}:${VERSION} does not exist; starting build."
           else
             cat "${inspect_output}"
-            echo "::error::Unable to determine whether ${IMAGE}:${VERSION} exists"
+            echo "::error::Unable to determine whether ${image}:${VERSION} exists"
             exit 1
           fi
 
-      - name: Build and push image
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: prepare
+    if: needs.prepare.outputs.exists != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push platform image by digest
         id: publish
-        if: steps.image.outputs.exists != 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/Dockerfile
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.metadata.outputs.tags }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.title=Seshat
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.event.pull_request.merge_commit_sha }}
-            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
-          cache-from: type=gha,scope=${{ github.event.pull_request.base.ref }}
-          cache-to: type=gha,mode=max,scope=${{ github.event.pull_request.base.ref }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+          cache-from: type=gha,scope=${{ github.event.pull_request.base.ref }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ github.event.pull_request.base.ref }}-${{ matrix.arch }}
 
-      - name: Write job summary
-        if: always() && steps.metadata.outcome == 'success'
+      - name: Export image digest
         shell: bash
         env:
-          IMAGE: ${{ steps.metadata.outputs.image }}
-          VERSION: ${{ steps.metadata.outputs.version }}
-          CHANNEL: ${{ steps.metadata.outputs.channel }}
-          VERSION_FILE: ${{ steps.metadata.outputs.version_file }}
-          EXISTS: ${{ steps.image.outputs.exists }}
-          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
         run: |
+          set -euo pipefail
+
+          digest="${DIGEST#sha256:}"
+          if [[ ! "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Invalid image digest: ${DIGEST}"
+            exit 1
+          fi
+
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${digest}"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish multi-platform image
+    needs:
+      - prepare
+      - build
+    if: needs.prepare.outputs.exists != 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+
+    steps:
+      - name: Download image digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Create and verify multi-platform manifest
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+        run: |
+          set -euo pipefail
+          image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
+
+          mapfile -t digest_files < <(find "${RUNNER_TEMP}/digests" -maxdepth 1 -type f -print | sort)
+          if [[ "${#digest_files[@]}" -ne 2 ]]; then
+            echo "::error::Expected 2 platform digests, found ${#digest_files[@]}"
+            exit 1
+          fi
+
+          sources=()
+          for digest_file in "${digest_files[@]}"; do
+            digest="$(basename "${digest_file}")"
+            if [[ ! "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::Invalid platform digest: ${digest}"
+              exit 1
+            fi
+            sources+=("${image}@sha256:${digest}")
+          done
+
+          tag_args=(
+            "--tag" "${image}:${VERSION}"
+            "--tag" "${image}:${CHANNEL}"
+          )
+          if [[ "${CHANNEL}" == "release" ]]; then
+            tag_args+=("--tag" "${image}:latest")
+          fi
+
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "${image}:${VERSION}"
+
+  summary:
+    name: Write publish summary
+    needs:
+      - prepare
+      - build
+      - merge
+    if: always() && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+
+    steps:
+      - name: Write job summary
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION_FILE: ${{ needs.prepare.outputs.version_file }}
+          EXISTS: ${{ needs.prepare.outputs.exists }}
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          MERGE_RESULT: ${{ needs.merge.result }}
+        run: |
+          image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
           {
             echo "## Docker publish"
             echo
-            echo "- Image: \`${IMAGE}\`"
+            echo "- Image: \`${image}\`"
             echo "- Version: \`${VERSION}\`"
             echo "- Version source: \`${VERSION_FILE}\`"
             echo "- Channel: \`${CHANNEL}\`"
             echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
-            if [[ "${EXISTS}" == "true" ]]; then
+            echo "- Prepare job: \`${PREPARE_RESULT}\`"
+            echo "- Platform build jobs: \`${BUILD_RESULT}\`"
+            echo "- Manifest job: \`${MERGE_RESULT}\`"
+            if [[ "${PREPARE_RESULT}" != "success" ]]; then
+              echo "- Result: metadata resolution or version check failed"
+            elif [[ "${EXISTS}" == "true" ]]; then
               echo "- Result: skipped because this version already exists"
-            elif [[ "${PUBLISH_OUTCOME}" == "success" ]]; then
+            elif [[ "${BUILD_RESULT}" == "success" && "${MERGE_RESULT}" == "success" ]]; then
               echo "- Result: published successfully"
             else
               echo "- Result: publish failed or was interrupted"

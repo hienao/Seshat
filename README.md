@@ -204,7 +204,7 @@ Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版
 | Secret | `DOCKERHUB_TOKEN` | 具有目标仓库读写权限的 Access Token |
 | Variable（可选） | `DOCKERHUB_REPOSITORY` | Docker Hub 仓库名，默认 `seshat` |
 
-当前发布地址为 `hienao6/seshat`（由 `DOCKERHUB_USERNAME/seshat` 组合生成）。工作流同时构建 `linux/amd64` 和 `linux/arm64` 镜像，并通过 GitHub Actions Cache 复用对应分支的构建缓存。
+当前发布地址为 `hienao6/seshat`（由 `DOCKERHUB_USERNAME/seshat` 组合生成）。工作流使用原生 AMD64 与 ARM64 GitHub 托管 Runner 并行构建 `linux/amd64` 和 `linux/arm64` 镜像，各平台按 digest 推送后再统一生成多架构标签；两个平台分别通过 GitHub Actions Cache 复用对应分支的构建缓存。
 
 ## 安全基线说明
 
