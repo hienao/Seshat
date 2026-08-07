@@ -612,11 +612,20 @@ const docTemplate = `{
         "service.SystemSettingsResponse": {
             "type": "object",
             "properties": {
+                "allow_private_notification_targets": {
+                    "type": "boolean"
+                },
                 "allow_register": {
                     "type": "boolean"
                 },
                 "api_log_retention_days": {
                     "type": "integer"
+                },
+                "http_proxy_configured": {
+                    "type": "boolean"
+                },
+                "http_proxy_display": {
+                    "type": "string"
                 }
             }
         },
@@ -634,11 +643,20 @@ const docTemplate = `{
         "service.UpdateSystemSettingsRequest": {
             "type": "object",
             "properties": {
+                "allow_private_notification_targets": {
+                    "type": "boolean"
+                },
                 "allow_register": {
                     "type": "boolean"
                 },
                 "api_log_retention_days": {
                     "type": "integer"
+                },
+                "clear_http_proxy": {
+                    "type": "boolean"
+                },
+                "http_proxy_url": {
+                    "type": "string"
                 }
             }
         },
@@ -680,7 +698,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Seshat API",
-	Description:      "Seshat 模板工程 API 文档",
+	Description:      "Seshat Webhook 消息管理 API 文档",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

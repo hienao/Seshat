@@ -24,7 +24,12 @@ func Success(c *gin.Context, data interface{}) {
 
 // Error 错误响应
 func Error(c *gin.Context, httpCode int, message string) {
-	c.Set("error_code", http.StatusText(httpCode))
+	ErrorWithCode(c, httpCode, http.StatusText(httpCode), message)
+}
+
+// ErrorWithCode 返回错误响应，并将稳定的业务错误码写入接口日志上下文。
+func ErrorWithCode(c *gin.Context, httpCode int, errorCode, message string) {
+	c.Set("error_code", errorCode)
 	c.Set("error_message", message)
 	c.JSON(httpCode, Response{
 		Code:    -1,

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"basegoapp/config"
-	"basegoapp/internal/model"
-	"basegoapp/internal/repository"
+	"seshat/config"
+	"seshat/internal/model"
+	"seshat/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"

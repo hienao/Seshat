@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"basegoapp/config"
-	"basegoapp/internal/repository"
+	"seshat/config"
+	"seshat/internal/repository"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"

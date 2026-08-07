@@ -1,14 +1,10 @@
-# Seshat 模板工程技术方案
+# Seshat 技术方案
+
+专项方案：[推送通知功能方案](./push-notification-design.md)
 
 ## 项目概述
 
-创建一个全栈模板工程，前端使用 React + Vite + Appica UI，后端使用 Go + Gin，最终打包为单一 Docker 镜像部署。
-
-> [!IMPORTANT]
-> 工程名 `basegoapp` 仅在以下位置声明，便于后期修改：
-> - `go.mod` 中的 module 名称
-> - 前端 `package.json` 中的 name 字段
-> - Docker 相关配置
+Seshat 是一个 Webhook 消息管理工具，用于统一接收不同 App 的 Webhook，根据消息类型生成对应展示，并保留原始内容、接口日志和分级业务日志用于问题排查。前端使用 React + Vite + Appica UI，后端使用 Go + Gin，最终打包为单一 Docker 镜像部署。
 
 ---
 
@@ -31,7 +27,7 @@
 ## 工程代码结构
 
 ```
-basegoapp/
+seshat/
 ├── frontend/                    # 前端 React + Vite 项目
 │   ├── vite.config.ts
 │   ├── package.json
@@ -97,6 +93,8 @@ basegoapp/
 | 修改密码 | PUT | `/api/user/password` | 修改当前用户密码 |
 | 获取用户信息 | GET | `/api/user/profile` | 获取当前用户信息 |
 | API 文档 | GET | `/swagger/*` | Swagger UI 文档 |
+| 接口日志 | GET | `/api/admin/logs` | 管理员查询 HTTP 请求日志 |
+| 业务日志 | GET | `/api/admin/application-logs` | 管理员按等级、来源和关键字查询手动业务日志 |
 
 ### 初始管理员
 
@@ -123,7 +121,7 @@ basegoapp/
 ```mermaid
 graph LR
     subgraph Docker Container
-        N["Nginx:80 (静态文件+反向代理)"]
+        N["Nginx:3112 (静态文件+反向代理)"]
         B[Gin API:8080]
         D[("/data/db/seshat.db")]
         L[("/cache/logs/*")]
@@ -134,6 +132,7 @@ graph LR
     N -->|/api/*| B
     N -->|/swagger/*| B
     B --> D
+    B --> L
     B -. optional .-> P[(PostgreSQL)]
     N --> L
 ```
@@ -148,7 +147,7 @@ graph LR
 
 - `/data/db/seshat.db` → 默认 SQLite 数据库文件
 - `/cache/logs/nginx/` → Nginx 日志
-- `/cache/logs/app/` → 应用日志预留目录
+- `/cache/logs/app/api-logs.db` → 接口日志和业务日志 SQLite 数据库
 - `/cache/tmp/` → 临时文件和运行时缓存
 
 ### 数据库模式

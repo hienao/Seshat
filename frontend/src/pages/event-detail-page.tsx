@@ -1,5 +1,5 @@
 import { Badge } from '@appica/ui-react/badge'
-import { ArrowLeft, FileText } from '@appica/icons-react'
+import { ArrowLeft, Bell, FileText } from '@appica/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '@/api/services'
@@ -12,6 +12,7 @@ import { errorMessage } from '@/lib/error-message'
 export function EventDetailPage() {
   const id = Number(useParams().id)
   const event = useQuery({ queryKey: ['webhooks', 'event', id], queryFn: () => api.event(id), enabled: Number.isFinite(id) && id > 0 })
+  const notificationStatus = useQuery({ queryKey: ['notifications', 'event', id], queryFn: () => api.eventNotificationStatus(id), enabled: Number.isFinite(id) && id > 0 })
   if (event.isPending) return <div className="grid min-h-[50vh] place-items-center text-sm text-neutral-500">正在加载消息…</div>
   if (event.error || !event.data) return <div className="mx-auto max-w-4xl px-4 py-10"><ErrorState message={errorMessage(event.error, '消息不存在')} /></div>
   const item = event.data
@@ -26,6 +27,9 @@ export function EventDetailPage() {
           <div><dt className="text-xs text-neutral-500">接收时间</dt><dd className="mt-1 text-sm">{new Date(item.received_at).toLocaleString()}</dd></div>
         </dl>
       </Panel>
+      <Panel title="推送状态" description="该状态按消息接收时生成的推送任务和当前实例配置计算。" icon={<Bell size={20} />}>
+        {notificationStatus.isPending ? <p className="text-sm text-neutral-500">正在加载推送状态…</p> : notificationStatus.error ? <ErrorState message={errorMessage(notificationStatus.error, '推送状态不可用')} onRetry={() => void notificationStatus.refetch()} /> : notificationStatus.data && <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><Badge variant={notificationStatus.data.state === 'succeeded' ? 'success' : notificationStatus.data.state === 'failed' ? 'error' : 'outline'}>{notificationStateLabel(notificationStatus.data.state)}</Badge><p className="mt-2 text-sm text-neutral-500">{notificationStatus.data.reason || notificationStatus.data.delivery?.last_error || '推送任务已创建并进入处理流程。'}</p></div>{notificationStatus.data.delivery && <div className="text-xs text-neutral-500">尝试 {notificationStatus.data.delivery.attempt_count} 次{notificationStatus.data.delivery.sent_at ? ` · ${new Date(notificationStatus.data.delivery.sent_at).toLocaleString()}` : ''}</div>}</div>}
+      </Panel>
       <Panel title="标准化展示" description="该区域由 App 类型渲染器提供，当前默认类型展示通用摘要。">
         <pre className="overflow-auto rounded-xl bg-neutral-950 p-5 text-sm leading-6 text-emerald-100">{JSON.stringify(item.presentation, null, 2)}</pre>
       </Panel>
@@ -34,4 +38,12 @@ export function EventDetailPage() {
       </Panel>
     </div>
   )
+}
+
+function notificationStateLabel(state: string) {
+  const labels: Record<string, string> = {
+    not_configured: '未配置渠道', channel_disabled: '渠道已停用', not_matched: '该类型未推送', not_created: '未创建任务',
+    pending: '等待发送', sending: '发送中', retrying: '等待重试', succeeded: '推送成功', failed: '推送失败',
+  }
+  return labels[state] ?? state
 }

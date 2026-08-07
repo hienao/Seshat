@@ -58,6 +58,7 @@ func NewRegistry() *Registry {
 	r := &Registry{providers: make(map[string]Provider)}
 	r.Register(NewGenericProvider("generic", "通用 Webhook", "支持 X-Webhook-Event 和 JSON event_type/type 约定的消息"))
 	r.Register(NewGitHubProvider())
+	r.Register(NewJellyfinProvider())
 	return r
 }
 
@@ -177,6 +178,95 @@ func (p *githubProvider) Normalize(eventType string, request IncomingRequest) Pr
 		title += " · " + repository
 	}
 	return Presentation{SchemaVersion: 1, Title: title, Summary: "收到 GitHub Webhook 消息", Severity: "info", Data: map[string]interface{}{"repository": repository}}
+}
+
+type jellyfinProvider struct{ definition AppDefinition }
+
+func NewJellyfinProvider() Provider {
+	return &jellyfinProvider{definition: AppDefinition{
+		Code: "jellyfin", Name: "Jellyfin", Description: "Jellyfin 媒体库与播放事件", DefaultEventType: DefaultEventType,
+		EventTypes: []EventTypeDefinition{
+			{Code: "media_added", Name: "新增媒体", RenderMode: "custom"},
+			{Code: "media_deleted", Name: "删除媒体", RenderMode: "custom"},
+			{Code: "playback_started", Name: "开始播放", RenderMode: "custom"},
+			{Code: "playback_stopped", Name: "停止播放", RenderMode: "custom"},
+			{Code: DefaultEventType, Name: "其他消息", RenderMode: "raw"},
+		},
+	}}
+}
+
+func (p *jellyfinProvider) Code() string              { return p.definition.Code }
+func (p *jellyfinProvider) Definition() AppDefinition { return p.definition }
+func (p *jellyfinProvider) Verify(secret string, request IncomingRequest) bool {
+	return verifyRequest(secret, request)
+}
+func (p *jellyfinProvider) DetectType(request IncomingRequest) string {
+	var payload map[string]interface{}
+	_ = json.Unmarshal(request.Body, &payload)
+	value := firstString(payload, "NotificationType", "notification_type", "Event", "event")
+	switch strings.ToLower(value) {
+	case "itemadded", "librarynew", "media_added":
+		return "media_added"
+	case "itemdeleted", "librarydeleted", "media_deleted":
+		return "media_deleted"
+	case "playbackstart", "playback_started":
+		return "playback_started"
+	case "playbackstop", "playback_stopped":
+		return "playback_stopped"
+	default:
+		if value != "" {
+			return value
+		}
+		return "unknown"
+	}
+}
+func (p *jellyfinProvider) ExternalEventID(request IncomingRequest) string {
+	var payload map[string]interface{}
+	_ = json.Unmarshal(request.Body, &payload)
+	return firstString(payload, "NotificationId", "notification_id", "Id", "id")
+}
+func (p *jellyfinProvider) Normalize(eventType string, request IncomingRequest) Presentation {
+	var payload map[string]interface{}
+	_ = json.Unmarshal(request.Body, &payload)
+	itemName := firstString(payload, "Name", "ItemName", "item_name")
+	itemType := firstString(payload, "ItemType", "item_type", "Type")
+	title := "Jellyfin · " + jellyfinEventName(eventType)
+	if itemName != "" {
+		title += " · " + itemName
+	}
+	summary := "收到 Jellyfin " + jellyfinEventName(eventType) + "事件"
+	facts := []map[string]string{}
+	if itemName != "" {
+		facts = append(facts, map[string]string{"label": "媒体", "value": itemName})
+	}
+	if itemType != "" {
+		facts = append(facts, map[string]string{"label": "类型", "value": itemType})
+	}
+	return Presentation{SchemaVersion: 1, Title: title, Summary: summary, Severity: "info", Facts: facts, Data: map[string]interface{}{"item_name": itemName, "item_type": itemType}}
+}
+
+func jellyfinEventName(eventType string) string {
+	switch eventType {
+	case "media_added":
+		return "新增媒体"
+	case "media_deleted":
+		return "删除媒体"
+	case "playback_started":
+		return "开始播放"
+	case "playback_stopped":
+		return "停止播放"
+	default:
+		return "其他消息"
+	}
+}
+
+func firstString(payload map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := payload[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func verifyRequest(secret string, request IncomingRequest) bool {

@@ -7,13 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
-	"basegoapp/internal/model"
-	"basegoapp/internal/webhook"
-	"basegoapp/pkg/database"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
+	"seshat/internal/model"
+	"seshat/internal/webhook"
+	"seshat/pkg/database"
 )
 
 const maxWebhookBody = 2 << 20
@@ -49,6 +51,33 @@ type EventListResponse struct {
 type WebhookEventDetail struct {
 	model.WebhookEvent
 	RawBody string `json:"raw_body,omitempty"`
+}
+
+// WebhookIngestResult 保存可写入接口日志的 Webhook 处理关联信息。
+// 即使处理失败，只要已经识别到接入实例，也会返回已知字段。
+type WebhookIngestResult struct {
+	AppCode       string
+	IntegrationID uint
+	EventID       uint
+}
+
+// WebhookIngestError 为 Webhook 接收失败提供稳定的日志错误码和 HTTP 状态。
+type WebhookIngestError struct {
+	Code       string
+	StatusCode int
+	Message    string
+	Cause      error
+}
+
+func (e *WebhookIngestError) Error() string {
+	if e.Cause != nil {
+		return e.Message + ": " + e.Cause.Error()
+	}
+	return e.Message
+}
+
+func newWebhookIngestError(code string, statusCode int, message string, cause error) error {
+	return &WebhookIngestError{Code: code, StatusCode: statusCode, Message: message, Cause: cause}
 }
 
 func (s *WebhookService) Catalog() []webhook.AppDefinition { return s.registry.Definitions() }
@@ -100,21 +129,27 @@ func (s *WebhookService) RotateSecret(ownerID, id uint) (*IntegrationCreatedResp
 	return &IntegrationCreatedResponse{IntegrationResponse: s.integrationResponse(&item), Secret: secret}, nil
 }
 
-func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, body []byte, contentType string) error {
-	if len(body) > maxWebhookBody {
-		return errors.New("Webhook 消息体过大")
-	}
+func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, body []byte, contentType string) (*WebhookIngestResult, error) {
+	result := &WebhookIngestResult{}
 	var integration model.AppIntegration
 	if err := database.GetDB().Where("endpoint_key = ? AND enabled = ?", endpointKey, true).First(&integration).Error; err != nil {
-		return errors.New("Webhook 接入不存在或已禁用")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return result, newWebhookIngestError("webhook_integration_not_found", http.StatusUnauthorized, "Webhook 接入不存在或已禁用", nil)
+		}
+		return result, newWebhookIngestError("webhook_integration_lookup_failed", http.StatusInternalServerError, "查询 Webhook 接入失败", err)
+	}
+	result.AppCode = integration.AppCode
+	result.IntegrationID = integration.ID
+	if len(body) > maxWebhookBody {
+		return result, newWebhookIngestError("webhook_body_too_large", http.StatusRequestEntityTooLarge, "Webhook 消息体过大", nil)
 	}
 	provider, ok := s.registry.Get(integration.AppCode)
 	if !ok {
-		return errors.New("Webhook App 类型不可用")
+		return result, newWebhookIngestError("webhook_app_unavailable", http.StatusServiceUnavailable, "Webhook App 类型不可用", nil)
 	}
 	request := webhook.IncomingRequest{Headers: headers, Body: body}
 	if !provider.Verify(integration.Secret, request) {
-		return errors.New("Webhook 签名验证失败")
+		return result, newWebhookIngestError("webhook_signature_invalid", http.StatusUnauthorized, "Webhook 签名验证失败", nil)
 	}
 
 	eventType := provider.DetectType(request)
@@ -131,7 +166,8 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 	}
 	var existing model.WebhookEvent
 	if database.GetDB().Where("integration_id = ? AND dedupe_key = ?", integration.ID, dedupeKey).First(&existing).Error == nil {
-		return nil
+		result.EventID = existing.ID
+		return result, nil
 	}
 	presentation := provider.Normalize(eventType, request)
 	presentation.SchemaVersion = 1
@@ -139,10 +175,16 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 	title, summary, severity := presentation.Title, presentation.Summary, presentation.Severity
 	now := time.Now()
 	event := &model.WebhookEvent{IntegrationID: integration.ID, AppCode: integration.AppCode, SourceEventType: eventType, DisplayEventType: displayType, ExternalEventID: externalID, DedupeKey: dedupeKey, Status: "processed", IsFallback: isFallback, Title: title, Summary: summary, Severity: severity, PresentationVersion: 1, Presentation: datatypes.JSON(presentationJSON), RawBody: string(body), ContentType: contentType, SafeHeaders: datatypes.JSON([]byte(`{}`)), ReceivedAt: now}
-	if err := database.GetDB().Create(event).Error; err != nil {
-		return err
+	if err := database.GetDB().Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(event).Error; err != nil {
+			return err
+		}
+		return queueNotificationDelivery(tx, &integration, event)
+	}); err != nil {
+		return result, newWebhookIngestError("webhook_event_persist_failed", http.StatusInternalServerError, "保存 Webhook 消息失败", err)
 	}
-	return nil
+	result.EventID = event.ID
+	return result, nil
 }
 
 func (s *WebhookService) ListEvents(ownerID uint, appCode, eventType string, limit, offset int) (*EventListResponse, error) {

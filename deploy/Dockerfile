@@ -49,6 +49,6 @@ RUN mkdir -p /data/db /cache/logs/nginx /cache/logs/app /cache/tmp && \
     echo 'exec ./main' >> /app/start.sh && \
     chmod +x /app/start.sh
 
-EXPOSE 80
+EXPOSE 3112
 
 CMD ["/app/start.sh"]

@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"basegoapp/config"
 	"github.com/gin-gonic/gin"
+	"seshat/config"
 )
 
 func TestAdminSetupCompleteBlocksBootstrapAccount(t *testing.T) {

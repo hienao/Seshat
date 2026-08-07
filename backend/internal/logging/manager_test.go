@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"basegoapp/config"
-	"basegoapp/internal/model"
+	"seshat/config"
+	"seshat/internal/model"
 )
 
 func TestSetRetentionDaysTriggersCleanup(t *testing.T) {
@@ -28,15 +28,25 @@ func TestSetRetentionDaysTriggersCleanup(t *testing.T) {
 	if err := manager.DB.Create(&entries).Error; err != nil {
 		t.Fatal(err)
 	}
+	applicationEntries := []model.ApplicationLog{
+		{OccurredAt: time.Now().AddDate(0, 0, -31), Level: "INFO", Source: "expired", Message: "expired"},
+		{OccurredAt: time.Now().AddDate(0, 0, -29), Level: "INFO", Source: "current", Message: "current"},
+	}
+	if err := manager.DB.Create(&applicationEntries).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	manager.SetRetentionDays(30)
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		var count int64
-		if err := manager.DB.Model(&model.ApiRequestLog{}).Where("request_id = ?", "expired").Count(&count).Error; err != nil {
+		var apiCount, applicationCount int64
+		if err := manager.DB.Model(&model.ApiRequestLog{}).Where("request_id = ?", "expired").Count(&apiCount).Error; err != nil {
 			t.Fatal(err)
 		}
-		if count == 0 {
+		if err := manager.DB.Model(&model.ApplicationLog{}).Where("source = ?", "expired").Count(&applicationCount).Error; err != nil {
+			t.Fatal(err)
+		}
+		if apiCount == 0 && applicationCount == 0 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -51,5 +61,12 @@ func TestSetRetentionDaysTriggersCleanup(t *testing.T) {
 	}
 	if currentCount != 1 {
 		t.Fatalf("current log count = %d, want 1", currentCount)
+	}
+	var currentApplicationCount int64
+	if err := manager.DB.Model(&model.ApplicationLog{}).Where("source = ?", "current").Count(&currentApplicationCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if currentApplicationCount != 1 {
+		t.Fatalf("current application log count = %d, want 1", currentApplicationCount)
 	}
 }

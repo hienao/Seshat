@@ -3,11 +3,11 @@ package service
 import (
 	"testing"
 
-	"basegoapp/config"
-	"basegoapp/internal/model"
-	"basegoapp/pkg/database"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"seshat/config"
+	"seshat/internal/model"
+	"seshat/pkg/database"
 )
 
 func setupAuthTestDB(t *testing.T) {

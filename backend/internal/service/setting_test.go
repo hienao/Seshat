@@ -4,10 +4,10 @@ import (
 	"errors"
 	"testing"
 
-	"basegoapp/internal/model"
-	"basegoapp/pkg/database"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"seshat/internal/model"
+	"seshat/pkg/database"
 )
 
 type retentionUpdaterStub struct {
@@ -86,5 +86,43 @@ func TestSettingServiceRejectsInvalidLogRetention(t *testing.T) {
 	err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{APILogRetentionDays: &days})
 	if !errors.Is(err, ErrInvalidAPILogRetentionDays) {
 		t.Fatalf("error = %v, want ErrInvalidAPILogRetentionDays", err)
+	}
+}
+
+func TestSettingServiceStoresAndRedactsHTTPProxy(t *testing.T) {
+	setupSettingTestDB(t)
+	settingService := NewSettingService()
+	if err := settingService.InitDefaultSettings(); err != nil {
+		t.Fatal(err)
+	}
+	proxyURL := "http://proxy-user:proxy-password@127.0.0.1:7890"
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{HTTPProxyURL: &proxyURL}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := settingService.GetSystemSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !settings.HTTPProxyConfigured || settings.HTTPProxyDisplay != "http://127.0.0.1:7890" {
+		t.Fatalf("unexpected proxy settings: %+v", settings)
+	}
+	if settingService.HTTPProxyURL() != proxyURL {
+		t.Fatal("stored proxy URL was not available to the notification sender")
+	}
+	clear := true
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{ClearHTTPProxy: &clear}); err != nil {
+		t.Fatal(err)
+	}
+	if settingService.HTTPProxyURL() != "" {
+		t.Fatal("proxy URL was not cleared")
+	}
+}
+
+func TestSettingServiceRejectsInvalidHTTPProxy(t *testing.T) {
+	setupSettingTestDB(t)
+	settingService := NewSettingService()
+	invalid := "socks5://127.0.0.1:1080"
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{HTTPProxyURL: &invalid}); !errors.Is(err, ErrInvalidHTTPProxyURL) {
+		t.Fatalf("error = %v, want ErrInvalidHTTPProxyURL", err)
 	}
 }

@@ -21,11 +21,15 @@ export function AdminPage() {
   const currentUser = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
   const [retentionDays, setRetentionDays] = useState('30')
+  const [httpProxyURL, setHTTPProxyURL] = useState('')
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: api.users })
   const settings = useQuery({ queryKey: ['admin', 'settings'], queryFn: api.systemSettings })
   const updateSettings = useMutation({
     mutationFn: api.updateSystemSettings,
-    onSuccess: (_, variables) => queryClient.setQueryData(['admin', 'settings'], (current: object | undefined) => ({ ...current, ...variables })),
+    onSuccess: (_, variables) => {
+      if (variables.http_proxy_url !== undefined || variables.clear_http_proxy) setHTTPProxyURL('')
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] })
+    },
   })
   const updateRole = useMutation({
     mutationFn: ({ id, isAdmin }: { id: number; isAdmin: boolean }) => api.setUserRole(id, isAdmin),
@@ -77,11 +81,26 @@ export function AdminPage() {
               <div><h3 className="font-semibold">允许用户注册</h3><p className="mt-1 text-sm text-neutral-500">开启后，访客可以自行创建账户并登录。</p></div>
               <Switch size="lg" aria-label="允许用户注册" checked={settings.data?.allow_register ?? false} disabled={updateSettings.isPending} onCheckedChange={(checked) => updateSettings.mutate({ allow_register: checked })} />
             </div>
+            <div className="flex items-center justify-between gap-5 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900">
+              <div><h3 className="font-semibold">允许推送到私有网络</h3><p className="mt-1 text-sm text-neutral-500">默认仅允许公网 HTTPS。开启后可访问内网地址和 HTTP，请仅在可信部署环境中使用。</p></div>
+              <Switch size="lg" aria-label="允许推送到私有网络" checked={settings.data?.allow_private_notification_targets ?? false} disabled={updateSettings.isPending} onCheckedChange={(checked) => updateSettings.mutate({ allow_private_notification_targets: checked })} />
+            </div>
+            <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
+              <label className="min-w-0 flex-1 space-y-2 text-sm font-medium">
+                <span>HTTP 代理</span>
+                <Input type="password" autoComplete="off" value={httpProxyURL} disabled={updateSettings.isPending} onChange={(event) => setHTTPProxyURL(event.target.value)} placeholder={settings.data?.http_proxy_configured ? `已配置：${settings.data.http_proxy_display || '地址已隐藏'}（留空保持）` : 'http://user:password@proxy.example.com:7890'} />
+                <span className="block text-xs text-neutral-500">支持 HTTP/HTTPS 代理，可包含用户名和密码。地址不会通过设置接口返回。</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {settings.data?.http_proxy_configured && <ConfirmDialog title="清空 HTTP 代理？" description="启用了“使用系统代理”的推送渠道将无法发送，直到重新配置代理或关闭渠道代理开关。" confirmLabel="清空代理" destructive busy={updateSettings.isPending} onConfirm={() => updateSettings.mutate({ clear_http_proxy: true })} trigger={<AppButton variant="outline" disabled={updateSettings.isPending}>清空代理</AppButton>} />}
+                <AppButton disabled={updateSettings.isPending || !httpProxyURL.trim()} onClick={() => updateSettings.mutate({ http_proxy_url: httpProxyURL.trim() })}>{updateSettings.isPending ? '正在保存…' : '保存代理'}</AppButton>
+              </div>
+            </div>
             <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
               <label className="max-w-xs flex-1 space-y-2 text-sm font-medium">
-                <span>接口日志保留天数</span>
+                <span>日志保留天数</span>
                 <Input type="number" min={1} max={3650} step={1} value={retentionDays} disabled={updateSettings.isPending} onChange={(event) => setRetentionDays(event.target.value)} />
-                <span className={`block text-xs ${retentionDaysValid ? 'text-neutral-500' : 'text-red-600'}`}>{retentionDaysValid ? '默认保留 30 天，可设置 1–3650 天。' : '请输入 1–3650 之间的整数。'}</span>
+                <span className={`block text-xs ${retentionDaysValid ? 'text-neutral-500' : 'text-red-600'}`}>{retentionDaysValid ? '接口日志和业务日志统一保留，默认 30 天，可设置 1–3650 天。' : '请输入 1–3650 之间的整数。'}</span>
               </label>
               <AppButton disabled={updateSettings.isPending || !retentionDaysValid || parsedRetentionDays === settings.data?.api_log_retention_days} onClick={() => updateSettings.mutate({ api_log_retention_days: parsedRetentionDays })}>{updateSettings.isPending ? '正在保存…' : '保存保留周期'}</AppButton>
             </div>

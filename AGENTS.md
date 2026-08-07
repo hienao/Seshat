@@ -2,6 +2,23 @@
 
 本文件是本仓库人工操作和自动化 Agent 的发版约束。执行版本修改、创建 MR/PR 或调整发布工作流前，必须先阅读并遵守本文件。
 
+## Business Logging
+
+需要在管理后台“业务日志”页面查询的手动日志，统一使用 `backend/internal/logging` 提供的分级方法：
+
+```go
+logging.Debug("webhook", "开始解析消息", logging.Fields{"request_id": requestID})
+logging.Info("webhook", "消息处理完成", logging.Fields{"event_id": eventID})
+logging.Warn("webhook", "消息签名无效", logging.Fields{"app_code": appCode})
+logging.Error("database", "保存消息失败", logging.Fields{"error": err})
+```
+
+- 支持 `DEBUG`、`INFO`、`WARN`、`ERROR` 四个等级，调用时必须选择符合语义的等级。
+- `source` 使用稳定的模块名，例如 `server`、`webhook`、`notification`，不要写动态值。
+- 可使用 `request_id`、`user_id`、`app_code`、`integration_id`、`event_id` 作为结构化关联字段。
+- 禁止记录 Webhook Secret、Token、Password、Cookie、Authorization、Signature、API Key 等敏感值；日志组件按字段名自动脱敏仅作为兜底。
+- 标准库 `log.Printf`、`fmt.Printf` 只输出到容器控制台，不会进入业务日志页面；需要后台可查询时必须使用上述分级方法。
+
 ## Branch Model
 
 | 分支 | 用途 | 是否触发镜像发布 |

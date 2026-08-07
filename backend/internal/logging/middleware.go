@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"basegoapp/internal/model"
+	"seshat/internal/model"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,23 +35,25 @@ func AccessLogMiddleware(manager *Manager) gin.HandlerFunc {
 		}
 		requestID, _ := c.Get(requestIDKey)
 		entry := model.ApiRequestLog{
-			RequestID:     stringValue(requestID),
-			OccurredAt:    start,
-			Method:        c.Request.Method,
-			Route:         routeName(c),
-			StatusCode:    c.Writer.Status(),
-			LatencyMs:     time.Since(start).Microseconds() / 1000,
-			RequestBytes:  requestBytes(c.Request),
-			ResponseBytes: responseBytes(c),
-			ClientIP:      c.ClientIP(),
-			UserAgent:     truncate(c.GetHeader("User-Agent"), 500),
-			UserID:        uintValue(c, "user_id"),
-			Username:      stringContextValue(c, "username"),
-			AppCode:       stringContextValue(c, "app_code"),
-			IntegrationID: uintValue(c, "integration_id"),
-			EventID:       uintValue(c, "event_id"),
-			ErrorCode:     stringContextValue(c, "error_code"),
-			ErrorMessage:  truncate(stringContextValue(c, "error_message"), 1000),
+			RequestID:      stringValue(requestID),
+			OccurredAt:     start,
+			Method:         c.Request.Method,
+			Route:          routeName(c),
+			StatusCode:     c.Writer.Status(),
+			LatencyMs:      time.Since(start).Microseconds() / 1000,
+			RequestBytes:   requestBytes(c.Request),
+			ResponseBytes:  responseBytes(c),
+			RequestHeaders: stringContextValue(c, "request_headers"),
+			RequestBody:    stringContextValue(c, "request_body"),
+			ClientIP:       c.ClientIP(),
+			UserAgent:      truncate(c.GetHeader("User-Agent"), 500),
+			UserID:         uintValue(c, "user_id"),
+			Username:       stringContextValue(c, "username"),
+			AppCode:        stringContextValue(c, "app_code"),
+			IntegrationID:  uintValue(c, "integration_id"),
+			EventID:        uintValue(c, "event_id"),
+			ErrorCode:      stringContextValue(c, "error_code"),
+			ErrorMessage:   truncate(stringContextValue(c, "error_message"), 1000),
 		}
 		if entry.StatusCode >= http.StatusInternalServerError && entry.ErrorMessage == "" {
 			entry.ErrorMessage = http.StatusText(entry.StatusCode)
@@ -61,7 +63,7 @@ func AccessLogMiddleware(manager *Manager) gin.HandlerFunc {
 }
 
 func shouldSkip(path string) bool {
-	return strings.HasPrefix(path, "/api/admin/logs") || strings.HasPrefix(path, "/swagger")
+	return strings.HasPrefix(path, "/api/admin/logs") || strings.HasPrefix(path, "/api/admin/application-logs") || strings.HasPrefix(path, "/swagger")
 }
 
 func routeName(c *gin.Context) string {

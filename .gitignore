@@ -3,8 +3,6 @@ node_modules/
 vendor/
 
 # Build outputs
-.output/
-.nuxt/
 dist/
 *.exe
 
