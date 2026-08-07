@@ -8,16 +8,17 @@ import (
 
 // AppIntegration 是用户配置的一个 Webhook 接入实例。
 type AppIntegration struct {
-	ID          uint           `gorm:"primarykey" json:"id"`
-	OwnerID     uint           `gorm:"index;not null" json:"owner_id"`
-	AppCode     string         `gorm:"size:50;index;not null" json:"app_code"`
-	Name        string         `gorm:"size:100;not null" json:"name"`
-	EndpointKey string         `gorm:"uniqueIndex;size:100;not null" json:"endpoint_key"`
-	Secret      string         `gorm:"size:100;not null" json:"-"`
-	Config      datatypes.JSON `gorm:"type:json" json:"config"`
-	Enabled     bool           `gorm:"default:true;not null" json:"enabled"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID                    uint           `gorm:"primarykey" json:"id"`
+	OwnerID               uint           `gorm:"index;not null" json:"owner_id"`
+	AppCode               string         `gorm:"size:50;index;not null" json:"app_code"`
+	Name                  string         `gorm:"size:100;not null" json:"name"`
+	EndpointKey           string         `gorm:"uniqueIndex;size:100;not null" json:"endpoint_key"`
+	Secret                string         `gorm:"size:100;not null" json:"-"`
+	Config                datatypes.JSON `gorm:"type:json" json:"config"`
+	Enabled               bool           `gorm:"default:true;not null" json:"enabled"`
+	NotificationChannelID *uint          `gorm:"index" json:"notification_channel_id,omitempty"`
+	CreatedAt             time.Time      `json:"created_at"`
+	UpdatedAt             time.Time      `json:"updated_at"`
 }
 
 func (AppIntegration) TableName() string { return "app_integrations" }
@@ -48,3 +49,51 @@ type WebhookEvent struct {
 }
 
 func (WebhookEvent) TableName() string { return "webhook_events" }
+
+type NotificationChannel struct {
+	ID             uint           `gorm:"primarykey" json:"id"`
+	OwnerID        uint           `gorm:"index;not null" json:"owner_id"`
+	Name           string         `gorm:"size:100;not null" json:"name"`
+	Type           string         `gorm:"size:20;index;not null" json:"type"`
+	Enabled        bool           `gorm:"default:false;not null" json:"enabled"`
+	Config         datatypes.JSON `gorm:"type:json" json:"config"`
+	SecretConfig   datatypes.JSON `gorm:"type:json" json:"-"`
+	LastTestStatus string         `gorm:"size:20" json:"last_test_status,omitempty"`
+	LastTestAt     *time.Time     `json:"last_test_at,omitempty"`
+	LastTestError  string         `gorm:"size:1000" json:"last_test_error,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+func (NotificationChannel) TableName() string { return "notification_channels" }
+
+type IntegrationNotificationRule struct {
+	ID            uint      `gorm:"primarykey" json:"id"`
+	IntegrationID uint      `gorm:"uniqueIndex:idx_integration_event_type;not null" json:"integration_id"`
+	EventType     string    `gorm:"uniqueIndex:idx_integration_event_type;size:150;not null" json:"event_type"`
+	Enabled       bool      `gorm:"default:false;not null" json:"enabled"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func (IntegrationNotificationRule) TableName() string { return "integration_notification_rules" }
+
+type NotificationDelivery struct {
+	ID             uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	EventID        uint       `gorm:"uniqueIndex:idx_delivery_event_channel;index;not null" json:"event_id"`
+	IntegrationID  uint       `gorm:"index:idx_delivery_integration_created;not null" json:"integration_id"`
+	ChannelID      uint       `gorm:"uniqueIndex:idx_delivery_event_channel;index:idx_delivery_channel_created;not null" json:"channel_id"`
+	ChannelName    string     `gorm:"size:100;not null" json:"channel_name"`
+	ChannelType    string     `gorm:"size:20;not null" json:"channel_type"`
+	EventType      string     `gorm:"size:150;index;not null" json:"event_type"`
+	Status         string     `gorm:"size:20;index:idx_delivery_status_next;not null" json:"status"`
+	AttemptCount   int        `gorm:"not null;default:0" json:"attempt_count"`
+	NextAttemptAt  *time.Time `gorm:"index:idx_delivery_status_next" json:"next_attempt_at,omitempty"`
+	LastStatusCode int        `json:"last_status_code,omitempty"`
+	LastError      string     `gorm:"size:1000" json:"last_error,omitempty"`
+	SentAt         *time.Time `json:"sent_at,omitempty"`
+	CreatedAt      time.Time  `gorm:"index:idx_delivery_integration_created;index:idx_delivery_channel_created" json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+func (NotificationDelivery) TableName() string { return "notification_deliveries" }

@@ -3,8 +3,8 @@ package handler
 import (
 	"errors"
 
-	"basegoapp/internal/service"
-	"basegoapp/pkg/response"
+	"seshat/internal/service"
+	"seshat/pkg/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -71,7 +71,7 @@ func (h *SettingHandler) UpdateSystemSettings(c *gin.Context) {
 	}
 
 	if err := h.settingService.UpdateSystemSettings(&req); err != nil {
-		if errors.Is(err, service.ErrInvalidAPILogRetentionDays) {
+		if errors.Is(err, service.ErrInvalidAPILogRetentionDays) || errors.Is(err, service.ErrInvalidHTTPProxyURL) || errors.Is(err, service.ErrConflictingHTTPProxyUpdate) {
 			response.BadRequest(c, err.Error())
 			return
 		}

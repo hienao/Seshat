@@ -6,7 +6,7 @@ import { AuthBootstrap } from './auth-bootstrap'
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider defaultTheme="system" enableSystem storageKey="basegoapp-theme">
+    <ThemeProvider defaultTheme="system" enableSystem storageKey="seshat-theme">
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <AuthBootstrap>{children}</AuthBootstrap>

@@ -5,7 +5,7 @@ services:
   app:
     image: ${SESHAT_IMAGE:-hienao6/seshat:beta}
     ports:
-      - "80:80"
+      - "3112:3112"
     environment:
       DB_DRIVER: ${DB_DRIVER:-sqlite}
       DATABASE_URL: ${DATABASE_URL:-}

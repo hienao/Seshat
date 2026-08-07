@@ -1,10 +1,10 @@
 package router
 
 import (
-	"basegoapp/config"
-	"basegoapp/internal/handler"
-	"basegoapp/internal/logging"
-	"basegoapp/internal/middleware"
+	"seshat/config"
+	"seshat/internal/handler"
+	"seshat/internal/logging"
+	"seshat/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -45,7 +45,9 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 	settingHandler := handler.NewSettingHandler(logManager)
 	adminHandler := handler.NewAdminHandler(authHandler.GetAuthService())
 	adminLogHandler := handler.NewAdminLogHandler(logManager)
+	adminApplicationLogHandler := handler.NewAdminApplicationLogHandler(logManager)
 	webhookHandler := handler.NewWebhookHandler()
+	notificationHandler := handler.NewNotificationHandler()
 
 	// 初始化一次性引导管理员和系统设置
 	if err := authHandler.GetAuthService().InitBootstrapAdmin(); err != nil {
@@ -65,8 +67,28 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 			webhookAPI.GET("/integrations", webhookHandler.ListIntegrations)
 			webhookAPI.POST("/integrations", webhookHandler.CreateIntegration)
 			webhookAPI.POST("/integrations/:id/rotate-secret", webhookHandler.RotateSecret)
+			webhookAPI.GET("/integrations/:id/notification-settings", notificationHandler.GetIntegrationSettings)
+			webhookAPI.PUT("/integrations/:id/notification-settings", notificationHandler.UpdateIntegrationSettings)
 			webhookAPI.GET("/events", webhookHandler.ListEvents)
 			webhookAPI.GET("/events/:id", webhookHandler.GetEvent)
+			webhookAPI.GET("/events/:id/notification-status", notificationHandler.GetEventStatus)
+		}
+
+		notifications := api.Group("/notification-channels")
+		notifications.Use(middleware.JWTAuth(cfg), middleware.AdminSetupComplete())
+		{
+			notifications.GET("", notificationHandler.ListChannels)
+			notifications.POST("", notificationHandler.CreateChannel)
+			notifications.PUT("/:id", notificationHandler.UpdateChannel)
+			notifications.DELETE("/:id", notificationHandler.DeleteChannel)
+			notifications.POST("/:id/test", notificationHandler.TestChannel)
+		}
+
+		deliveries := api.Group("/notifications/deliveries")
+		deliveries.Use(middleware.JWTAuth(cfg), middleware.AdminSetupComplete())
+		{
+			deliveries.GET("", notificationHandler.ListDeliveries)
+			deliveries.POST("/:id/retry", notificationHandler.RetryDelivery)
 		}
 		// 公开路由
 		auth := api.Group("/auth")
@@ -108,6 +130,16 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 			adminLogs.GET("/export", adminLogHandler.Export)
 			adminLogs.POST("/clear", adminLogHandler.Clear)
 			adminLogs.GET("/:id", adminLogHandler.Get)
+		}
+
+		applicationLogs := api.Group("/admin/application-logs")
+		applicationLogs.Use(middleware.JWTAuth(cfg), middleware.AdminSetupComplete(), middleware.AdminAuth())
+		{
+			applicationLogs.GET("", adminApplicationLogHandler.List)
+			applicationLogs.GET("/summary", adminApplicationLogHandler.Summary)
+			applicationLogs.GET("/export", adminApplicationLogHandler.Export)
+			applicationLogs.POST("/clear", adminApplicationLogHandler.Clear)
+			applicationLogs.GET("/:id", adminApplicationLogHandler.Get)
 		}
 
 		// 管理员路由

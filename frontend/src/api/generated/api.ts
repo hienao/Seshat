@@ -52,8 +52,11 @@ export interface ServiceSetupAdminRequest {
 }
 
 export interface ServiceSystemSettingsResponse {
+  allow_private_notification_targets?: boolean;
   allow_register?: boolean;
   api_log_retention_days?: number;
+  http_proxy_configured?: boolean;
+  http_proxy_display?: string;
 }
 
 export interface ServiceTokenResponse {
@@ -62,8 +65,11 @@ export interface ServiceTokenResponse {
 }
 
 export interface ServiceUpdateSystemSettingsRequest {
+  allow_private_notification_targets?: boolean;
   allow_register?: boolean;
   api_log_retention_days?: number;
+  clear_http_proxy?: boolean;
+  http_proxy_url?: string;
 }
 
 export interface ServiceUserResponse {
@@ -335,7 +341,7 @@ export class HttpClient<SecurityDataType = unknown> {
  * @baseUrl //localhost:8080
  * @contact
  *
- * Seshat 模板工程 API 文档
+ * Seshat Webhook 消息管理 API 文档
  */
 export class Api<
   SecurityDataType extends unknown,

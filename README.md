@@ -1,6 +1,8 @@
 # Seshat
 
-基于 React 19 + Go Gin 的全栈模板工程。
+用于统一接收、展示和排查多种 App Webhook 消息的轻量管理工具。
+
+当前内置通用 Webhook、GitHub 和 Jellyfin App 类型。每个接入实例都可以按消息类型选择是否通过 Webhook、Telegram、Apprise、邮箱、Server酱、Bark、DingTalk、Feishu、WhatsApp 或 WxPusher 推送；未知类型统一匹配该 App 的默认消息类型，所有推送开关初始均为关闭。
 
 ## 技术栈
 
@@ -56,16 +58,19 @@ npm run dev
 |----------|------|
 | `/data/db` | SQLite 数据库文件目录 |
 | `/cache/logs/nginx` | Nginx access/error 日志 |
-| `/cache/logs/app` | 应用日志预留目录 |
+| `/cache/logs/app` | 接口日志和业务日志数据库目录 |
 | `/cache/tmp` | 临时文件和运行时缓存 |
 
 其中：
 - `SQLite` 路径固定派生为 `/data/db/seshat.db`
-- 应用日志目录固定派生为 `/cache/logs/app`
-- 接口日志固定启用并保存到 `/cache/logs/app/api-logs.db`
-- 接口日志默认保留 30 天，管理员可在“系统管理 → 系统设置”中调整为 1–3650 天，保存后立即生效
+- 日志目录固定派生为 `/cache/logs/app`
+- 接口日志和业务日志固定启用并保存到 `/cache/logs/app/api-logs.db` 的独立数据表中
+- 两类日志默认保留 30 天，管理员可在“系统管理 → 系统设置”中调整为 1–3650 天，保存后立即生效
 - 登录令牌由前端保存到 LocalStorage，并通过 `Authorization: Bearer <token>` 请求头发送
 - Webhook Secret 以明文保存在业务数据库中；接入列表和详情接口不返回该字段，仅在创建或轮换时返回一次
+- 推送渠道凭据以明文保存在业务数据库中，但 API 不返回其内容；Webhook、Apprise 和其他可配置 URL 默认只允许公网 HTTPS 目标
+- 管理员可在“系统管理 → 系统设置”中显式允许私有网络推送目标，开启后仍会阻止 link-local 和已知云元数据地址
+- 管理员可在系统设置中保存一个 HTTP/HTTPS 代理；每个推送渠道独立决定是否使用，默认不使用代理
 
 #### DATABASE_URL 格式
 
@@ -89,7 +94,7 @@ docker build -f deploy/Dockerfile -t seshat .
 
 # 运行（替换为实际的数据库连接信息）
 docker run -d \
-  -p 80:80 \
+  -p 3112:3112 \
   -v seshat_data:/data \
   -v seshat_cache:/cache \
   -e JWT_SECRET="your-secret-key-at-least-32-chars" \
@@ -158,7 +163,7 @@ docker compose -f docker-compose.dockerhub.yml up -d
 docker compose -f docker-compose.dockerhub.yml ps
 ```
 
-默认端口为 `80`，SQLite 数据保存在 `./runtime/data`，应用和 Nginx 日志保存在 `./runtime/cache`。如需使用内置 PostgreSQL：
+容器内外统一使用 Web 端口 `3112`，默认访问地址为 `http://localhost:3112`。SQLite 数据保存在 `./runtime/data`，应用和 Nginx 日志保存在 `./runtime/cache`。如需使用内置 PostgreSQL：
 
 ```bash
 SESHAT_IMAGE=hienao6/seshat:beta \
@@ -246,17 +251,34 @@ Seshat/
 | PUT | /api/user/password | 修改密码 |
 | GET | /api/webhooks/apps | 获取可用 App 类型 |
 | GET/POST | /api/webhooks/integrations | 查询/创建 Webhook 接入实例 |
+| GET/PUT | /api/webhooks/integrations/:id/notification-settings | 查询/更新实例的渠道绑定和消息类型开关 |
 | GET | /api/webhooks/events | 查询收到的 Webhook 消息 |
 | GET | /api/webhooks/events/:id | 查看消息详情和原始内容 |
+| GET | /api/webhooks/events/:id/notification-status | 查看消息的推送状态 |
+| GET/POST | /api/notification-channels | 查询/创建推送渠道 |
+| PUT/DELETE | /api/notification-channels/:id | 更新/删除推送渠道 |
+| POST | /api/notification-channels/:id/test | 发送测试通知 |
+| GET | /api/notifications/deliveries | 查询最近推送记录 |
+| POST | /api/notifications/deliveries/:id/retry | 手动重试最终失败的推送 |
 | POST | /hooks/v1/:endpointKey | 外部 App Webhook 接收入口（无需登录） |
 | GET | /api/admin/logs | 查询后端接口日志（管理员） |
 | GET | /api/admin/logs/:id | 查看接口日志详情（管理员） |
 | GET | /api/admin/logs/export | 导出接口日志 CSV/JSONL（管理员） |
 | POST | /api/admin/logs/clear | 按条件清空接口日志（管理员） |
+| GET | /api/admin/application-logs | 按等级、来源和关键字查询业务日志（管理员） |
+| GET | /api/admin/application-logs/:id | 查看业务日志详情（管理员） |
+| GET | /api/admin/application-logs/export | 导出业务日志 CSV/JSONL（管理员） |
+| POST | /api/admin/application-logs/clear | 按条件清空业务日志（管理员） |
 
-## 更换项目名
+## 记录业务日志
 
-只需修改以下文件：
-1. `backend/go.mod` - module 名称
-2. `frontend/package.json` - name 字段
-3. `deploy/Dockerfile` - 镜像标签（如需要）
+后端代码通过 `internal/logging` 提供的等级方法记录业务日志。日志会同时输出到容器控制台和“系统管理 → 业务日志”页面：
+
+```go
+logging.Debug("webhook", "开始解析消息", logging.Fields{"request_id": requestID})
+logging.Info("webhook", "消息处理完成", logging.Fields{"event_id": eventID})
+logging.Warn("webhook", "消息签名无效", logging.Fields{"app_code": appCode})
+logging.Error("database", "保存消息失败", logging.Fields{"error": err})
+```
+
+支持 `DEBUG`、`INFO`、`WARN`、`ERROR` 四个等级。结构化字段名包含 `secret`、`token`、`password`、`cookie`、`authorization`、`signature` 或 `api-key` 时，值会在控制台和日志数据库中自动替换为 `[REDACTED]`。标准库 `log.Printf` 仍只输出到容器控制台，不会写入业务日志页面。

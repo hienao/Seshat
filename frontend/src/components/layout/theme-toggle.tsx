@@ -10,7 +10,7 @@ export function ThemeToggle() {
     const next = !dark
     document.documentElement.classList.toggle('dark', next)
     document.documentElement.style.colorScheme = next ? 'dark' : 'light'
-    localStorage.setItem('basegoapp-theme', next ? 'dark' : 'light')
+    localStorage.setItem('seshat-theme', next ? 'dark' : 'light')
     setDark(next)
   }
 

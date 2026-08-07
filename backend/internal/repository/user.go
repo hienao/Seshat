@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"basegoapp/internal/model"
-	"basegoapp/pkg/database"
+	"seshat/internal/model"
+	"seshat/pkg/database"
 
 	"gorm.io/gorm"
 )

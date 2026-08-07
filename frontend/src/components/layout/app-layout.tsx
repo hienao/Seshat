@@ -36,7 +36,7 @@ export function AppLayout() {
         <main id="main-content" className="relative flex-1">
           <Suspense fallback={loadingFallback}><Outlet /></Suspense>
         </main>
-        <footer className="border-t border-neutral-200/70 px-4 py-6 text-center text-sm text-neutral-500 dark:border-neutral-800">Seshat · Go 与 React 的轻量全栈起点</footer>
+        <footer className="border-t border-neutral-200/70 px-4 py-6 text-center text-sm text-neutral-500 dark:border-neutral-800">Seshat · Webhook 消息管理工具</footer>
       </div>
     )
   }

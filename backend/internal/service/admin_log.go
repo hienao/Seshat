@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"basegoapp/internal/logging"
-	"basegoapp/internal/model"
-	"basegoapp/pkg/database"
 	"gorm.io/gorm"
+	"seshat/internal/logging"
+	"seshat/internal/model"
+	"seshat/pkg/database"
 )
 
 type ApiLogFilter struct {
@@ -64,7 +64,8 @@ func (s *AdminLogService) List(filter ApiLogFilter) (*ApiLogListResponse, error)
 		return nil, err
 	}
 	var items []model.ApiRequestLog
-	if err := base.Order("id DESC").Limit(filter.Limit + 1).Find(&items).Error; err != nil {
+	// 请求头和正文只在详情/导出时读取，避免日志列表一次返回大量内容。
+	if err := base.Omit("request_headers", "request_body").Order("id DESC").Limit(filter.Limit + 1).Find(&items).Error; err != nil {
 		return nil, err
 	}
 	result := &ApiLogListResponse{Total: total, HasMore: len(items) > filter.Limit}
@@ -133,7 +134,7 @@ func (s *AdminLogService) Export(writer io.Writer, filter ApiLogFilter, format s
 	var csvWriter *csv.Writer
 	if format == "csv" {
 		csvWriter = csv.NewWriter(writer)
-		if err := csvWriter.Write([]string{"id", "occurred_at", "request_id", "method", "route", "status_code", "latency_ms", "client_ip", "user_id", "username", "app_code", "integration_id", "event_id", "error_code", "error_message", "user_agent"}); err != nil {
+		if err := csvWriter.Write([]string{"id", "occurred_at", "request_id", "method", "route", "status_code", "latency_ms", "request_bytes", "response_bytes", "client_ip", "user_id", "username", "app_code", "integration_id", "event_id", "error_code", "error_message", "user_agent", "request_headers", "request_body"}); err != nil {
 			return 0, err
 		}
 	}
@@ -155,7 +156,7 @@ func (s *AdminLogService) Export(writer io.Writer, filter ApiLogFilter, format s
 				break
 			}
 			if format == "csv" {
-				if err := csvWriter.Write([]string{strconv.FormatUint(row.ID, 10), row.OccurredAt.Format(time.RFC3339Nano), row.RequestID, row.Method, row.Route, strconv.Itoa(row.StatusCode), strconv.FormatInt(row.LatencyMs, 10), row.ClientIP, strconv.FormatUint(uint64(row.UserID), 10), row.Username, row.AppCode, strconv.FormatUint(uint64(row.IntegrationID), 10), strconv.FormatUint(uint64(row.EventID), 10), row.ErrorCode, row.ErrorMessage, row.UserAgent}); err != nil {
+				if err := csvWriter.Write([]string{strconv.FormatUint(row.ID, 10), row.OccurredAt.Format(time.RFC3339Nano), row.RequestID, row.Method, row.Route, strconv.Itoa(row.StatusCode), strconv.FormatInt(row.LatencyMs, 10), strconv.FormatInt(row.RequestBytes, 10), strconv.FormatInt(row.ResponseBytes, 10), row.ClientIP, strconv.FormatUint(uint64(row.UserID), 10), row.Username, row.AppCode, strconv.FormatUint(uint64(row.IntegrationID), 10), strconv.FormatUint(uint64(row.EventID), 10), row.ErrorCode, row.ErrorMessage, row.UserAgent, row.RequestHeaders, row.RequestBody}); err != nil {
 					return count, err
 				}
 			} else if err := json.NewEncoder(writer).Encode(row); err != nil {
@@ -219,7 +220,8 @@ func (s *AdminLogService) query(filter ApiLogFilter) *gorm.DB {
 		query = query.Where("request_id = ?", filter.RequestID)
 	}
 	if filter.Keyword != "" {
-		query = query.Where("error_message LIKE ?", "%"+escapeLike(filter.Keyword)+"%")
+		keyword := "%" + escapeLike(filter.Keyword) + "%"
+		query = query.Where("error_message LIKE ? OR request_headers LIKE ? OR request_body LIKE ?", keyword, keyword, keyword)
 	}
 	if filter.Cursor > 0 {
 		query = query.Where("id < ?", filter.Cursor)

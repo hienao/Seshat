@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"basegoapp/internal/logging"
-	"basegoapp/internal/service"
-	"basegoapp/pkg/response"
+	"seshat/internal/logging"
+	"seshat/internal/service"
+	"seshat/pkg/response"
 
 	"github.com/gin-gonic/gin"
 )

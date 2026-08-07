@@ -2,9 +2,11 @@ package service
 
 import (
 	"errors"
+	"net/url"
 	"strconv"
+	"strings"
 
-	"basegoapp/internal/repository"
+	"seshat/internal/repository"
 )
 
 const (
@@ -13,7 +15,11 @@ const (
 	MaxAPILogRetentionDays     = 3650
 )
 
-var ErrInvalidAPILogRetentionDays = errors.New("接口日志保留天数必须在 1 到 3650 天之间")
+var (
+	ErrInvalidAPILogRetentionDays = errors.New("接口日志保留天数必须在 1 到 3650 天之间")
+	ErrInvalidHTTPProxyURL        = errors.New("HTTP 代理地址必须是有效的 http:// 或 https:// URL")
+	ErrConflictingHTTPProxyUpdate = errors.New("不能同时设置和清空 HTTP 代理")
+)
 
 // APILogRetentionUpdater 由接口日志管理器实现，用于让设置立即生效。
 type APILogRetentionUpdater interface {
@@ -39,8 +45,11 @@ func NewSettingService(retentionUpdaters ...APILogRetentionUpdater) *SettingServ
 
 // SystemSettingsResponse 系统设置响应
 type SystemSettingsResponse struct {
-	AllowRegister       bool `json:"allow_register"`
-	APILogRetentionDays int  `json:"api_log_retention_days"`
+	AllowRegister                   bool   `json:"allow_register"`
+	APILogRetentionDays             int    `json:"api_log_retention_days"`
+	AllowPrivateNotificationTargets bool   `json:"allow_private_notification_targets"`
+	HTTPProxyConfigured             bool   `json:"http_proxy_configured"`
+	HTTPProxyDisplay                string `json:"http_proxy_display,omitempty"`
 }
 
 // GetSystemSettings 获取系统设置
@@ -59,6 +68,13 @@ func (s *SettingService) GetSystemSettings() (*SystemSettingsResponse, error) {
 			if days, parseErr := strconv.Atoi(setting.Value); parseErr == nil && validAPILogRetentionDays(days) {
 				response.APILogRetentionDays = days
 			}
+		case "allow_private_notification_targets":
+			response.AllowPrivateNotificationTargets = setting.Value == "true"
+		case "http_proxy_url":
+			if setting.Value != "" {
+				response.HTTPProxyConfigured = true
+				response.HTTPProxyDisplay = displayHTTPProxyURL(setting.Value)
+			}
 		}
 	}
 	return response, nil
@@ -66,14 +82,26 @@ func (s *SettingService) GetSystemSettings() (*SystemSettingsResponse, error) {
 
 // UpdateSystemSettingsRequest 更新系统设置请求
 type UpdateSystemSettingsRequest struct {
-	AllowRegister       *bool `json:"allow_register"`
-	APILogRetentionDays *int  `json:"api_log_retention_days"`
+	AllowRegister                   *bool   `json:"allow_register"`
+	APILogRetentionDays             *int    `json:"api_log_retention_days"`
+	AllowPrivateNotificationTargets *bool   `json:"allow_private_notification_targets"`
+	HTTPProxyURL                    *string `json:"http_proxy_url"`
+	ClearHTTPProxy                  *bool   `json:"clear_http_proxy"`
 }
 
 // UpdateSystemSettings 更新系统设置
 func (s *SettingService) UpdateSystemSettings(req *UpdateSystemSettingsRequest) error {
 	if req.APILogRetentionDays != nil && !validAPILogRetentionDays(*req.APILogRetentionDays) {
 		return ErrInvalidAPILogRetentionDays
+	}
+	if req.HTTPProxyURL != nil && req.ClearHTTPProxy != nil && *req.ClearHTTPProxy {
+		return ErrConflictingHTTPProxyUpdate
+	}
+	if req.HTTPProxyURL != nil {
+		proxyURL := strings.TrimSpace(*req.HTTPProxyURL)
+		if !validHTTPProxyURL(proxyURL) {
+			return ErrInvalidHTTPProxyURL
+		}
 	}
 	if req.AllowRegister != nil {
 		value := "false"
@@ -93,7 +121,38 @@ func (s *SettingService) UpdateSystemSettings(req *UpdateSystemSettingsRequest) 
 			s.retentionUpdater.SetRetentionDays(days)
 		}
 	}
+	if req.AllowPrivateNotificationTargets != nil {
+		value := "false"
+		if *req.AllowPrivateNotificationTargets {
+			value = "true"
+		}
+		if err := s.settingRepo.SetSystemSetting("allow_private_notification_targets", value); err != nil {
+			return err
+		}
+	}
+	if req.HTTPProxyURL != nil {
+		if err := s.settingRepo.SetSystemSetting("http_proxy_url", strings.TrimSpace(*req.HTTPProxyURL)); err != nil {
+			return err
+		}
+	} else if req.ClearHTTPProxy != nil && *req.ClearHTTPProxy {
+		if err := s.settingRepo.SetSystemSetting("http_proxy_url", ""); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (s *SettingService) AllowPrivateNotificationTargets() bool {
+	setting, err := s.settingRepo.GetSystemSetting("allow_private_notification_targets")
+	return err == nil && setting.Value == "true"
+}
+
+func (s *SettingService) HTTPProxyURL() string {
+	setting, err := s.settingRepo.GetSystemSetting("http_proxy_url")
+	if err != nil || !validHTTPProxyURL(setting.Value) {
+		return ""
+	}
+	return setting.Value
 }
 
 // IsRegistrationAllowed 检查是否允许注册
@@ -122,4 +181,28 @@ func (s *SettingService) InitDefaultSettings() error {
 
 func validAPILogRetentionDays(days int) bool {
 	return days >= MinAPILogRetentionDays && days <= MaxAPILogRetentionDays
+}
+
+func validHTTPProxyURL(value string) bool {
+	if value == "" || len(value) > 500 {
+		return false
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return false
+	}
+	return (parsed.Path == "" || parsed.Path == "/") && parsed.RawQuery == "" && parsed.Fragment == ""
+}
+
+func displayHTTPProxyURL(value string) string {
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "已配置"
+	}
+	parsed.User = nil
+	parsed.Path = ""
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
 }

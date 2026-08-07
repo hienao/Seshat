@@ -1,4 +1,4 @@
-module basegoapp
+module seshat
 
 go 1.25.4
 

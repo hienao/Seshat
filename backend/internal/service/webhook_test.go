@@ -6,12 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"testing"
 
-	"basegoapp/internal/model"
-	"basegoapp/pkg/database"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"seshat/internal/model"
+	"seshat/pkg/database"
 )
 
 func githubSignature(secret string, body []byte) string {
@@ -61,7 +62,8 @@ func TestWebhookUsesAppDefaultEventType(t *testing.T) {
 		t.Fatal("webhook secret was exposed by integration JSON")
 	}
 	body := []byte(`{"event_type":"not-registered","message":"hello"}`)
-	if err := service.Ingest(created.EndpointKey, map[string]string{"X-Webhook-Secret": created.Secret}, body, "application/json"); err != nil {
+	result, err := service.Ingest(created.EndpointKey, map[string]string{"X-Webhook-Secret": created.Secret}, body, "application/json")
+	if err != nil {
 		t.Fatal(err)
 	}
 	var event model.WebhookEvent
@@ -76,6 +78,9 @@ func TestWebhookUsesAppDefaultEventType(t *testing.T) {
 	}
 	if event.RawBody != string(body) {
 		t.Fatal("raw body was not preserved")
+	}
+	if result.AppCode != "generic" || result.IntegrationID != integration.ID || result.EventID != event.ID {
+		t.Fatalf("unexpected ingest result: %+v", result)
 	}
 	var presentation map[string]interface{}
 	if err := json.Unmarshal(event.Presentation, &presentation); err != nil {
@@ -95,15 +100,44 @@ func TestWebhookDeduplicatesExternalEventID(t *testing.T) {
 	}
 	body := []byte(`{"repository":{"full_name":"demo/repo"}}`)
 	headers := map[string]string{"X-Hub-Signature-256": githubSignature(created.Secret, body), "X-GitHub-Event": "push", "X-GitHub-Delivery": "delivery-1"}
-	if err := service.Ingest(created.EndpointKey, headers, body, "application/json"); err != nil {
+	first, err := service.Ingest(created.EndpointKey, headers, body, "application/json")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Ingest(created.EndpointKey, headers, body, "application/json"); err != nil {
+	second, err := service.Ingest(created.EndpointKey, headers, body, "application/json")
+	if err != nil {
 		t.Fatal(err)
 	}
 	var count int64
 	database.GetDB().Model(&model.WebhookEvent{}).Count(&count)
 	if count != 1 {
 		t.Fatalf("event count = %d, want 1", count)
+	}
+	if first.EventID == 0 || second.EventID != first.EventID {
+		t.Fatalf("deduplicated event IDs = %d and %d", first.EventID, second.EventID)
+	}
+}
+
+func TestWebhookFailureReturnsLogContext(t *testing.T) {
+	setupWebhookTestDB(t)
+	webhookService := NewWebhookService()
+	created, err := webhookService.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "generic", Name: "测试接入"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := webhookService.Ingest(created.EndpointKey, map[string]string{"X-Webhook-Secret": "wrong-secret"}, []byte(`{"event_type":"test"}`), "application/json")
+	if err == nil {
+		t.Fatal("expected signature verification error")
+	}
+	var ingestError *WebhookIngestError
+	if !errors.As(err, &ingestError) {
+		t.Fatalf("error type = %T, want *WebhookIngestError", err)
+	}
+	if ingestError.Code != "webhook_signature_invalid" {
+		t.Fatalf("error code = %q", ingestError.Code)
+	}
+	if result.AppCode != "generic" || result.IntegrationID != created.ID || result.EventID != 0 {
+		t.Fatalf("unexpected failure context: %+v", result)
 	}
 }

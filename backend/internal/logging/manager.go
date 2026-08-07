@@ -8,25 +8,31 @@ import (
 	"sync/atomic"
 	"time"
 
-	"basegoapp/config"
-	"basegoapp/internal/model"
+	"seshat/config"
+	"seshat/internal/model"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-// Manager 负责接口日志的异步写入、查询共用数据库连接和保留期清理。
+type queuedLog struct {
+	api         *model.ApiRequestLog
+	application *model.ApplicationLog
+}
+
+// Manager 负责接口日志和业务日志的异步写入、查询共用数据库连接和保留期清理。
 type Manager struct {
-	DB               *gorm.DB
-	enabled          bool
-	queue            chan model.ApiRequestLog
-	done             chan struct{}
-	retentionChanged chan struct{}
-	wg               sync.WaitGroup
-	dropped          atomic.Uint64
-	retentionDays    atomic.Int64
-	config           *config.Config
+	DB                 *gorm.DB
+	enabled            bool
+	queue              chan queuedLog
+	done               chan struct{}
+	retentionChanged   chan struct{}
+	wg                 sync.WaitGroup
+	apiDropped         atomic.Uint64
+	applicationDropped atomic.Uint64
+	retentionDays      atomic.Int64
+	config             *config.Config
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
@@ -51,7 +57,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	if err := db.Exec("PRAGMA journal_mode = WAL").Error; err != nil {
 		return nil, err
 	}
-	if err := db.AutoMigrate(&model.ApiRequestLog{}); err != nil {
+	if err := db.AutoMigrate(&model.ApiRequestLog{}, &model.ApplicationLog{}); err != nil {
 		return nil, err
 	}
 	manager.DB = db
@@ -62,7 +68,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	if cfg.APILogBatchSize < 1 {
 		cfg.APILogBatchSize = 100
 	}
-	manager.queue = make(chan model.ApiRequestLog, queueSize)
+	manager.queue = make(chan queuedLog, queueSize)
 	manager.done = make(chan struct{})
 	manager.wg.Add(2)
 	go manager.writeLoop()
@@ -77,9 +83,20 @@ func (m *Manager) Submit(entry model.ApiRequestLog) {
 		return
 	}
 	select {
-	case m.queue <- entry:
+	case m.queue <- queuedLog{api: &entry}:
 	default:
-		m.dropped.Add(1)
+		m.apiDropped.Add(1)
+	}
+}
+
+func (m *Manager) SubmitApplication(entry model.ApplicationLog) {
+	if !m.Enabled() {
+		return
+	}
+	select {
+	case m.queue <- queuedLog{application: &entry}:
+	default:
+		m.applicationDropped.Add(1)
 	}
 }
 
@@ -87,7 +104,14 @@ func (m *Manager) Dropped() uint64 {
 	if m == nil {
 		return 0
 	}
-	return m.dropped.Load()
+	return m.apiDropped.Load()
+}
+
+func (m *Manager) ApplicationDropped() uint64 {
+	if m == nil {
+		return 0
+	}
+	return m.applicationDropped.Load()
 }
 
 func (m *Manager) ExportLimit() int {
@@ -129,23 +153,36 @@ func (m *Manager) flush(max int) {
 	if !m.Enabled() {
 		return
 	}
-	entries := make([]model.ApiRequestLog, 0, m.config.APILogBatchSize)
-	for max == 0 || len(entries) < max {
+	apiEntries := make([]model.ApiRequestLog, 0, m.config.APILogBatchSize)
+	applicationEntries := make([]model.ApplicationLog, 0, m.config.APILogBatchSize)
+	count := 0
+	for max == 0 || count < max {
 		select {
 		case entry := <-m.queue:
-			entries = append(entries, entry)
-		default:
-			if len(entries) > 0 {
-				if err := m.DB.CreateInBatches(&entries, len(entries)).Error; err != nil {
-					log.Printf("failed to persist API request logs: %v", err)
-				}
+			if entry.api != nil {
+				apiEntries = append(apiEntries, *entry.api)
 			}
+			if entry.application != nil {
+				applicationEntries = append(applicationEntries, *entry.application)
+			}
+			count++
+		default:
+			m.persist(apiEntries, applicationEntries)
 			return
 		}
 	}
-	if len(entries) > 0 {
-		if err := m.DB.CreateInBatches(&entries, len(entries)).Error; err != nil {
+	m.persist(apiEntries, applicationEntries)
+}
+
+func (m *Manager) persist(apiEntries []model.ApiRequestLog, applicationEntries []model.ApplicationLog) {
+	if len(apiEntries) > 0 {
+		if err := m.DB.CreateInBatches(&apiEntries, len(apiEntries)).Error; err != nil {
 			log.Printf("failed to persist API request logs: %v", err)
+		}
+	}
+	if len(applicationEntries) > 0 {
+		if err := m.DB.CreateInBatches(&applicationEntries, len(applicationEntries)).Error; err != nil {
+			log.Printf("failed to persist application logs: %v", err)
 		}
 	}
 }
@@ -174,6 +211,9 @@ func (m *Manager) cleanup() {
 	cutoff := time.Now().AddDate(0, 0, -days)
 	if err := m.DB.Where("occurred_at < ?", cutoff).Delete(&model.ApiRequestLog{}).Error; err != nil {
 		log.Printf("failed to clean API request logs: %v", err)
+	}
+	if err := m.DB.Where("occurred_at < ?", cutoff).Delete(&model.ApplicationLog{}).Error; err != nil {
+		log.Printf("failed to clean application logs: %v", err)
 	}
 }
 

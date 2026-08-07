@@ -1,8 +1,9 @@
 import { Badge } from '@appica/ui-react/badge'
 import { Input } from '@appica/ui-react/input'
-import { Check, Copy, Link as LinkIcon, Plus, Refresh } from '@appica/icons-react'
+import { Bell, Check, Copy, Link as LinkIcon, Plus, Refresh } from '@appica/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '@/api/services'
 import { AppButton } from '@/components/common/app-button'
 import { EmptyState, ErrorState, Message } from '@/components/common/feedback'
@@ -39,9 +40,9 @@ export function IntegrationsPage() {
         {create.error && <div className="mt-4"><Message variant="error" title={errorMessage(create.error, '创建接入失败')} /></div>}
       </Panel>
       <Panel title="已有接入" description={`共 ${integrations.data?.length ?? 0} 个`}>
-        {integrations.isPending ? <div className="py-10 text-center text-sm text-neutral-500">正在加载接入…</div> : integrations.error ? <ErrorState message={errorMessage(integrations.error)} onRetry={() => void integrations.refetch()} /> : !integrations.data?.length ? <EmptyState title="还没有接入实例" description="选择一个 App 创建你的第一个 Webhook 地址。" /> : <div className="grid gap-4 md:grid-cols-2">{integrations.data.map((item) => <article key={item.id} className="rounded-xl border border-neutral-200 p-5 dark:border-neutral-800"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{item.name}</h3><p className="mt-1 text-sm text-neutral-500">{item.app_code}</p></div><Badge variant={item.enabled ? 'soft' : 'outline'}>{item.enabled ? '已启用' : '已停用'}</Badge></div><p className="mt-4 break-all rounded-lg bg-neutral-50 p-3 font-mono text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">{window.location.origin}{item.webhook_path}</p><AppButton className="mt-4" size="sm" variant="outline" disabled={rotate.isPending} onClick={() => rotate.mutate(item.id)}><Refresh size={15} />轮换 Secret</AppButton></article>)}</div>}
+        {integrations.isPending ? <div className="py-10 text-center text-sm text-neutral-500">正在加载接入…</div> : integrations.error ? <ErrorState message={errorMessage(integrations.error)} onRetry={() => void integrations.refetch()} /> : !integrations.data?.length ? <EmptyState title="还没有接入实例" description="选择一个 App 创建你的第一个 Webhook 地址。" /> : <div className="grid gap-4 md:grid-cols-2">{integrations.data.map((item) => <article key={item.id} className="rounded-xl border border-neutral-200 p-5 dark:border-neutral-800"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{item.name}</h3><p className="mt-1 text-sm text-neutral-500">{item.app_code}</p></div><Badge variant={item.enabled ? 'soft' : 'outline'}>{item.enabled ? '已启用' : '已停用'}</Badge></div><p className="mt-4 break-all rounded-lg bg-neutral-50 p-3 font-mono text-xs text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">{window.location.origin}{item.webhook_path}</p><div className="mt-4 flex flex-wrap gap-2"><AppButton size="sm" variant="outline" disabled={rotate.isPending} onClick={() => rotate.mutate(item.id)}><Refresh size={15} />轮换 Secret</AppButton><AppButton render={<Link to={`/notification-channels?integration=${item.id}`} />} size="sm" variant="outline"><Bell size={15} />通知设置</AppButton></div></article>)}</div>}
       </Panel>
-      <div className="flex items-center gap-2 text-xs text-neutral-500"><LinkIcon size={15} />支持通用 Webhook 和 GitHub Webhooks；未知事件类型会使用对应 App 的默认类型展示。</div>
+      <div className="flex items-center gap-2 text-xs text-neutral-500"><LinkIcon size={15} />支持通用 Webhook、GitHub 和 Jellyfin；未知事件类型会使用对应 App 的默认类型展示。</div>
     </div>
   )
 }

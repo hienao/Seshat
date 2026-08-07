@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"basegoapp/internal/model"
-	"basegoapp/pkg/database"
+	"seshat/internal/model"
+	"seshat/pkg/database"
 
 	"gorm.io/gorm"
 )
@@ -52,8 +52,10 @@ func (r *SettingRepository) GetAllSystemSettings() ([]model.SystemSetting, error
 // InitDefaultSettings 初始化默认设置
 func (r *SettingRepository) InitDefaultSettings() error {
 	defaults := map[string]string{
-		"allow_register":         "false",
-		"api_log_retention_days": "30",
+		"allow_register":                     "false",
+		"api_log_retention_days":             "30",
+		"allow_private_notification_targets": "false",
+		"http_proxy_url":                     "",
 	}
 
 	for key, value := range defaults {

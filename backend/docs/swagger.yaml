@@ -62,10 +62,16 @@ definitions:
     type: object
   service.SystemSettingsResponse:
     properties:
+      allow_private_notification_targets:
+        type: boolean
       allow_register:
         type: boolean
       api_log_retention_days:
         type: integer
+      http_proxy_configured:
+        type: boolean
+      http_proxy_display:
+        type: string
     type: object
   service.TokenResponse:
     properties:
@@ -76,10 +82,16 @@ definitions:
     type: object
   service.UpdateSystemSettingsRequest:
     properties:
+      allow_private_notification_targets:
+        type: boolean
       allow_register:
         type: boolean
       api_log_retention_days:
         type: integer
+      clear_http_proxy:
+        type: boolean
+      http_proxy_url:
+        type: string
     type: object
   service.UserResponse:
     properties:
@@ -97,7 +109,7 @@ definitions:
 host: localhost:8080
 info:
   contact: {}
-  description: Seshat 模板工程 API 文档
+  description: Seshat Webhook 消息管理 API 文档
   title: Seshat API
   version: "1.0"
 paths:
