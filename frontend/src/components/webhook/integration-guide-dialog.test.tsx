@@ -6,7 +6,7 @@ import { IntegrationGuideDialog } from './integration-guide-dialog'
 afterEach(cleanup)
 
 const integration: Integration = {
-  id: 1, owner_id: 7, app_code: 'jellyfin', name: '家庭影院', endpoint_key: 'endpoint', webhook_path: '/hooks/v1/endpoint', config: {}, enabled: true,
+  id: 1, owner_id: 7, app_code: 'jellyfin', name: '家庭影院', endpoint_key: 'endpoint', webhook_path: '/hooks/v1/endpoint', config: {}, enabled: true, media_api_configured: false,
   created_at: '2026-08-08T00:00:00Z', updated_at: '2026-08-08T00:00:00Z',
 }
 

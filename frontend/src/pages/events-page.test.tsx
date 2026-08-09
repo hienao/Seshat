@@ -36,7 +36,7 @@ describe('EventsPage', () => {
       event_types: [{ code: 'playback_progress', name: '播放进度', render_mode: 'custom' }, { code: '__default__', name: '其他消息', render_mode: 'raw' }],
     }])
     vi.spyOn(api, 'integrations').mockResolvedValue([{
-      id: 11, owner_id: 7, app_code: 'jellyfin', name: '客厅影院', endpoint_key: 'living-room', webhook_path: '/hooks/v1/living-room', config: {}, enabled: true,
+      id: 11, owner_id: 7, app_code: 'jellyfin', name: '客厅影院', endpoint_key: 'living-room', webhook_path: '/hooks/v1/living-room', config: {}, enabled: true, media_api_configured: false,
       created_at: '2026-08-09T00:00:00Z', updated_at: '2026-08-09T00:00:00Z',
     }])
     const events = vi.spyOn(api, 'events').mockImplementation(async (params = {}) => ({

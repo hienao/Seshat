@@ -79,9 +79,21 @@ export interface Integration {
   webhook_path: string
   config: Record<string, unknown>
   enabled: boolean
+	media_api_configured: boolean
   notification_channel_id?: number
   created_at: string
   updated_at: string
+}
+
+export interface IntegrationMediaSettings {
+	server_url: string
+	api_key: string
+	configured: boolean
+}
+
+export interface IntegrationMediaSettingsInput {
+	server_url: string
+	api_key: string
 }
 
 export interface CreatedIntegration {

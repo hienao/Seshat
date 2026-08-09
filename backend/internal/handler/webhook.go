@@ -79,6 +79,95 @@ func (h *WebhookHandler) GetIntegrationSecret(c *gin.Context) {
 	response.Success(c, item)
 }
 
+// GetIntegrationMediaSettings 获取 Jellyfin/Emby 实例的媒体 API 配置。
+// @Summary 获取实例媒体 API 配置
+// @Tags Webhook
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "接入实例 ID"
+// @Success 200 {object} response.Response{data=service.IntegrationMediaSettingsResponse}
+// @Failure 400 {object} response.Response
+// @Failure 404 {object} response.Response
+// @Router /api/webhooks/integrations/{id}/media-settings [get]
+func (h *WebhookHandler) GetIntegrationMediaSettings(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.BadRequest(c, "接入 ID 无效")
+		return
+	}
+	item, err := h.service.GetIntegrationMediaSettings(c.GetUint("user_id"), uint(id))
+	if err != nil {
+		if errors.Is(err, service.ErrMediaAPIUnsupported) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.NotFound(c, "接入不存在")
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, item)
+}
+
+// UpdateIntegrationMediaSettings 保存 Jellyfin/Emby 实例的媒体 API 配置。
+// @Summary 保存实例媒体 API 配置
+// @Tags Webhook
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "接入实例 ID"
+// @Param request body service.UpdateIntegrationMediaSettingsRequest true "媒体 API 配置"
+// @Success 200 {object} response.Response{data=service.IntegrationMediaSettingsResponse}
+// @Failure 400 {object} response.Response
+// @Router /api/webhooks/integrations/{id}/media-settings [put]
+func (h *WebhookHandler) UpdateIntegrationMediaSettings(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.BadRequest(c, "接入 ID 无效")
+		return
+	}
+	var req service.UpdateIntegrationMediaSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "服务器地址和 API Key 均不能为空")
+		return
+	}
+	item, err := h.service.UpdateIntegrationMediaSettings(c.GetUint("user_id"), uint(id), &req)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, item)
+}
+
+// TestIntegrationMediaSettings 使用当前输入测试 Jellyfin/Emby 媒体 API，不保存配置。
+// @Summary 测试实例媒体 API
+// @Tags Webhook
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "接入实例 ID"
+// @Param request body service.UpdateIntegrationMediaSettingsRequest true "媒体 API 配置"
+// @Success 200 {object} response.Response{data=map[string]string}
+// @Failure 400 {object} response.Response
+// @Router /api/webhooks/integrations/{id}/media-settings/test [post]
+func (h *WebhookHandler) TestIntegrationMediaSettings(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.BadRequest(c, "接入 ID 无效")
+		return
+	}
+	var req service.UpdateIntegrationMediaSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "服务器地址和 API Key 均不能为空")
+		return
+	}
+	if err := h.service.TestIntegrationMediaSettings(c.Request.Context(), c.GetUint("user_id"), uint(id), &req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"message": "连接成功"})
+}
+
 func (h *WebhookHandler) ListEvents(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
@@ -135,6 +224,25 @@ func (h *WebhookHandler) GetPublicEvent(c *gin.Context) {
 	c.Header("Cache-Control", "private, no-store")
 	c.Header("Referrer-Policy", "no-referrer")
 	response.Success(c, item)
+}
+
+// GetPublicMediaImage 通过随机标识读取缓存后的媒体服务器图片。
+// @Summary 获取缓存媒体图片
+// @Tags Webhook
+// @Produce image/jpeg
+// @Param token path string true "图片访问标识"
+// @Success 200 {file} binary
+// @Failure 404 {object} response.Response
+// @Router /api/public/media-images/{token} [get]
+func (h *WebhookHandler) GetPublicMediaImage(c *gin.Context) {
+	item, err := h.service.GetCachedMediaImage(c.Param("token"))
+	if err != nil {
+		response.NotFound(c, "媒体图片不存在或已过期")
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Data(http.StatusOK, item.ImageType, item.ImageData)
 }
 
 func (h *WebhookHandler) Receive(c *gin.Context) {

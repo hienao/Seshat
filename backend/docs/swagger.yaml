@@ -24,6 +24,15 @@ definitions:
     - new_password
     - old_password
     type: object
+  service.IntegrationMediaSettingsResponse:
+    properties:
+      api_key:
+        type: string
+      configured:
+        type: boolean
+      server_url:
+        type: string
+    type: object
   service.LoginRequest:
     properties:
       password:
@@ -128,6 +137,16 @@ definitions:
         type: integer
       token:
         type: string
+    type: object
+  service.UpdateIntegrationMediaSettingsRequest:
+    properties:
+      api_key:
+        type: string
+      server_url:
+        type: string
+    required:
+    - api_key
+    - server_url
     type: object
   service.UpdateSystemSettingsRequest:
     properties:
@@ -399,6 +418,28 @@ paths:
       summary: 获取公开消息详情
       tags:
       - Webhook
+  /api/public/media-images/{token}:
+    get:
+      parameters:
+      - description: 图片访问标识
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取缓存媒体图片
+      tags:
+      - Webhook
   /api/settings/registration-status:
     get:
       description: 检查系统是否允许注册（公开接口）
@@ -604,6 +645,114 @@ paths:
       summary: 获取用户信息
       tags:
       - 用户
+  /api/webhooks/integrations/{id}/media-settings:
+    get:
+      parameters:
+      - description: 接入实例 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.IntegrationMediaSettingsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取实例媒体 API 配置
+      tags:
+      - Webhook
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 接入实例 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 媒体 API 配置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.UpdateIntegrationMediaSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.IntegrationMediaSettingsResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 保存实例媒体 API 配置
+      tags:
+      - Webhook
+  /api/webhooks/integrations/{id}/media-settings/test:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 接入实例 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 媒体 API 配置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.UpdateIntegrationMediaSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 测试实例媒体 API
+      tags:
+      - Webhook
 securityDefinitions:
   BearerAuth:
     description: 输入 Bearer {token}

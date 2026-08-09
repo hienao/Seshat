@@ -28,7 +28,7 @@ function event(overrides: Partial<WebhookEvent> = {}): WebhookEvent {
       data: {
         category: 'playback',
         event_label: '播放进度',
-        media: { display_name: 'Severance · S01E01 · Pilot', duration_label: '60:00', overview: '团队发现了新的线索。', image_url: 'https://image.tmdb.org/t/p/w342/poster.jpg', metadata_source: 'tmdb' },
+        media: { display_name: 'Severance · S01E01 · Pilot', type: 'Episode', duration_label: '60:00', overview: '团队发现了新的线索。', image_url: 'https://image.tmdb.org/t/p/w342/poster.jpg', metadata_source: 'tmdb' },
         playback: { percent: 25, position_label: '15:00', method: 'Transcode' },
       },
     },
@@ -76,6 +76,29 @@ describe('EventCard', () => {
     expect(screen.getAllByText('Episode')).toHaveLength(1)
   })
 
+  it('uses a larger landscape image and shows complete external IDs in detail mode', () => {
+    const externalIDs = 'TMDB: 1452857 · TVDB: 6493171 · IMDb: tt8150114'
+    const item = event()
+    item.presentation.facts = [...(item.presentation.facts ?? []), { label: '外部 ID', value: externalIDs }]
+    const { container } = render(<EventCard event={item} detail />)
+
+    const image = container.querySelector('img')
+    expect(image?.parentElement).toHaveClass('aspect-video', 'w-40', 'sm:w-64')
+    const externalIDValue = screen.getByText(externalIDs)
+    expect(externalIDValue).toHaveClass('whitespace-normal', 'break-words')
+    expect(externalIDValue).not.toHaveClass('truncate')
+    expect(externalIDValue.parentElement).toHaveClass('sm:col-span-2', 'xl:col-span-3')
+  })
+
+  it('accepts cached media image paths and attributes Jellyfin metadata', () => {
+		const item = event()
+		const data = item.presentation.data as Record<string, unknown>
+		data.media = { display_name: 'Jellyfin item', type: 'Episode', image_url: '/api/public/media-images/random-token', metadata_source: 'jellyfin' }
+		const { container } = render(<EventCard event={item} />)
+		expect(container.querySelector('img')).toHaveAttribute('src', '/api/public/media-images/random-token')
+		expect(screen.getByText('媒体资料由 Jellyfin 提供')).toBeInTheDocument()
+	})
+
   it('renders unknown events as raw cards', () => {
     render(<EventCard event={event({
       source_event_type: 'PluginCustomEvent',
@@ -91,9 +114,13 @@ describe('EventCard', () => {
   })
 
   it('routes Emby events to the independent Emby renderer', () => {
-    render(<EventCard event={event({ app_code: 'emby', title: 'Emby · 播放进度 · Severance' })} />)
+		const item = event({ app_code: 'emby', title: 'Emby · 播放进度 · Severance' })
+		const data = item.presentation.data as Record<string, unknown>
+		data.media = { display_name: 'Emby item', type: 'Episode', metadata_source: 'emby' }
+		render(<EventCard event={item} />)
     expect(screen.getByTestId('event-card')).toHaveAttribute('data-renderer', 'emby')
     expect(screen.getByText('Emby')).toBeInTheDocument()
+		expect(screen.getByText('媒体资料由 Emby 提供')).toBeInTheDocument()
   })
 
   it('uses the default renderer for apps without a dedicated renderer', () => {
