@@ -473,6 +473,138 @@
                 }
             }
         },
+        "/api/settings/system/test-http-proxy": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "使用当前输入的代理地址访问固定 HTTPS 探测地址（需要管理员权限）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "设置"
+                ],
+                "summary": "测试 HTTP 代理",
+                "parameters": [
+                    {
+                        "description": "HTTP 代理测试配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.TestHTTPProxyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/settings/system/test-tmdb": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "使用当前输入的 Token 和代理配置请求 TMDB（需要管理员权限）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "设置"
+                ],
+                "summary": "测试 TMDB 连接",
+                "parameters": [
+                    {
+                        "description": "TMDB 测试配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.TestTMDBConnectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/user/password": {
             "put": {
                 "security": [
@@ -713,6 +845,34 @@
                     "type": "string"
                 },
                 "tmdb_use_proxy": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "service.TestHTTPProxyRequest": {
+            "type": "object",
+            "required": [
+                "http_proxy_url"
+            ],
+            "properties": {
+                "http_proxy_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.TestTMDBConnectionRequest": {
+            "type": "object",
+            "required": [
+                "tmdb_read_access_token"
+            ],
+            "properties": {
+                "http_proxy_url": {
+                    "type": "string"
+                },
+                "tmdb_read_access_token": {
+                    "type": "string"
+                },
+                "use_proxy": {
                     "type": "boolean"
                 }
             }

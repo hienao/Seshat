@@ -129,6 +129,9 @@ func normalizeJellyfinMedia(payload, item map[string]interface{}) map[string]int
 	putString(media, "season", firstStringFrom(values, "SeasonNumber", "SeasonNumber00", "ParentIndexNumber", "season_number"))
 	putString(media, "episode", firstStringFrom(values, "EpisodeNumber", "EpisodeNumber00", "IndexNumber", "episode_number"))
 	putString(media, "year", firstStringFrom(values, "ProductionYear", "Year", "year"))
+	if premiereDate := firstStringFrom(values, "SeriesPremiereDate", "series_premiere_date"); len(premiereDate) >= 4 && digitsOnly(premiereDate[:4]) {
+		media["series_year"] = premiereDate[:4]
+	}
 	putString(media, "overview", firstStringFrom(values, "Overview", "Description", "overview"))
 	putString(media, "library", firstStringFrom(values, "LibraryName", "CollectionName", "library_name"))
 	putString(media, "image_url", safeURL(firstStringFrom(values, "ImageUrl", "PosterUrl", "PrimaryImageUrl", "image_url")))

@@ -50,8 +50,19 @@ type IntegrationSecretResponse struct {
 }
 
 type EventListResponse struct {
-	Items []model.WebhookEvent `json:"items"`
-	Total int64                `json:"total"`
+	Items   []model.WebhookEvent `json:"items"`
+	Total   int64                `json:"total"`
+	Limit   int                  `json:"limit"`
+	Offset  int                  `json:"offset"`
+	HasMore bool                 `json:"has_more"`
+}
+
+type EventListFilter struct {
+	AppCode       string
+	IntegrationID uint
+	EventType     string
+	Limit         int
+	Offset        int
 }
 
 type WebhookEventDetail struct {
@@ -212,29 +223,32 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 	return result, nil
 }
 
-func (s *WebhookService) ListEvents(ownerID uint, appCode, eventType string, limit, offset int) (*EventListResponse, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 30
+func (s *WebhookService) ListEvents(ownerID uint, filter EventListFilter) (*EventListResponse, error) {
+	if filter.Limit <= 0 || filter.Limit > 100 {
+		filter.Limit = 30
 	}
-	if offset < 0 {
-		offset = 0
+	if filter.Offset < 0 {
+		filter.Offset = 0
 	}
 	query := database.GetDB().Model(&model.WebhookEvent{}).Joins("JOIN app_integrations ON app_integrations.id = webhook_events.integration_id").Where("app_integrations.owner_id = ?", ownerID)
-	if appCode != "" {
-		query = query.Where("webhook_events.app_code = ?", appCode)
+	if filter.AppCode != "" {
+		query = query.Where("webhook_events.app_code = ?", filter.AppCode)
 	}
-	if eventType != "" {
-		query = query.Where("webhook_events.display_event_type = ?", eventType)
+	if filter.IntegrationID > 0 {
+		query = query.Where("webhook_events.integration_id = ?", filter.IntegrationID)
+	}
+	if filter.EventType != "" {
+		query = query.Where("webhook_events.display_event_type = ?", filter.EventType)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
 	var items []model.WebhookEvent
-	if err := query.Order("webhook_events.received_at desc").Limit(limit).Offset(offset).Find(&items).Error; err != nil {
+	if err := query.Order("webhook_events.received_at desc, webhook_events.id desc").Limit(filter.Limit).Offset(filter.Offset).Find(&items).Error; err != nil {
 		return nil, err
 	}
-	return &EventListResponse{Items: items, Total: total}, nil
+	return &EventListResponse{Items: items, Total: total, Limit: filter.Limit, Offset: filter.Offset, HasMore: int64(filter.Offset+len(items)) < total}, nil
 }
 
 func (s *WebhookService) GetEvent(ownerID, id uint) (*WebhookEventDetail, error) {

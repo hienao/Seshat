@@ -76,6 +76,16 @@ export interface ServiceSystemSettingsResponse {
   tmdb_use_proxy?: boolean;
 }
 
+export interface ServiceTestHTTPProxyRequest {
+  http_proxy_url: string;
+}
+
+export interface ServiceTestTMDBConnectionRequest {
+  http_proxy_url?: string;
+  tmdb_read_access_token: string;
+  use_proxy?: boolean;
+}
+
 export interface ServiceTokenResponse {
   expires_at?: number;
   token?: string;
@@ -604,6 +614,62 @@ export class Api<
       this.request<ResponseResponse, ResponseResponse>({
         path: `/api/settings/system`,
         method: "PUT",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description 使用当前输入的代理地址访问固定 HTTPS 探测地址（需要管理员权限）
+     *
+     * @tags 设置
+     * @name SettingsSystemTestHttpProxyCreate
+     * @summary 测试 HTTP 代理
+     * @request POST:/api/settings/system/test-http-proxy
+     * @secure
+     */
+    settingsSystemTestHttpProxyCreate: (
+      request: ServiceTestHTTPProxyRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: Record<string, string>;
+        },
+        ResponseResponse
+      >({
+        path: `/api/settings/system/test-http-proxy`,
+        method: "POST",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description 使用当前输入的 Token 和代理配置请求 TMDB（需要管理员权限）
+     *
+     * @tags 设置
+     * @name SettingsSystemTestTmdbCreate
+     * @summary 测试 TMDB 连接
+     * @request POST:/api/settings/system/test-tmdb
+     * @secure
+     */
+    settingsSystemTestTmdbCreate: (
+      request: ServiceTestTMDBConnectionRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: Record<string, string>;
+        },
+        ResponseResponse
+      >({
+        path: `/api/settings/system/test-tmdb`,
+        method: "POST",
         body: request,
         secure: true,
         type: ContentType.Json,
