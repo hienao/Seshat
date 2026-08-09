@@ -13,6 +13,7 @@ import (
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	appLogging "seshat/internal/logging"
 	"seshat/internal/model"
 	"seshat/internal/webhook"
 	"seshat/pkg/database"
@@ -21,11 +22,12 @@ import (
 const maxWebhookBody = 2 << 20
 
 type WebhookService struct {
-	registry *webhook.Registry
+	registry      *webhook.Registry
+	mediaMetadata *MediaMetadataService
 }
 
 func NewWebhookService() *WebhookService {
-	return &WebhookService{registry: webhook.NewRegistry()}
+	return &WebhookService{registry: webhook.NewRegistry(), mediaMetadata: NewMediaMetadataService()}
 }
 
 type CreateIntegrationRequest struct {
@@ -185,12 +187,19 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 		result.EventID = existing.ID
 		return result, nil
 	}
+	publicToken, err := randomSecret()
+	if err != nil {
+		return result, newWebhookIngestError("webhook_public_token_failed", http.StatusInternalServerError, "生成消息访问标识失败", err)
+	}
 	presentation := provider.Normalize(displayType, request)
 	presentation.SchemaVersion = 1
+	if err := s.mediaMetadata.Enrich(&presentation); err != nil {
+		appLogging.Warn("webhook", "外部媒体信息补充失败", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "error": err})
+	}
 	presentationJSON, _ := json.Marshal(presentation)
 	title, summary, severity := presentation.Title, presentation.Summary, presentation.Severity
 	now := time.Now()
-	event := &model.WebhookEvent{IntegrationID: integration.ID, AppCode: integration.AppCode, SourceEventType: sourceEventType, DisplayEventType: displayType, ExternalEventID: externalID, DedupeKey: dedupeKey, Status: "processed", IsFallback: isFallback, Title: title, Summary: summary, Severity: severity, PresentationVersion: 1, Presentation: datatypes.JSON(presentationJSON), RawBody: string(body), ContentType: contentType, SafeHeaders: datatypes.JSON([]byte(`{}`)), ReceivedAt: now}
+	event := &model.WebhookEvent{PublicToken: publicToken, IntegrationID: integration.ID, AppCode: integration.AppCode, SourceEventType: sourceEventType, DisplayEventType: displayType, ExternalEventID: externalID, DedupeKey: dedupeKey, Status: "processed", IsFallback: isFallback, Title: title, Summary: summary, Severity: severity, PresentationVersion: 1, Presentation: datatypes.JSON(presentationJSON), RawBody: string(body), ContentType: contentType, SafeHeaders: datatypes.JSON([]byte(`{}`)), ReceivedAt: now}
 	if err := database.GetDB().Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(event).Error; err != nil {
 			return err

@@ -9,261 +9,36 @@ import { api } from '@/api/services'
 import type { Integration, NotificationChannel, NotificationChannelInput, NotificationChannelType, NotificationEventTypeSetting } from '@/api/types'
 import { AppButton } from '@/components/common/app-button'
 import { EmptyState, ErrorState, Message } from '@/components/common/feedback'
+import { notificationChannelAdapter, notificationChannelAdapters, notificationChannelLabel } from '@/components/notification-channels/registry'
+import { channelInputClass, type ChannelCommonValues, type ChannelFields, type ChannelFieldValue } from '@/components/notification-channels/types'
 import { PageHeader } from '@/components/common/page-header'
 import { Panel } from '@/components/common/panel'
 import { errorMessage } from '@/lib/error-message'
 
-const inputClass = 'h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-900'
-const channelLabels: Record<NotificationChannelType, string> = {
-  webhook: 'Webhook',
-  telegram: 'Telegram',
-  apprise: 'Apprise',
-  email: '邮箱通知',
-  serverchan: 'Server酱',
-  bark: 'Bark',
-  dingtalk: 'DingTalk',
-  feishu: 'Feishu',
-  whatsapp: 'WhatsApp',
-  wxpusher: 'WxPusher',
-}
+type ChannelFormState = ChannelCommonValues & { fields: ChannelFields }
 
-type ChannelFormState = {
-  name: string
-  type: NotificationChannelType
-  enabled: boolean
-  useProxy: boolean
-  url: string
-  headers: string
-  botToken: string
-  chatId: string
-  threadId: string
-  silent: boolean
-  baseUrl: string
-  appriseMode: 'stateful' | 'stateless'
-  appriseKey: string
-  appriseUrls: string
-  tag: string
-  smtpHost: string
-  smtpPort: string
-  smtpEncryption: 'starttls' | 'tls' | 'none'
-  smtpFrom: string
-  smtpTo: string
-  smtpUsername: string
-  smtpPassword: string
-  serverChanSendKey: string
-  barkBaseUrl: string
-  barkDeviceKey: string
-  barkGroup: string
-  barkSound: string
-  robotWebhookUrl: string
-  robotSigningSecret: string
-  whatsappVersion: string
-  whatsappToken: string
-  whatsappPhoneNumberId: string
-  whatsappRecipient: string
-  wxPusherAppToken: string
-  wxPusherUids: string
-  wxPusherTopicIds: string
-}
-
-function emptyChannelForm(): ChannelFormState {
+function emptyChannelForm(type: NotificationChannelType = 'webhook'): ChannelFormState {
   return {
     name: '',
-    type: 'webhook',
+    type,
     enabled: false,
     useProxy: false,
-    url: '',
-    headers: '',
-    botToken: '',
-    chatId: '',
-    threadId: '',
-    silent: false,
-    baseUrl: '',
-    appriseMode: 'stateful',
-    appriseKey: '',
-    appriseUrls: '',
-    tag: '',
-    smtpHost: '',
-    smtpPort: '587',
-    smtpEncryption: 'starttls',
-    smtpFrom: '',
-    smtpTo: '',
-    smtpUsername: '',
-    smtpPassword: '',
-    serverChanSendKey: '',
-    barkBaseUrl: 'https://api.day.app',
-    barkDeviceKey: '',
-    barkGroup: 'Seshat',
-    barkSound: '',
-    robotWebhookUrl: '',
-    robotSigningSecret: '',
-    whatsappVersion: 'v25.0',
-    whatsappToken: '',
-    whatsappPhoneNumberId: '',
-    whatsappRecipient: '',
-    wxPusherAppToken: '',
-    wxPusherUids: '',
-    wxPusherTopicIds: '',
+    fields: notificationChannelAdapter(type).defaultFields(),
   }
 }
 
 function formFromChannel(channel: NotificationChannel): ChannelFormState {
   return {
-    ...emptyChannelForm(),
     name: channel.name,
     type: channel.type,
     enabled: channel.enabled,
     useProxy: Boolean(channel.config.use_proxy),
-    chatId: String(channel.config.chat_id ?? ''),
-    threadId: String(channel.config.message_thread_id ?? ''),
-    silent: Boolean(channel.config.silent),
-    baseUrl: String(channel.config.base_url ?? ''),
-    appriseMode: channel.config.mode === 'stateless' ? 'stateless' : 'stateful',
-    tag: String(channel.config.tag ?? ''),
-    smtpHost: String(channel.config.smtp_host ?? ''),
-    smtpPort: String(channel.config.smtp_port ?? '587'),
-    smtpEncryption: channel.config.encryption === 'tls' || channel.config.encryption === 'none' ? channel.config.encryption : 'starttls',
-    smtpFrom: String(channel.config.from ?? ''),
-    smtpTo: String(channel.config.to ?? ''),
-    barkBaseUrl: String(channel.config.base_url ?? 'https://api.day.app'),
-    barkGroup: String(channel.config.group ?? 'Seshat'),
-    barkSound: String(channel.config.sound ?? ''),
-    whatsappVersion: String(channel.config.api_version ?? 'v25.0'),
-    wxPusherUids: String(channel.config.uids ?? ''),
-    wxPusherTopicIds: String(channel.config.topic_ids ?? ''),
+    fields: notificationChannelAdapter(channel.type).fieldsFromChannel(channel),
   }
 }
 
 function channelPayload(form: ChannelFormState): NotificationChannelInput {
-  if (form.type === 'webhook') {
-    let headers: Record<string, string> = {}
-    if (form.headers.trim()) headers = JSON.parse(form.headers) as Record<string, string>
-    return {
-      name: form.name.trim(),
-      type: form.type,
-      enabled: form.enabled,
-      config: { use_proxy: form.useProxy },
-      credentials:
-        form.url.trim() || Object.keys(headers).length
-          ? {
-              ...(form.url.trim() ? { url: form.url.trim() } : {}),
-              ...(Object.keys(headers).length ? { headers } : {}),
-            }
-          : undefined,
-    }
-  }
-  if (form.type === 'telegram') {
-    return {
-      name: form.name.trim(),
-      type: form.type,
-      enabled: form.enabled,
-      config: {
-        chat_id: form.chatId.trim(),
-        silent: form.silent,
-        use_proxy: form.useProxy,
-        ...(form.threadId.trim() ? { message_thread_id: Number(form.threadId) } : {}),
-      },
-      credentials: form.botToken.trim() ? { bot_token: form.botToken.trim() } : undefined,
-    }
-  }
-  if (form.type === 'apprise')
-    return {
-      name: form.name.trim(),
-      type: form.type,
-      enabled: form.enabled,
-      config: {
-        base_url: form.baseUrl.trim(),
-        mode: form.appriseMode,
-        tag: form.tag.trim(),
-        use_proxy: form.useProxy,
-      },
-      credentials: form.appriseMode === 'stateless' ? (form.appriseUrls.trim() ? { urls: form.appriseUrls.trim() } : undefined) : form.appriseKey.trim() ? { key: form.appriseKey.trim() } : undefined,
-    }
-  if (form.type === 'email')
-    return {
-      name: form.name.trim(),
-      type: form.type,
-      enabled: form.enabled,
-      config: {
-        smtp_host: form.smtpHost.trim(),
-        smtp_port: Number(form.smtpPort),
-        encryption: form.smtpEncryption,
-        from: form.smtpFrom.trim(),
-        to: form.smtpTo.trim(),
-        use_proxy: form.useProxy,
-      },
-      credentials:
-        form.smtpUsername.trim() || form.smtpPassword
-          ? {
-              ...(form.smtpUsername.trim() ? { username: form.smtpUsername.trim() } : {}),
-              ...(form.smtpPassword ? { password: form.smtpPassword } : {}),
-            }
-          : undefined,
-    }
-  if (form.type === 'serverchan')
-    return {
-      name: form.name.trim(),
-      type: form.type,
-      enabled: form.enabled,
-      config: { use_proxy: form.useProxy },
-      credentials: form.serverChanSendKey.trim() ? { send_key: form.serverChanSendKey.trim() } : undefined,
-    }
-  if (form.type === 'bark')
-    return {
-      name: form.name.trim(),
-      type: form.type,
-      enabled: form.enabled,
-      config: {
-        base_url: form.barkBaseUrl.trim(),
-        group: form.barkGroup.trim(),
-        sound: form.barkSound.trim(),
-        use_proxy: form.useProxy,
-      },
-      credentials: form.barkDeviceKey.trim() ? { device_key: form.barkDeviceKey.trim() } : undefined,
-    }
-  if (form.type === 'dingtalk' || form.type === 'feishu')
-    return {
-      name: form.name.trim(),
-      type: form.type,
-      enabled: form.enabled,
-      config: { use_proxy: form.useProxy },
-      credentials:
-        form.robotWebhookUrl.trim() || form.robotSigningSecret.trim()
-          ? {
-              ...(form.robotWebhookUrl.trim() ? { webhook_url: form.robotWebhookUrl.trim() } : {}),
-              ...(form.robotSigningSecret.trim() ? { signing_secret: form.robotSigningSecret.trim() } : {}),
-            }
-          : undefined,
-    }
-  if (form.type === 'whatsapp')
-    return {
-      name: form.name.trim(),
-      type: form.type,
-      enabled: form.enabled,
-      config: {
-        api_version: form.whatsappVersion.trim(),
-        use_proxy: form.useProxy,
-      },
-      credentials:
-        form.whatsappToken.trim() || form.whatsappPhoneNumberId.trim() || form.whatsappRecipient.trim()
-          ? {
-              ...(form.whatsappToken.trim() ? { access_token: form.whatsappToken.trim() } : {}),
-              ...(form.whatsappPhoneNumberId.trim() ? { phone_number_id: form.whatsappPhoneNumberId.trim() } : {}),
-              ...(form.whatsappRecipient.trim() ? { recipient: form.whatsappRecipient.trim() } : {}),
-            }
-          : undefined,
-    }
-  return {
-    name: form.name.trim(),
-    type: form.type,
-    enabled: form.enabled,
-    config: {
-      uids: form.wxPusherUids.trim(),
-      topic_ids: form.wxPusherTopicIds.trim(),
-      use_proxy: form.useProxy,
-    },
-    credentials: form.wxPusherAppToken.trim() ? { app_token: form.wxPusherAppToken.trim() } : undefined,
-  }
+  return notificationChannelAdapter(form.type).toPayload(form, form.fields)
 }
 
 export function NotificationChannelsPage() {
@@ -345,10 +120,15 @@ export function NotificationChannelsPage() {
   function submit(event: FormEvent) {
     event.preventDefault()
     setFormError('')
+    const validationError = notificationChannelAdapter(form.type).validate?.(form.fields)
+    if (validationError) {
+      setFormError(validationError)
+      return
+    }
     try {
       save.mutate(channelPayload(form))
     } catch {
-      setFormError('自定义请求头必须是 JSON 对象')
+      setFormError('渠道配置格式不正确，请检查后重试')
     }
   }
 
@@ -382,7 +162,7 @@ export function NotificationChannelsPage() {
                   <div>
                     <h3 className="font-semibold">{channel.name}</h3>
                     <p className="mt-1 text-xs text-neutral-500">
-                      {channelLabels[channel.type]} · {channel.binding_count} 个实例{channel.config.use_proxy ? ' · 使用系统代理' : ''}
+                      {notificationChannelLabel(channel.type)} · {channel.binding_count} 个实例{channel.config.use_proxy ? ' · 使用系统代理' : ''}
                     </p>
                   </div>
                   <Badge variant={channel.enabled ? 'success' : 'outline'}>{channel.enabled ? '已启用' : '已停用'}</Badge>
@@ -545,15 +325,18 @@ function ChannelFormDrawer({
   onClose: () => void
   onSubmit: (event: FormEvent) => void
 }) {
-  function update<K extends keyof ChannelFormState>(key: K, value: ChannelFormState[K]) {
+  function update<K extends keyof ChannelCommonValues>(key: K, value: ChannelCommonValues[K]) {
     setForm((previous) => ({ ...previous, [key]: value }))
   }
 
-  const keepsExistingCredential = Boolean(editing?.has_credentials)
-  const keepsExistingAppriseCredential = Boolean(editing?.has_credentials && (editing.config.mode === 'stateless' ? 'stateless' : 'stateful') === form.appriseMode)
-  const wxPusherHasTarget = Boolean(form.wxPusherUids.trim() || form.wxPusherTopicIds.trim())
+  function updateField(key: string, value: ChannelFieldValue) {
+    setForm((previous) => ({ ...previous, fields: { ...previous.fields, [key]: value } }))
+  }
 
-  const secretLabel = (label: string) => `${label}${keepsExistingCredential ? '（留空保持原值）' : ''}`
+  const keepsExistingCredential = Boolean(editing?.has_credentials)
+  const adapter = notificationChannelAdapter(form.type)
+  const AdapterForm = adapter.Form
+  const validationError = adapter.validate?.(form.fields) ?? ''
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
@@ -575,236 +358,31 @@ function ChannelFormDrawer({
           </label>
           <label className="block space-y-2 text-sm font-medium">
             <span>渠道类型</span>
-            <select className={inputClass} value={form.type} disabled={Boolean(editing)} onChange={(event) => update('type', event.target.value as NotificationChannelType)}>
-              {Object.entries(channelLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
+            <select
+              className={channelInputClass}
+              value={form.type}
+              disabled={Boolean(editing)}
+              onChange={(event) => {
+                const type = event.target.value as NotificationChannelType
+                setForm((previous) => ({ ...previous, type, fields: notificationChannelAdapter(type).defaultFields() }))
+              }}
+            >
+              {notificationChannelAdapters().map((item) => (
+                <option key={item.type} value={item.type}>
+                  {item.label}
                 </option>
               ))}
             </select>
           </label>
 
-          {form.type === 'webhook' && (
-            <>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('目标 URL')}</span>
-                <Input type="url" value={form.url} onChange={(event) => update('url', event.target.value)} required={!keepsExistingCredential} placeholder="https://example.com/notify" />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>自定义请求头 JSON（可选）</span>
-                <textarea
-                  className="min-h-28 w-full rounded-lg border border-neutral-300 bg-white p-3 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                  value={form.headers}
-                  onChange={(event) => update('headers', event.target.value)}
-                  placeholder={'{"Authorization":"Bearer ..."}'}
-                />
-              </label>
-            </>
-          )}
-
-          {form.type === 'telegram' && (
-            <>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('Bot Token')}</span>
-                <Input type="password" value={form.botToken} onChange={(event) => update('botToken', event.target.value)} required={!keepsExistingCredential} />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>Chat ID</span>
-                <Input value={form.chatId} onChange={(event) => update('chatId', event.target.value)} required />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>Message Thread ID（可选）</span>
-                <Input type="number" value={form.threadId} onChange={(event) => update('threadId', event.target.value)} />
-              </label>
-              <SwitchRow title="静默发送" checked={form.silent} onChange={(checked) => update('silent', checked)} />
-            </>
-          )}
-
-          {form.type === 'apprise' && (
-            <>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>Apprise Base URL</span>
-                <Input type="url" value={form.baseUrl} onChange={(event) => update('baseUrl', event.target.value)} required placeholder="https://apprise.example.com" />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>模式</span>
-                <select className={inputClass} value={form.appriseMode} onChange={(event) => update('appriseMode', event.target.value as 'stateful' | 'stateless')}>
-                  <option value="stateful">Stateful（推荐）</option>
-                  <option value="stateless">Stateless</option>
-                </select>
-              </label>
-              {form.appriseMode === 'stateful' ? (
-                <label className="block space-y-2 text-sm font-medium">
-                  <span>
-                    配置 Key
-                    {keepsExistingAppriseCredential && '（留空保持原值）'}
-                  </span>
-                  <Input type="password" value={form.appriseKey} onChange={(event) => update('appriseKey', event.target.value)} required={!keepsExistingAppriseCredential} />
-                </label>
-              ) : (
-                <label className="block space-y-2 text-sm font-medium">
-                  <span>
-                    Apprise URLs
-                    {keepsExistingAppriseCredential && '（留空保持原值）'}
-                  </span>
-                  <Input type="password" value={form.appriseUrls} onChange={(event) => update('appriseUrls', event.target.value)} required={!keepsExistingAppriseCredential} />
-                </label>
-              )}
-              <label className="block space-y-2 text-sm font-medium">
-                <span>Tag（可选）</span>
-                <Input value={form.tag} onChange={(event) => update('tag', event.target.value)} />
-              </label>
-            </>
-          )}
-
-          {form.type === 'email' && (
-            <>
-              <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
-                <label className="block space-y-2 text-sm font-medium">
-                  <span>SMTP 主机</span>
-                  <Input value={form.smtpHost} onChange={(event) => update('smtpHost', event.target.value)} required placeholder="smtp.example.com" />
-                </label>
-                <label className="block space-y-2 text-sm font-medium">
-                  <span>端口</span>
-                  <Input type="number" min="1" max="65535" value={form.smtpPort} onChange={(event) => update('smtpPort', event.target.value)} required />
-                </label>
-              </div>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>连接加密</span>
-                <select className={inputClass} value={form.smtpEncryption} onChange={(event) => update('smtpEncryption', event.target.value as 'starttls' | 'tls' | 'none')}>
-                  <option value="starttls">STARTTLS（常用端口 587）</option>
-                  <option value="tls">TLS（常用端口 465）</option>
-                  <option value="none">不加密（仅允许私有网络）</option>
-                </select>
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>发件人</span>
-                <Input type="email" value={form.smtpFrom} onChange={(event) => update('smtpFrom', event.target.value)} required placeholder="notice@example.com" />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>收件人</span>
-                <Input value={form.smtpTo} onChange={(event) => update('smtpTo', event.target.value)} required placeholder="a@example.com, b@example.com" />
-                <span className="block text-xs font-normal text-neutral-500">多个地址使用逗号或分号分隔。</span>
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>SMTP 用户名（可选，与密码同时填写）</span>
-                <Input value={form.smtpUsername} onChange={(event) => update('smtpUsername', event.target.value)} autoComplete="off" />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('SMTP 密码（可选，与用户名同时填写）')}</span>
-                <Input type="password" value={form.smtpPassword} onChange={(event) => update('smtpPassword', event.target.value)} autoComplete="new-password" />
-              </label>
-            </>
-          )}
-
-          {form.type === 'serverchan' && (
-            <label className="block space-y-2 text-sm font-medium">
-              <span>{secretLabel('SendKey')}</span>
-              <Input
-                type="password"
-                value={form.serverChanSendKey}
-                onChange={(event) => update('serverChanSendKey', event.target.value)}
-                required={!keepsExistingCredential}
-                placeholder="SCT... 或 sctp..."
-              />
-            </label>
-          )}
-
-          {form.type === 'bark' && (
-            <>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>Bark 服务地址</span>
-                <Input type="url" value={form.barkBaseUrl} onChange={(event) => update('barkBaseUrl', event.target.value)} required placeholder="https://api.day.app" />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('Device Key')}</span>
-                <Input type="password" value={form.barkDeviceKey} onChange={(event) => update('barkDeviceKey', event.target.value)} required={!keepsExistingCredential} />
-              </label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block space-y-2 text-sm font-medium">
-                  <span>分组（可选）</span>
-                  <Input value={form.barkGroup} onChange={(event) => update('barkGroup', event.target.value)} />
-                </label>
-                <label className="block space-y-2 text-sm font-medium">
-                  <span>声音（可选）</span>
-                  <Input value={form.barkSound} onChange={(event) => update('barkSound', event.target.value)} />
-                </label>
-              </div>
-            </>
-          )}
-
-          {(form.type === 'dingtalk' || form.type === 'feishu') && (
-            <>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel(`${form.type === 'dingtalk' ? '钉钉' : '飞书'}机器人 Webhook URL`)}</span>
-                <Input type="password" value={form.robotWebhookUrl} onChange={(event) => update('robotWebhookUrl', event.target.value)} required={!keepsExistingCredential} autoComplete="off" />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('签名密钥（可选）')}</span>
-                <Input type="password" value={form.robotSigningSecret} onChange={(event) => update('robotSigningSecret', event.target.value)} autoComplete="new-password" />
-              </label>
-            </>
-          )}
-
-          {form.type === 'whatsapp' && (
-            <>
-              <Message variant="warning" title="当前发送普通文本消息" description="需要满足 WhatsApp Cloud API 的会话窗口要求；超出窗口时应使用已审核的消息模板。" />
-              <label className="block space-y-2 text-sm font-medium">
-                <span>Graph API 版本</span>
-                <Input value={form.whatsappVersion} onChange={(event) => update('whatsappVersion', event.target.value)} required pattern="v[0-9]+\\.[0-9]+" placeholder="v25.0" />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('Access Token')}</span>
-                <Input type="password" value={form.whatsappToken} onChange={(event) => update('whatsappToken', event.target.value)} required={!keepsExistingCredential} />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('Phone Number ID')}</span>
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  value={form.whatsappPhoneNumberId}
-                  onChange={(event) => update('whatsappPhoneNumberId', event.target.value)}
-                  required={!keepsExistingCredential}
-                />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('收件号码')}</span>
-                <Input
-                  type="password"
-                  inputMode="tel"
-                  value={form.whatsappRecipient}
-                  onChange={(event) => update('whatsappRecipient', event.target.value)}
-                  required={!keepsExistingCredential}
-                  placeholder="国家码 + 手机号"
-                />
-              </label>
-            </>
-          )}
-
-          {form.type === 'wxpusher' && (
-            <>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>{secretLabel('AppToken')}</span>
-                <Input type="password" value={form.wxPusherAppToken} onChange={(event) => update('wxPusherAppToken', event.target.value)} required={!keepsExistingCredential} />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>UIDs（可选）</span>
-                <Input value={form.wxPusherUids} onChange={(event) => update('wxPusherUids', event.target.value)} placeholder="UID_xxx, UID_yyy" />
-              </label>
-              <label className="block space-y-2 text-sm font-medium">
-                <span>Topic IDs（可选）</span>
-                <Input value={form.wxPusherTopicIds} onChange={(event) => update('wxPusherTopicIds', event.target.value)} placeholder="123, 456" />
-                <span className="block text-xs font-normal text-neutral-500">UIDs 和 Topic IDs 至少填写一项。</span>
-              </label>
-            </>
-          )}
+          <AdapterForm fields={form.fields} keepsExistingCredential={keepsExistingCredential} update={updateField} />
 
           <SwitchRow title="使用系统 HTTP 代理" description="仅此渠道的测试和消息推送经过系统设置中的代理。" checked={form.useProxy} onChange={(checked) => update('useProxy', checked)} />
           <SwitchRow title="启用渠道" description="建议先保存并测试成功后再启用。" checked={form.enabled} onChange={(checked) => update('enabled', checked)} />
 
-          {form.type === 'wxpusher' && !wxPusherHasTarget && <Message variant="error" title="UIDs 和 Topic IDs 至少填写一项" />}
+          {validationError && <Message variant="error" title={validationError} />}
           {formError && <Message variant="error" title={formError} />}
-          <AppButton type="submit" disabled={saving || !form.name.trim() || (form.type === 'wxpusher' && !wxPusherHasTarget)}>
+          <AppButton type="submit" disabled={saving || !form.name.trim() || Boolean(validationError)}>
             {saving ? '正在保存…' : '保存渠道'}
           </AppButton>
         </form>
@@ -868,11 +446,11 @@ function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved
           <div className="mt-7 space-y-6">
             <label className="block space-y-2 text-sm font-medium">
               <span>推送渠道</span>
-              <select className={inputClass} value={channelId} onChange={(event) => setChannelId(event.target.value)}>
+              <select className={channelInputClass} value={channelId} onChange={(event) => setChannelId(event.target.value)}>
                 <option value="">不绑定渠道</option>
                 {channels.map((channel) => (
                   <option key={channel.id} value={channel.id}>
-                    {channel.name} · {channelLabels[channel.type]}
+                    {channel.name} · {notificationChannelLabel(channel.type)}
                     {channel.enabled ? '' : '（已停用）'}
                   </option>
                 ))}

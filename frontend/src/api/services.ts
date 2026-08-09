@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, CreatedIntegration, EventListResponse, EventNotificationStatus, Integration, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
+import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, CreatedIntegration, DisplayWebhookEvent, EventListResponse, EventNotificationStatus, Integration, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
 import { readAccessToken } from '@/lib/auth-token'
 
 export const api = {
@@ -50,6 +50,7 @@ export const api = {
     return apiRequest<EventListResponse>(`/api/webhooks/events${query.size ? `?${query.toString()}` : ''}`)
   },
   event: (id: number) => apiRequest<WebhookEvent>(`/api/webhooks/events/${id}`),
+  publicEvent: (token: string) => apiRequest<DisplayWebhookEvent>(`/api/public/events/${encodeURIComponent(token)}`, { auth: false }),
   eventNotificationStatus: (id: number) => apiRequest<EventNotificationStatus>(`/api/webhooks/events/${id}/notification-status`),
   apiLogs: (params: { startAt?: string; endAt?: string; method?: string; route?: string; statusGroup?: string; requestId?: string; keyword?: string; cursor?: number } = {}) => {
     const query = new URLSearchParams()

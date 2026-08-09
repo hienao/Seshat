@@ -12,12 +12,13 @@ export class ApiError extends Error {
   }
 }
 
-type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown }
+type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; auth?: boolean }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { auth = true, ...requestOptions } = options
   const headers = new Headers(options.headers)
   const accessToken = readAccessToken()
-  if (accessToken && !headers.has('Authorization')) {
+  if (auth && accessToken && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${accessToken}`)
   }
 
@@ -25,7 +26,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (hasBody && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
 
   const response = await fetch(path, {
-    ...options,
+    ...requestOptions,
     headers,
     credentials: 'omit',
     body: hasBody ? JSON.stringify(options.body) : undefined,

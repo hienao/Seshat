@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,6 +150,60 @@ func TestUpdateChannelMergesCredentialsWithoutReturningSecrets(t *testing.T) {
 	}
 }
 
+func TestAppriseChannelUsesConfigIDAndTag(t *testing.T) {
+	setupNotificationTestDB(t)
+	service := NewNotificationService()
+	created, err := service.CreateChannel(7, &NotificationChannelRequest{
+		Name:    "Apprise",
+		Type:    "apprise",
+		Enabled: true,
+		Config: map[string]interface{}{
+			"base_url":  "http://apprise.internal:8000",
+			"tag":       "media, admin",
+			"use_proxy": false,
+		},
+		Credentials: map[string]interface{}{"config_id": "seshat_main-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created.HasCredentials || created.Config["tag"] != "media, admin" || created.Config["mode"] != nil {
+		t.Fatalf("unexpected Apprise channel response: %+v", created)
+	}
+
+	var channel model.NotificationChannel
+	if err := database.GetDB().First(&channel, created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	spec, err := buildTestNotificationRequest(&channel, outboundMessage{Title: "媒体更新", Body: "新增电影", Severity: "warning"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.endpoint != "http://apprise.internal:8000/notify/seshat_main-1" {
+		t.Fatalf("Apprise endpoint = %q", spec.endpoint)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(spec.body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["tag"] != "media, admin" || payload["type"] != "warning" || payload["urls"] != nil {
+		t.Fatalf("unexpected Apprise payload: %+v", payload)
+	}
+}
+
+func TestAppriseConfigIDValidation(t *testing.T) {
+	setupNotificationTestDB(t)
+	_, err := NewNotificationService().CreateChannel(7, &NotificationChannelRequest{
+		Name:        "Apprise",
+		Type:        "apprise",
+		Config:      map[string]interface{}{"base_url": "http://apprise.internal:8000"},
+		Credentials: map[string]interface{}{"config_id": "invalid/config"},
+	})
+	if err == nil {
+		t.Fatal("invalid Apprise Config ID should be rejected")
+	}
+}
+
 func TestNotificationResourcesAreOwnerScoped(t *testing.T) {
 	db := setupNotificationTestDB(t)
 	channel, integration := createNotificationFixture(t, db)
@@ -170,10 +225,18 @@ func TestNotificationResourcesAreOwnerScoped(t *testing.T) {
 
 func TestValidateOutboundURLPrivateNetworkPolicy(t *testing.T) {
 	if err := validateOutboundURL("https://127.0.0.1/notify", false); err == nil {
-		t.Fatal("loopback target should be blocked by default")
+		t.Fatal("loopback target should be blocked when private access is disabled")
 	}
 	if err := validateOutboundURL("http://127.0.0.1/notify", true); err != nil {
 		t.Fatalf("private HTTP target should be allowed when enabled: %v", err)
+	}
+}
+
+func TestNotificationNetworkPolicyAlwaysAllowsPrivateTargets(t *testing.T) {
+	channel := model.NotificationChannel{Config: []byte(`{}`)}
+	allowPrivate, proxyURL, err := notificationNetworkPolicyForChannel(&channel)
+	if err != nil || !allowPrivate || proxyURL != "" {
+		t.Fatalf("network policy = allowPrivate:%t proxy:%q error:%v", allowPrivate, proxyURL, err)
 	}
 }
 
@@ -191,6 +254,10 @@ func TestWebhookSenderUsesNormalizedPayloadAndDoesNotLeakResponseBody(t *testing
 		if payload["type"] != "seshat.notification" || payload["event"] == nil || payload["raw_body"] != nil {
 			t.Errorf("unexpected payload: %+v", payload)
 		}
+		eventPayload, _ := payload["event"].(map[string]interface{})
+		if eventPayload["detail_url"] != "https://seshat.example.com/public/events/public-token" || eventPayload["summary"] != "电影已加入\n\n消息详情：https://seshat.example.com/public/events/public-token" {
+			t.Errorf("public detail link missing from payload: %+v", eventPayload)
+		}
 		if requests == 2 {
 			writer.WriteHeader(http.StatusInternalServerError)
 			_, _ = writer.Write([]byte("token-should-not-be-persisted"))
@@ -200,7 +267,7 @@ func TestWebhookSenderUsesNormalizedPayloadAndDoesNotLeakResponseBody(t *testing
 	}))
 	defer server.Close()
 	channel := model.NotificationChannel{Type: "webhook", Config: []byte(`{}`), SecretConfig: []byte(fmt.Sprintf(`{"url":%q,"headers":{"Authorization":"Bearer channel-token"}}`, server.URL))}
-	message := outboundMessage{Title: "新增媒体", Body: "电影已加入", Severity: "info", AppCode: "jellyfin", IntegrationID: 2, IntegrationName: "家庭媒体库", EventID: 3, EventType: "media_added", ReceivedAt: time.Now()}
+	message := outboundMessage{Title: "新增媒体", Body: "电影已加入", Severity: "info", AppCode: "jellyfin", IntegrationID: 2, IntegrationName: "家庭媒体库", EventID: 3, EventType: "media_added", ReceivedAt: time.Now(), DetailURL: "https://seshat.example.com/public/events/public-token"}
 	if err := sendChannel(t.Context(), &channel, message, true, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -211,6 +278,18 @@ func TestWebhookSenderUsesNormalizedPayloadAndDoesNotLeakResponseBody(t *testing
 	}
 	if containsSecret(err.Error(), "token-should-not-be-persisted") {
 		t.Fatal("downstream response body leaked into delivery error")
+	}
+}
+
+func TestNotificationTextEndsWithPublicDetailURL(t *testing.T) {
+	message := outboundMessage{Title: "新增媒体", Body: "电影已加入", DetailURL: "https://seshat.example.com/public/events/token"}
+	expected := "新增媒体\n\n电影已加入\n\n消息详情：https://seshat.example.com/public/events/token"
+	if actual := notificationPlainText(message); actual != expected {
+		t.Fatalf("notification text = %q, want %q", actual, expected)
+	}
+	markdown := notificationDingTalkMarkdown(message)
+	if !strings.HasSuffix(markdown, "[查看消息详情](https://seshat.example.com/public/events/token)") {
+		t.Fatalf("DingTalk markdown missing detail link: %q", markdown)
 	}
 }
 

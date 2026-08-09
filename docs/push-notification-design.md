@@ -41,6 +41,16 @@ Seshat 为不同 App 的 Webhook 消息提供可配置的外部通知能力：
 
 全部满足时创建一条待发送任务，否则仅保存 Webhook 消息，不产生通知。
 
+### 2.3 渠道 Adapter 隔离
+
+推送渠道采用注册表和独立 Adapter：
+
+- 后端每个渠道独立负责配置清洗、完整校验、协议发送、签名和业务响应判断；注册表只按类型查找 Adapter。
+- 队列、重试、HTTP/SMTP 传输、代理、DNS/IP 安全检查和标准通知消息属于共享基础设施，不包含渠道类型分支。
+- 前端每个渠道独立提供默认字段、编辑回填、请求转换和表单组件；页面只管理公共字段并通过注册表渲染当前 Adapter。
+- 新增渠道时只新增后端 Adapter、前端 Adapter 和各自注册项，不向共享发送器、服务或页面增加渠道专有 `switch/if`。
+- 修改某个渠道必须运行全部渠道回归测试，确保其他渠道的配置和发送结果不变。
+
 ## 3. 数据模型
 
 ### 3.1 `notification_channels`
@@ -170,17 +180,14 @@ Seshat 为不同 App 的 Webhook 消息提供可配置的外部通知能力：
 
 ### 4.3 Apprise
 
-支持两种模式：
-
-- Stateful：配置 Apprise API Base URL、配置 Key 和可选 Tag，调用 `/notify/{KEY}`。推荐作为默认模式。
-- Stateless：配置 Base URL 和 Apprise URLs，调用 `/notify`；Apprise URLs 作为敏感配置保存。
+配置 Apprise API Base URL、Config ID 和可选 Tag，调用 `/notify/{Config ID}`。Config ID 作为敏感配置保存，不通过查询接口返回；Tag 留空时推送到该 Config ID 下的全部服务。
 
 统一发送 `title`、`body`、`type` 和 `format`。Seshat 的 `severity` 映射到 Apprise 的 `info`、`success`、`warning`、`failure`。
 
 ### 4.4 邮箱通知
 
 - 配置 SMTP 主机、端口、连接加密、发件人、一个或多个收件人，以及可选的用户名和密码。
-- 支持 STARTTLS、隐式 TLS 和不加密连接；不加密 SMTP 仅在管理员允许私有网络推送目标时可用。
+- 支持 STARTTLS、隐式 TLS 和不加密连接；不加密 SMTP 适用于可信的私有网络环境。
 - 渠道启用系统代理时，通过 HTTP `CONNECT` 隧道连接 SMTP 服务，HTTP 与 HTTPS 代理均可使用。
 - 邮件以 UTF-8 纯文本发送，标题和正文来自标准通知消息，不附加原始 Webhook 正文。
 
@@ -324,7 +331,7 @@ flowchart LR
 - 渠道凭据不通过列表或详情 API 明文返回，不写入接口日志、业务日志和发送错误。
 - Telegram、Server酱、WhatsApp 和 WxPusher 只请求各自固定的官方 API Host。
 - Webhook、Apprise、Bark、DingTalk 和 Feishu 属于服务端主动请求，必须防止 SSRF：校验协议和解析后的 IP，检查每次重定向，永久禁止 link-local 和云元数据地址。
-- 默认只允许公网 HTTPS 地址。若自托管 Apprise 需要访问内网，由管理员在系统设置中显式开启“允许私有网络推送目标”；即使开启也继续阻止云元数据地址。
+- Webhook、Apprise 等可配置 URL 支持 HTTP/HTTPS 与私有网络目标，同时继续阻止链路本地、组播、未指定地址和已知云元数据地址。
 - 限制响应读取长度，例如最多 32 KiB；错误记录只保存脱敏后的摘要。
 - 页面和通知正文必须转义 HTML/Markdown，避免内容注入。
 - 普通用户只能管理自己的渠道、实例、规则和发送记录；管理员权限不应隐式绕过所有权校验。

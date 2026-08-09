@@ -20,14 +20,18 @@ export interface TokenResponse {
 export interface SystemSettings {
   allow_register: boolean
   api_log_retention_days: number
-  allow_private_notification_targets: boolean
   http_proxy_configured: boolean
   http_proxy_display?: string
+  tmdb_configured: boolean
+  public_base_url: string
 }
 
-export type UpdateSystemSettingsInput = Partial<Pick<SystemSettings, 'allow_register' | 'api_log_retention_days' | 'allow_private_notification_targets'>> & {
+export type UpdateSystemSettingsInput = Partial<Pick<SystemSettings, 'allow_register' | 'api_log_retention_days'>> & {
   http_proxy_url?: string
   clear_http_proxy?: boolean
+  tmdb_read_access_token?: string
+  clear_tmdb_token?: boolean
+  public_base_url?: string
 }
 
 export interface RegistrationStatus {
@@ -89,14 +93,10 @@ export interface EventPresentation {
   data?: Record<string, unknown>
 }
 
-export interface WebhookEvent {
-  id: number
-  integration_id: number
+export interface DisplayWebhookEvent {
   app_code: string
   source_event_type: string
   display_event_type: string
-  external_event_id: string
-  status: string
   is_fallback: boolean
   title: string
   summary: string
@@ -104,9 +104,16 @@ export interface WebhookEvent {
   occurred_at?: string
   presentation_version: number
   presentation: EventPresentation
+  received_at: string
+}
+
+export interface WebhookEvent extends DisplayWebhookEvent {
+  id: number
+  integration_id: number
+  external_event_id: string
+  status: string
   raw_body?: string
   content_type: string
-  received_at: string
 }
 
 export interface EventListResponse {

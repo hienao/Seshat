@@ -34,4 +34,15 @@ describe('apiRequest', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({ body: '{"username":"admin"}' }))
   })
+
+  it('can call public APIs without attaching the stored Bearer token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 0, message: 'ok', data: {} }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    writeAccessToken('private-token')
+
+    await apiRequest('/api/public/events/token', { auth: false })
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(new Headers(request.headers).has('Authorization')).toBe(false)
+  })
 })

@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -326,13 +325,14 @@ func queueNotificationDelivery(tx *gorm.DB, integration *model.AppIntegration, e
 func channelFromRequest(ownerID uint, existing *model.NotificationChannel, request *NotificationChannelRequest) (*model.NotificationChannel, error) {
 	name := strings.TrimSpace(request.Name)
 	typeName := strings.ToLower(strings.TrimSpace(request.Type))
-	if name == "" || !supportedNotificationChannelType(typeName) {
+	adapter, ok := defaultNotificationChannelRegistry.Get(typeName)
+	if name == "" || !ok {
 		return nil, ErrInvalidNotificationChannel
 	}
 	if existing != nil && existing.Type != typeName {
 		return nil, errors.New("不能修改渠道类型")
 	}
-	publicConfig, credentials, err := sanitizeChannelInput(typeName, request.Config, request.Credentials)
+	publicConfig, credentials, err := adapter.Sanitize(request.Config, request.Credentials)
 	if err != nil {
 		return nil, err
 	}
@@ -356,140 +356,10 @@ func channelFromRequest(ownerID uint, existing *model.NotificationChannel, reque
 	if err != nil {
 		return nil, ErrInvalidNotificationChannel
 	}
-	if err := validateChannelConfiguration(typeName, config, secret); err != nil {
+	if err := adapter.Validate(publicConfig, secretValues); err != nil {
 		return nil, err
 	}
 	return &model.NotificationChannel{OwnerID: ownerID, Name: name, Type: typeName, Enabled: request.Enabled, Config: datatypes.JSON(config), SecretConfig: datatypes.JSON(secret)}, nil
-}
-
-func sanitizeChannelInput(channelType string, config, credentials map[string]interface{}) (map[string]interface{}, map[string]interface{}, error) {
-	publicKeys := map[string]bool{}
-	secretKeys := map[string]bool{}
-	switch channelType {
-	case "webhook":
-		publicKeys = map[string]bool{"use_proxy": true}
-		secretKeys = map[string]bool{"url": true, "headers": true}
-	case "telegram":
-		publicKeys = map[string]bool{"chat_id": true, "message_thread_id": true, "silent": true, "use_proxy": true}
-		secretKeys = map[string]bool{"bot_token": true}
-	case "apprise":
-		publicKeys = map[string]bool{"base_url": true, "mode": true, "tag": true, "use_proxy": true}
-		secretKeys = map[string]bool{"key": true, "urls": true}
-	case "email":
-		publicKeys = map[string]bool{"smtp_host": true, "smtp_port": true, "encryption": true, "from": true, "to": true, "use_proxy": true}
-		secretKeys = map[string]bool{"username": true, "password": true}
-	case "serverchan":
-		publicKeys = map[string]bool{"use_proxy": true}
-		secretKeys = map[string]bool{"send_key": true}
-	case "bark":
-		publicKeys = map[string]bool{"base_url": true, "group": true, "sound": true, "use_proxy": true}
-		secretKeys = map[string]bool{"device_key": true}
-	case "dingtalk", "feishu":
-		publicKeys = map[string]bool{"use_proxy": true}
-		secretKeys = map[string]bool{"webhook_url": true, "signing_secret": true}
-	case "whatsapp":
-		publicKeys = map[string]bool{"api_version": true, "use_proxy": true}
-		secretKeys = map[string]bool{"access_token": true, "phone_number_id": true, "recipient": true}
-	case "wxpusher":
-		publicKeys = map[string]bool{"uids": true, "topic_ids": true, "use_proxy": true}
-		secretKeys = map[string]bool{"app_token": true}
-	}
-	cleanPublic := map[string]interface{}{}
-	for key, value := range config {
-		if !publicKeys[key] {
-			return nil, nil, errors.New("包含不支持的渠道配置项: " + key)
-		}
-		cleanPublic[key] = value
-	}
-	if useProxy, ok := cleanPublic["use_proxy"]; ok {
-		if _, valid := useProxy.(bool); !valid {
-			return nil, nil, errors.New("渠道代理开关必须是布尔值")
-		}
-	}
-	cleanSecret := map[string]interface{}{}
-	for key, value := range credentials {
-		if !secretKeys[key] {
-			return nil, nil, errors.New("包含不支持的渠道凭据项: " + key)
-		}
-		cleanSecret[key] = value
-	}
-	if channelType == "webhook" {
-		if headers, ok := cleanSecret["headers"]; ok {
-			values, ok := headers.(map[string]interface{})
-			if !ok {
-				return nil, nil, errors.New("Webhook 请求头必须是 JSON 对象")
-			}
-			for key, value := range values {
-				if _, ok := value.(string); !ok || isUnsafeNotificationHeader(key) {
-					return nil, nil, errors.New("Webhook 请求头配置无效: " + key)
-				}
-			}
-		}
-	}
-	if channelType == "apprise" {
-		mode, _ := cleanPublic["mode"].(string)
-		if mode == "" {
-			cleanPublic["mode"] = "stateful"
-		} else if mode != "stateful" && mode != "stateless" {
-			return nil, nil, errors.New("Apprise 模式必须是 stateful 或 stateless")
-		}
-	}
-	if channelType == "email" {
-		encryption, _ := cleanPublic["encryption"].(string)
-		if encryption == "" {
-			cleanPublic["encryption"] = "starttls"
-		} else if encryption != "starttls" && encryption != "tls" && encryption != "none" {
-			return nil, nil, errors.New("邮件加密方式必须是 starttls、tls 或 none")
-		}
-	}
-	if channelType == "whatsapp" {
-		version, _ := cleanPublic["api_version"].(string)
-		if version == "" {
-			cleanPublic["api_version"] = "v25.0"
-		} else if !validGraphAPIVersion(version) {
-			return nil, nil, errors.New("WhatsApp Graph API 版本格式无效")
-		}
-	}
-	return cleanPublic, cleanSecret, nil
-}
-
-func supportedNotificationChannelType(value string) bool {
-	switch value {
-	case "webhook", "telegram", "apprise", "email", "serverchan", "bark", "dingtalk", "feishu", "whatsapp", "wxpusher":
-		return true
-	default:
-		return false
-	}
-}
-
-func validGraphAPIVersion(value string) bool {
-	if len(value) < 4 || value[0] != 'v' {
-		return false
-	}
-	parts := strings.Split(value[1:], ".")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return false
-	}
-	for _, part := range parts {
-		for _, character := range part {
-			if character < '0' || character > '9' {
-				return false
-			}
-		}
-		if len(part) > 1 && part[0] == '0' {
-			return false
-		}
-	}
-	return true
-}
-
-func isUnsafeNotificationHeader(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "host", "content-length", "transfer-encoding", "connection", "upgrade", "trailer":
-		return true
-	default:
-		return false
-	}
 }
 
 func channelResponse(db *gorm.DB, channel *model.NotificationChannel) (NotificationChannelResponse, error) {
@@ -500,74 +370,4 @@ func channelResponse(db *gorm.DB, channel *model.NotificationChannel) (Notificat
 		return NotificationChannelResponse{}, err
 	}
 	return NotificationChannelResponse{ID: channel.ID, Name: channel.Name, Type: channel.Type, Enabled: channel.Enabled, Config: config, HasCredentials: len(channel.SecretConfig) > 2, BindingCount: count, LastTestStatus: channel.LastTestStatus, LastTestAt: channel.LastTestAt, LastTestError: channel.LastTestError, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt}, nil
-}
-
-func validateChannelConfiguration(channelType string, configJSON, secretJSON []byte) error {
-	config, secret := map[string]interface{}{}, map[string]interface{}{}
-	_ = json.Unmarshal(configJSON, &config)
-	_ = json.Unmarshal(secretJSON, &secret)
-	requiredString := func(values map[string]interface{}, key string) bool {
-		value, ok := values[key].(string)
-		return ok && strings.TrimSpace(value) != ""
-	}
-	switch channelType {
-	case "webhook":
-		if !requiredString(secret, "url") {
-			return errors.New("Webhook URL 不能为空")
-		}
-	case "telegram":
-		if !requiredString(secret, "bot_token") || !requiredString(config, "chat_id") {
-			return errors.New("Telegram Bot Token 和 Chat ID 不能为空")
-		}
-	case "apprise":
-		if !requiredString(config, "base_url") {
-			return errors.New("Apprise Base URL 不能为空")
-		}
-		mode, _ := config["mode"].(string)
-		if mode == "stateless" {
-			if !requiredString(secret, "urls") {
-				return errors.New("Apprise URLs 不能为空")
-			}
-		} else if !requiredString(secret, "key") {
-			return errors.New("Apprise 配置 Key 不能为空")
-		}
-	case "email":
-		if !requiredString(config, "smtp_host") || !requiredString(config, "from") || !requiredString(config, "to") {
-			return errors.New("SMTP 主机、发件人和收件人不能为空")
-		}
-		if _, err := notificationSMTPPort(config); err != nil {
-			return err
-		}
-		if _, _, err := parseEmailRecipients(fmt.Sprint(config["from"]), fmt.Sprint(config["to"])); err != nil {
-			return err
-		}
-		if requiredString(secret, "username") != requiredString(secret, "password") {
-			return errors.New("SMTP 用户名和密码必须同时填写")
-		}
-	case "serverchan":
-		if !requiredString(secret, "send_key") {
-			return errors.New("Server酱 SendKey 不能为空")
-		}
-	case "bark":
-		if !requiredString(config, "base_url") || !requiredString(secret, "device_key") {
-			return errors.New("Bark 服务地址和 Device Key 不能为空")
-		}
-	case "dingtalk":
-		if !requiredString(secret, "webhook_url") {
-			return errors.New("钉钉机器人 Webhook 地址不能为空")
-		}
-	case "feishu":
-		if !requiredString(secret, "webhook_url") {
-			return errors.New("飞书机器人 Webhook 地址不能为空")
-		}
-	case "whatsapp":
-		if !requiredString(secret, "access_token") || !requiredString(secret, "phone_number_id") || !requiredString(secret, "recipient") {
-			return errors.New("WhatsApp Access Token、Phone Number ID 和收件号码不能为空")
-		}
-	case "wxpusher":
-		if !requiredString(secret, "app_token") || (!requiredString(config, "uids") && !requiredString(config, "topic_ids")) {
-			return errors.New("WxPusher AppToken 和至少一个 UID 或 Topic ID 不能为空")
-		}
-	}
-	return nil
 }
