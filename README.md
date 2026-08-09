@@ -196,13 +196,17 @@ Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版
 
 - `VERSION_BETA`：仅控制合并到 `beta` 分支时发布的版本。
 - `VERSION_RELEASE`：仅控制合并到 `main` 分支时发布的版本。
+- `release-notes/beta/vX.Y.Z.json`：Beta 版本对应的中英文更新记录。
+- `release-notes/release/vX.Y.Z.json`：Release/Hotfix 对应的中英文更新记录。
 
 | 合并目标 | 版本来源 | 文件内容为 `v0.0.1` 时的不可变标签 | 滚动标签 |
 |----------|----------|--------------------------------------|----------|
 | `beta` | `VERSION_BETA` | `beta-v0.0.1` | `beta` |
 | `main` | `VERSION_RELEASE` | `v0.0.1` | `release`、`latest` |
 
-工作流在构建前使用 Docker Hub 查询不可变版本标签；如果该标签已存在，则跳过构建和推送，避免重复发布同一合并提交。
+工作流在构建前校验目标版本的双语更新记录，并使用 Docker Hub 查询不可变版本标签；如果该标签已存在，则跳过构建和推送，避免重复发布同一合并提交。新镜像构建并通过多架构验证后，工作流会创建同名 GitHub Release，并附带供应用更新提醒读取的累计 `update-feed.json`。Beta 与 Release 的更新目录和检查结果完全隔离。
+
+运行镜像会把版本、渠道、提交和构建时间写入后端二进制。管理员登录后可以在左侧 Seshat 名称下查看当前版本及更新状态；更新检查由后端访问 GitHub，配置系统 HTTP 代理后会自动通过该代理请求。
 
 需要在 GitHub 仓库中配置：
 

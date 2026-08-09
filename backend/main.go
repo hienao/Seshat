@@ -12,6 +12,7 @@ import (
 
 	"seshat/config"
 	_ "seshat/docs"
+	"seshat/internal/buildinfo"
 	"seshat/internal/logging"
 	"seshat/internal/router"
 	"seshat/internal/service"
@@ -52,7 +53,8 @@ func main() {
 	defer notificationWorker.Close()
 
 	// 启动服务器
-	logging.Info("server", "Seshat 服务启动", logging.Fields{"port": cfg.ServerPort})
+	build := buildinfo.Current()
+	logging.Info("server", "Seshat 服务启动", logging.Fields{"port": cfg.ServerPort, "version": build.Version, "channel": build.Channel, "commit": build.Commit})
 	server := &http.Server{Addr: ":" + cfg.ServerPort, Handler: r}
 	serverErrors := make(chan error, 1)
 	go func() { serverErrors <- server.ListenAndServe() }()

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "channel": "beta",
+  "version": "v0.8.0",
+  "summary": {
+    "en": "Update notifications and integration reliability improvements",
+    "zh-CN": "新增更新提醒并提升接入与推送可靠性"
+  },
+  "changes": [
+    {
+      "id": "update-notifications",
+      "type": "feature",
+      "text": {
+        "en": "Added channel-isolated update checks, cumulative bilingual release notes, and current/new-version status below the Seshat name.",
+        "zh-CN": "新增按渠道隔离的更新检查、累计双语更新内容，以及 Seshat 名称下方的当前版本和新版本状态。"
+      }
+    },
+    {
+      "id": "release-metadata",
+      "type": "feature",
+      "text": {
+        "en": "Release images now embed build metadata, and successful image publishing generates a matching GitHub Release and update feed.",
+        "zh-CN": "发布镜像现在会内嵌构建信息，并在镜像发布成功后生成对应的 GitHub Release 和更新 Feed。"
+      }
+    },
+    {
+      "id": "dingtalk-settings",
+      "type": "fix",
+      "text": {
+        "en": "Corrected DingTalk channel settings to store and use token, secret, and targets independently.",
+        "zh-CN": "修正钉钉渠道设置，独立保存并使用 token、secret 和 targets。"
+      }
+    },
+    {
+      "id": "media-enrichment",
+      "type": "change",
+      "text": {
+        "en": "Improved media-added enrichment through the configured Jellyfin or Emby server while avoiding external lookups for deleted items.",
+        "zh-CN": "改进新增媒体通过已配置的 Jellyfin 或 Emby 服务器补充资料的逻辑，并避免为已删除媒体执行外部查询。"
+      }
+    },
+    {
+      "id": "github-project-link",
+      "type": "change",
+      "text": {
+        "en": "Added a GitHub project shortcut to the application header.",
+        "zh-CN": "在应用左上角增加 GitHub 项目入口。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [
+      "Deploy the immutable beta-v0.8.0 image and restart the container.",
+      "Update checks use the configured system HTTP proxy automatically when one is set."
+    ],
+    "zh-CN": [
+      "部署不可变镜像 beta-v0.8.0 并重启容器。",
+      "配置系统 HTTP 代理后，更新检查会自动使用该代理。"
+    ]
+  }
+}

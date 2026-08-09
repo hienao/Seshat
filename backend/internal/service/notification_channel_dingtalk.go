@@ -16,15 +16,27 @@ import (
 
 type dingTalkNotificationAdapter struct{}
 
+const dingTalkRobotEndpoint = "https://oapi.dingtalk.com/robot/send"
+
 func (dingTalkNotificationAdapter) Type() string { return "dingtalk" }
 
 func (dingTalkNotificationAdapter) Sanitize(config, credentials map[string]interface{}) (map[string]interface{}, map[string]interface{}, error) {
-	return sanitizeNotificationChannelFields(config, credentials, nil, []string{"webhook_url", "signing_secret"})
+	return sanitizeNotificationChannelFields(config, credentials, nil, []string{"secret", "token", "targets"})
 }
 
 func (dingTalkNotificationAdapter) Validate(_ map[string]interface{}, credentials map[string]interface{}) error {
-	if !requiredNotificationString(credentials, "webhook_url") {
-		return errors.New("钉钉机器人 Webhook 地址不能为空")
+	if !requiredNotificationString(credentials, "token") {
+		return errors.New("钉钉机器人 Token 不能为空")
+	}
+	if _, ok := credentials["secret"].(string); !ok && credentials["secret"] != nil {
+		return errors.New("钉钉机器人 Secret 必须是字符串")
+	}
+	targets, ok := credentials["targets"].(string)
+	if !ok && credentials["targets"] != nil {
+		return errors.New("钉钉机器人 Targets 必须是字符串")
+	}
+	if _, err := parseDingTalkTargets(targets); err != nil {
+		return err
 	}
 	return nil
 }
@@ -35,12 +47,32 @@ func (a dingTalkNotificationAdapter) Send(ctx context.Context, channel *model.No
 
 func (dingTalkNotificationAdapter) BuildRequest(channel *model.NotificationChannel, message outboundMessage) (*notificationRequestSpec, error) {
 	_, credentials := notificationChannelConfiguration(channel)
-	endpoint, _ := credentials["webhook_url"].(string)
-	if secret, _ := credentials["signing_secret"].(string); secret != "" {
+	token, _ := credentials["token"].(string)
+	secret, _ := credentials["secret"].(string)
+	targetValue, _ := credentials["targets"].(string)
+	if strings.TrimSpace(token) == "" {
+		token = dingTalkLegacyToken(credentials)
+	}
+	if strings.TrimSpace(secret) == "" {
+		secret, _ = credentials["signing_secret"].(string)
+	}
+	if strings.TrimSpace(token) == "" {
+		return nil, &deliveryError{message: "钉钉机器人 Token 不能为空"}
+	}
+	targets, err := parseDingTalkTargets(targetValue)
+	if err != nil {
+		return nil, &deliveryError{message: err.Error()}
+	}
+	endpoint := dingTalkRobotEndpoint + "?access_token=" + url.QueryEscape(strings.TrimSpace(token))
+	if secret = strings.TrimSpace(secret); secret != "" {
 		endpoint = signDingTalkURL(endpoint, secret)
 	}
-	payload := map[string]interface{}{"msgtype": "markdown", "markdown": map[string]interface{}{"title": singleLineTitle(message.Title), "text": notificationDingTalkMarkdown(message)}}
-	return jsonNotificationRequest(endpoint, payload, nil, true, false)
+	payload := map[string]interface{}{
+		"msgtype":  "markdown",
+		"markdown": map[string]interface{}{"title": singleLineTitle(message.Title), "text": notificationDingTalkMarkdown(message)},
+		"at":       map[string]interface{}{"atMobiles": targets, "isAtAll": false},
+	}
+	return jsonNotificationRequest(endpoint, payload, nil, true, true)
 }
 
 func (dingTalkNotificationAdapter) ValidateResponse(_ int, body []byte) error {
@@ -68,6 +100,37 @@ func signDingTalkURL(endpoint, secret string) string {
 	query.Set("sign", signature)
 	parsed.RawQuery = query.Encode()
 	return parsed.String()
+}
+
+func dingTalkLegacyToken(credentials map[string]interface{}) string {
+	legacyURL, _ := credentials["webhook_url"].(string)
+	parsed, err := url.Parse(strings.TrimSpace(legacyURL))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(parsed.Query().Get("access_token"))
+}
+
+func parseDingTalkTargets(value string) ([]string, error) {
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ';' || r == '\n' || r == '\r' })
+	targets := make([]string, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		target := strings.Map(func(r rune) rune {
+			if r >= '0' && r <= '9' {
+				return r
+			}
+			return -1
+		}, part)
+		if len(target) < 11 || len(target) > 14 {
+			return nil, errors.New("钉钉机器人 Targets 必须是 11 到 14 位手机号，多个号码使用逗号分隔")
+		}
+		if !seen[target] {
+			targets = append(targets, target)
+			seen[target] = true
+		}
+	}
+	return targets, nil
 }
 
 func notificationDingTalkMarkdown(message outboundMessage) string {

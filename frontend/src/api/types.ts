@@ -56,6 +56,53 @@ export interface RegistrationStatus {
   allowed: boolean
 }
 
+export interface BuildInfo {
+  version: string
+  channel: 'beta' | 'release' | 'dev' | string
+  commit: string
+  build_time: string
+}
+
+export interface LocalizedText {
+  en: string
+  'zh-CN': string
+}
+
+export interface LocalizedList {
+  en: string[]
+  'zh-CN': string[]
+}
+
+export type UpdateChangeType = 'feature' | 'fix' | 'security' | 'change' | 'deprecated'
+
+export interface UpdateChange {
+  id: string
+  type: UpdateChangeType
+  text: LocalizedText
+}
+
+export interface UpdateRelease {
+  schema_version: number
+  channel: 'beta' | 'release'
+  version: string
+  summary: LocalizedText
+  changes: UpdateChange[]
+  upgrade_notes: LocalizedList
+  published_at?: string
+  release_url?: string
+  image_tag?: string
+}
+
+export interface UpdateStatus {
+  supported: boolean
+  current: BuildInfo
+  latest_version: string
+  update_available: boolean
+  image_tag: string
+  releases: UpdateRelease[]
+  checked_at?: string
+}
+
 export interface AppEventType {
   code: string
   name: string
