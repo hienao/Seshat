@@ -15,6 +15,7 @@ type AppIntegration struct {
 	EndpointKey           string         `gorm:"uniqueIndex;size:100;not null" json:"endpoint_key"`
 	Secret                string         `gorm:"size:100;not null" json:"-"`
 	Config                datatypes.JSON `gorm:"type:json" json:"config"`
+	SecretConfig          datatypes.JSON `gorm:"type:json" json:"-"`
 	Enabled               bool           `gorm:"default:true;not null" json:"enabled"`
 	NotificationChannelID *uint          `gorm:"index" json:"notification_channel_id,omitempty"`
 	CreatedAt             time.Time      `json:"created_at"`
@@ -53,16 +54,20 @@ func (WebhookEvent) TableName() string { return "webhook_events" }
 
 // MediaMetadataCache 持久化外部媒体平台返回的展示信息，避免重复查询。
 type MediaMetadataCache struct {
-	ID         uint      `gorm:"primarykey"`
-	CacheKey   string    `gorm:"uniqueIndex;size:220;not null"`
-	Provider   string    `gorm:"index;size:30;not null"`
-	ExternalID string    `gorm:"index;size:100;not null"`
-	MediaType  string    `gorm:"size:30"`
-	Title      string    `gorm:"size:500"`
-	Overview   string    `gorm:"type:text"`
-	ImageURL   string    `gorm:"size:1000"`
-	SourceURL  string    `gorm:"size:1000"`
-	ExpiresAt  time.Time `gorm:"index;not null"`
+	ID         uint   `gorm:"primarykey"`
+	CacheKey   string `gorm:"uniqueIndex;size:220;not null"`
+	Provider   string `gorm:"index;size:30;not null"`
+	ExternalID string `gorm:"index;size:100;not null"`
+	MediaType  string `gorm:"size:30"`
+	Title      string `gorm:"size:500"`
+	Overview   string `gorm:"type:text"`
+	ImageURL   string `gorm:"size:1000"`
+	ImageToken string `gorm:"index;size:64"`
+	ImageData  []byte
+	ImageType  string         `gorm:"size:100"`
+	Metadata   datatypes.JSON `gorm:"type:json"`
+	SourceURL  string         `gorm:"size:1000"`
+	ExpiresAt  time.Time      `gorm:"index;not null"`
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }

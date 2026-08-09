@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -151,6 +152,54 @@ func TestIntegrationSecretCanOnlyBeReadByOwner(t *testing.T) {
 	}
 	if _, err := service.GetIntegrationSecret(8, created.ID); err == nil {
 		t.Fatal("another owner should not be able to read the secret")
+	}
+}
+
+func TestIntegrationMediaSettingsAreRequiredReturnedAndKeptOutOfIntegrationJSON(t *testing.T) {
+	setupWebhookTestDB(t)
+	service := NewWebhookService()
+	created, err := service.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "jellyfin", Name: "家庭影院"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.UpdateIntegrationMediaSettings(7, created.ID, &UpdateIntegrationMediaSettingsRequest{ServerURL: "", APIKey: "key"}); !errors.Is(err, ErrInvalidMediaAPIURL) {
+		t.Fatalf("empty server URL error = %v", err)
+	}
+	if _, err := service.UpdateIntegrationMediaSettings(7, created.ID, &UpdateIntegrationMediaSettingsRequest{ServerURL: "http://jellyfin.example:8096", APIKey: ""}); !errors.Is(err, ErrInvalidMediaAPIKey) {
+		t.Fatalf("empty API key error = %v", err)
+	}
+	updated, err := service.UpdateIntegrationMediaSettings(7, created.ID, &UpdateIntegrationMediaSettingsRequest{ServerURL: "http://jellyfin.example:8096/", APIKey: "media-secret-key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.Configured || updated.ServerURL != "http://jellyfin.example:8096" || updated.APIKey != "media-secret-key" {
+		t.Fatalf("unexpected updated settings: %+v", updated)
+	}
+	loaded, err := service.GetIntegrationMediaSettings(7, created.ID)
+	if err != nil || loaded.APIKey != "media-secret-key" {
+		t.Fatalf("loaded settings = %+v, error = %v", loaded, err)
+	}
+	if _, err := service.GetIntegrationMediaSettings(8, created.ID); err == nil {
+		t.Fatal("another owner should not be able to read media API settings")
+	}
+	items, err := service.ListIntegrations(7)
+	if err != nil || len(items) != 1 || !items[0].MediaAPIConfigured {
+		t.Fatalf("integration response did not report configured media API: %+v, %v", items, err)
+	}
+	encoded, _ := json.Marshal(items)
+	if bytes.Contains(encoded, []byte("media-secret-key")) {
+		t.Fatalf("media API key was exposed by integration list: %s", encoded)
+	}
+	if err := service.TestIntegrationMediaSettings(context.Background(), 7, created.ID, &UpdateIntegrationMediaSettingsRequest{ServerURL: "https://user:password@example.com", APIKey: "key"}); !errors.Is(err, ErrInvalidMediaAPIURL) {
+		t.Fatalf("credential-bearing server URL error = %v", err)
+	}
+
+	generic, err := service.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "generic", Name: "Generic"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.GetIntegrationMediaSettings(7, generic.ID); !errors.Is(err, ErrMediaAPIUnsupported) {
+		t.Fatalf("generic media settings error = %v", err)
 	}
 }
 

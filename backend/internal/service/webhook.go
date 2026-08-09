@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -37,7 +38,8 @@ type CreateIntegrationRequest struct {
 
 type IntegrationResponse struct {
 	model.AppIntegration
-	WebhookPath string `json:"webhook_path"`
+	WebhookPath        string `json:"webhook_path"`
+	MediaAPIConfigured bool   `json:"media_api_configured"`
 }
 
 type IntegrationCreatedResponse struct {
@@ -47,6 +49,17 @@ type IntegrationCreatedResponse struct {
 
 type IntegrationSecretResponse struct {
 	Secret string `json:"secret"`
+}
+
+type IntegrationMediaSettingsResponse struct {
+	ServerURL  string `json:"server_url"`
+	APIKey     string `json:"api_key"`
+	Configured bool   `json:"configured"`
+}
+
+type UpdateIntegrationMediaSettingsRequest struct {
+	ServerURL string `json:"server_url" binding:"required"`
+	APIKey    string `json:"api_key" binding:"required"`
 }
 
 type EventListResponse struct {
@@ -108,7 +121,7 @@ func (s *WebhookService) CreateIntegration(ownerID uint, req *CreateIntegrationR
 	if err != nil {
 		return nil, err
 	}
-	item := &model.AppIntegration{OwnerID: ownerID, AppCode: provider.Code(), Name: strings.TrimSpace(req.Name), EndpointKey: randomEndpointKey(), Secret: secret, Config: datatypes.JSON([]byte("{}")), Enabled: true}
+	item := &model.AppIntegration{OwnerID: ownerID, AppCode: provider.Code(), Name: strings.TrimSpace(req.Name), EndpointKey: randomEndpointKey(), Secret: secret, Config: datatypes.JSON([]byte("{}")), SecretConfig: datatypes.JSON([]byte("{}")), Enabled: true}
 	if item.Name == "" {
 		return nil, errors.New("接入名称不能为空")
 	}
@@ -155,6 +168,78 @@ func (s *WebhookService) GetIntegrationSecret(ownerID, id uint) (*IntegrationSec
 		return nil, err
 	}
 	return &IntegrationSecretResponse{Secret: item.Secret}, nil
+}
+
+func (s *WebhookService) GetIntegrationMediaSettings(ownerID, id uint) (*IntegrationMediaSettingsResponse, error) {
+	item, err := s.integrationForOwner(ownerID, id)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := s.mediaMetadata.adapter(item.AppCode); !ok {
+		return nil, ErrMediaAPIUnsupported
+	}
+	settings, configured := mediaSettingsFromIntegration(item)
+	return &IntegrationMediaSettingsResponse{ServerURL: settings.ServerURL, APIKey: settings.APIKey, Configured: configured}, nil
+}
+
+func (s *WebhookService) UpdateIntegrationMediaSettings(ownerID, id uint, req *UpdateIntegrationMediaSettingsRequest) (*IntegrationMediaSettingsResponse, error) {
+	item, err := s.integrationForOwner(ownerID, id)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := s.mediaMetadata.adapter(item.AppCode); !ok {
+		return nil, ErrMediaAPIUnsupported
+	}
+	settings, err := normalizeMediaServerSettings(req.ServerURL, req.APIKey)
+	if err != nil {
+		return nil, err
+	}
+	config := jsonObject(item.Config)
+	secretConfig := jsonObject(item.SecretConfig)
+	config["media_server_url"] = settings.ServerURL
+	secretConfig["media_api_key"] = settings.APIKey
+	item.Config, _ = json.Marshal(config)
+	item.SecretConfig, _ = json.Marshal(secretConfig)
+	if err := database.GetDB().Model(item).Select("config", "secret_config", "updated_at").Updates(item).Error; err != nil {
+		return nil, err
+	}
+	return &IntegrationMediaSettingsResponse{ServerURL: settings.ServerURL, APIKey: settings.APIKey, Configured: true}, nil
+}
+
+func (s *WebhookService) TestIntegrationMediaSettings(ctx context.Context, ownerID, id uint, req *UpdateIntegrationMediaSettingsRequest) error {
+	item, err := s.integrationForOwner(ownerID, id)
+	if err != nil {
+		return err
+	}
+	return s.mediaMetadata.TestMediaServer(ctx, item.AppCode, req.ServerURL, req.APIKey)
+}
+
+func (s *WebhookService) integrationForOwner(ownerID, id uint) (*model.AppIntegration, error) {
+	var item model.AppIntegration
+	if err := database.GetDB().Where("id = ? AND owner_id = ?", id, ownerID).First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func mediaSettingsFromIntegration(item *model.AppIntegration) (mediaServerSettings, bool) {
+	if item == nil {
+		return mediaServerSettings{}, false
+	}
+	config := jsonObject(item.Config)
+	secretConfig := jsonObject(item.SecretConfig)
+	serverURL, _ := config["media_server_url"].(string)
+	apiKey, _ := secretConfig["media_api_key"].(string)
+	settings, err := normalizeMediaServerSettings(serverURL, apiKey)
+	return settings, err == nil
+}
+
+func jsonObject(data []byte) map[string]interface{} {
+	result := map[string]interface{}{}
+	if len(data) > 0 {
+		_ = json.Unmarshal(data, &result)
+	}
+	return result
 }
 
 func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, body []byte, contentType string) (*WebhookIngestResult, error) {
@@ -204,7 +289,7 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 	}
 	presentation := provider.Normalize(displayType, request)
 	presentation.SchemaVersion = 1
-	if err := s.mediaMetadata.Enrich(&presentation); err != nil {
+	if err := s.mediaMetadata.Enrich(&presentation, &integration); err != nil {
 		appLogging.Warn("webhook", "外部媒体信息补充失败", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "error": err})
 	}
 	presentationJSON, _ := json.Marshal(presentation)
@@ -257,8 +342,13 @@ func (s *WebhookService) GetEvent(ownerID, id uint) (*WebhookEventDetail, error)
 	return &WebhookEventDetail{WebhookEvent: item, RawBody: item.RawBody}, err
 }
 
+func (s *WebhookService) GetCachedMediaImage(token string) (*model.MediaMetadataCache, error) {
+	return s.mediaMetadata.CachedImage(token)
+}
+
 func (s *WebhookService) integrationResponse(item *model.AppIntegration) IntegrationResponse {
-	return IntegrationResponse{AppIntegration: *item, WebhookPath: "/hooks/v1/" + item.EndpointKey}
+	_, configured := mediaSettingsFromIntegration(item)
+	return IntegrationResponse{AppIntegration: *item, WebhookPath: "/hooks/v1/" + item.EndpointKey, MediaAPIConfigured: configured}
 }
 
 func randomSecret() (string, error) {

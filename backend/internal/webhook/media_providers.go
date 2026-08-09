@@ -45,6 +45,36 @@ func buildMediaPresentation(appName string, definitions []EventTypeDefinition, e
 	}
 }
 
+// RefreshMediaPresentation 依据更新后的标准化数据刷新依赖媒体字段的展示文本。
+// 外部媒体信息补充只需要修改标准化 media，不需要了解具体 App 的卡片实现。
+func RefreshMediaPresentation(presentation *Presentation) {
+	if presentation == nil || presentation.Data == nil {
+		return
+	}
+	category := stringValue(presentation.Data, "category")
+	if category != "media" && category != "playback" {
+		return
+	}
+	media, _ := presentation.Data["media"].(map[string]interface{})
+	actor, _ := presentation.Data["actor"].(map[string]interface{})
+	playback, _ := presentation.Data["playback"].(map[string]interface{})
+	system, _ := presentation.Data["system"].(map[string]interface{})
+	if len(media) == 0 {
+		return
+	}
+	media["display_name"] = mediaDisplayName(media)
+	appName := strings.TrimSpace(strings.SplitN(presentation.Title, " · ", 2)[0])
+	label := stringValue(presentation.Data, "event_label")
+	if appName != "" && label != "" {
+		presentation.Title = appName + " · " + label
+		if subject := presentationSubject(category, media, actor, system); subject != "" {
+			presentation.Title += " · " + subject
+		}
+		presentation.Summary = presentationSummary(appName, label, category, media, actor, playback, system)
+	}
+	presentation.Facts = presentationFacts(category, media, actor, playback, system)
+}
+
 func decodePayload(body []byte) map[string]interface{} {
 	payload := map[string]interface{}{}
 	_ = json.Unmarshal(body, &payload)
