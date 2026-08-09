@@ -328,6 +328,9 @@ export interface NotificationDelivery {
   next_attempt_at?: string
   last_status_code?: number
   last_error?: string
+  content_format?: 'plain_text' | 'markdown'
+  content_profile?: string
+  content_version?: number
   sent_at?: string
   created_at: string
   updated_at: string

@@ -167,6 +167,9 @@ func notificationPlainText(message outboundMessage) string {
 
 func notificationBody(message outboundMessage) string {
 	body := strings.TrimSpace(message.Body)
+	if message.Rendered != nil {
+		return body
+	}
 	if message.DetailURL == "" {
 		return body
 	}

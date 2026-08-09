@@ -1,8 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NotificationChannel, NotificationChannelType } from '@/api/types'
 import { notificationChannelAdapter, notificationChannelAdapters } from './registry'
 import { notificationChannelBindingName, type ChannelCommonValues } from './types'
+
+beforeEach(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({ matches: false, media: query, onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn() })),
+  })
+})
 
 function common(type: NotificationChannelType): ChannelCommonValues {
   return { name: '测试渠道', type, enabled: true, useProxy: true }
@@ -45,8 +52,8 @@ describe('notification channel adapter registry', () => {
     expect(apprise.config).toEqual({ base_url: 'https://apprise.example.com', tag: 'all', use_proxy: true })
     expect(apprise.credentials).toEqual({ config_id: 'config-main' })
 
-    const dingTalk = notificationChannelAdapter('dingtalk').toPayload(common('dingtalk'), { secret: 'SEC-test', token: 'ding-token', targets: '13800138000, 13900139000' })
-    expect(dingTalk.config).toEqual({ use_proxy: true })
+    const dingTalk = notificationChannelAdapter('dingtalk').toPayload(common('dingtalk'), { secret: 'SEC-test', token: 'ding-token', targets: '13800138000, 13900139000', messageFormat: 'markdown', includeImage: false })
+    expect(dingTalk.config).toEqual({ message_format: 'markdown', include_image: false, use_proxy: true })
     expect(dingTalk.credentials).toEqual({ secret: 'SEC-test', token: 'ding-token', targets: '13800138000, 13900139000' })
     expect(dingTalk.credentials).not.toHaveProperty('webhook_url')
   })
@@ -75,8 +82,8 @@ describe('notification channel adapter registry', () => {
     expect(notificationChannelAdapter('email').fieldsFromChannel(channel('email', {}, { username: 'mailer', password: 'mail-password' }))).toMatchObject({ username: 'mailer', password: 'mail-password' })
     expect(notificationChannelAdapter('serverchan').fieldsFromChannel(channel('serverchan', {}, { send_key: 'SCT-key' })).sendKey).toBe('SCT-key')
     expect(notificationChannelAdapter('bark').fieldsFromChannel(channel('bark', {}, { device_key: 'device-key' })).deviceKey).toBe('device-key')
-    expect(notificationChannelAdapter('dingtalk').fieldsFromChannel(channel('dingtalk', {}, { secret: 'SEC-ding', token: 'ding-token', targets: '13800138000' }))).toEqual({ secret: 'SEC-ding', token: 'ding-token', targets: '13800138000' })
-    expect(notificationChannelAdapter('dingtalk').fieldsFromChannel(channel('dingtalk', {}, { webhook_url: 'https://oapi.dingtalk.com/robot/send?access_token=legacy-token', signing_secret: 'legacy-secret' }))).toEqual({ secret: 'legacy-secret', token: 'legacy-token', targets: '' })
+    expect(notificationChannelAdapter('dingtalk').fieldsFromChannel(channel('dingtalk', { message_format: 'plain_text', include_image: false }, { secret: 'SEC-ding', token: 'ding-token', targets: '13800138000' }))).toEqual({ secret: 'SEC-ding', token: 'ding-token', targets: '13800138000', messageFormat: 'plain_text', includeImage: false })
+    expect(notificationChannelAdapter('dingtalk').fieldsFromChannel(channel('dingtalk', {}, { webhook_url: 'https://oapi.dingtalk.com/robot/send?access_token=legacy-token', signing_secret: 'legacy-secret' }))).toEqual({ secret: 'legacy-secret', token: 'legacy-token', targets: '', messageFormat: 'auto', includeImage: true })
     expect(notificationChannelAdapter('feishu').fieldsFromChannel(channel('feishu', {}, { webhook_url: 'https://feishu.example/hook', signing_secret: 'feishu-secret' }))).toEqual({ webhookUrl: 'https://feishu.example/hook', signingSecret: 'feishu-secret' })
     expect(notificationChannelAdapter('whatsapp').fieldsFromChannel(channel('whatsapp', {}, { access_token: 'wa-token', phone_number_id: '123', recipient: '86138' }))).toMatchObject({ token: 'wa-token', phoneNumberId: '123', recipient: '86138' })
     expect(notificationChannelAdapter('wxpusher').fieldsFromChannel(channel('wxpusher', {}, { app_token: 'wx-token' })).appToken).toBe('wx-token')
@@ -113,6 +120,8 @@ describe('notification channel adapter registry', () => {
     expect(screen.getByText('钉钉 Token')).toBeInTheDocument()
     expect(screen.getByText('钉钉 Secret（可选）')).toBeInTheDocument()
     expect(screen.getByText('Targets（可选）')).toBeInTheDocument()
+    expect(screen.getByText('消息格式')).toBeInTheDocument()
+    expect(screen.getByText('附带媒体图片')).toBeInTheDocument()
     expect(screen.queryByText('DingTalk机器人 Webhook URL')).not.toBeInTheDocument()
   })
 

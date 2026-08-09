@@ -22,6 +22,10 @@ func buildTestNotificationRequest(channel *model.NotificationChannel, message ou
 	if !ok {
 		return nil, errors.New("adapter is not HTTP based")
 	}
+	message, err := prepareNotificationMessage(adapter, channel, message)
+	if err != nil {
+		return nil, err
+	}
 	return httpAdapter.BuildRequest(channel, message)
 }
 
@@ -267,13 +271,13 @@ func TestDingTalkAdapterOwnsTokenSecretAndTargets(t *testing.T) {
 		t.Fatal("DingTalk adapter not registered")
 	}
 	config, credentials, err := adapter.Sanitize(
-		map[string]interface{}{},
+		map[string]interface{}{"message_format": "markdown", "include_image": true},
 		map[string]interface{}{"secret": "SEC-test", "token": "token", "targets": "13800138000,13900139000"},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(config) != 0 || len(credentials) != 3 || credentials["secret"] != "SEC-test" || credentials["token"] != "token" || credentials["targets"] != "13800138000,13900139000" {
+	if len(config) != 2 || config["message_format"] != "markdown" || config["include_image"] != true || len(credentials) != 3 || credentials["secret"] != "SEC-test" || credentials["token"] != "token" || credentials["targets"] != "13800138000,13900139000" {
 		t.Fatalf("unexpected DingTalk sanitized configuration: config=%v credentials=%v", config, credentials)
 	}
 	if err := adapter.Validate(config, credentials); err != nil {
@@ -287,6 +291,9 @@ func TestDingTalkAdapterOwnsTokenSecretAndTargets(t *testing.T) {
 	}
 	if err := adapter.Validate(map[string]interface{}{}, map[string]interface{}{"token": "", "targets": ""}); err == nil {
 		t.Fatal("DingTalk adapter accepted an empty token")
+	}
+	if err := adapter.Validate(map[string]interface{}{"message_format": "html"}, map[string]interface{}{"token": "token"}); err == nil {
+		t.Fatal("DingTalk adapter accepted an unsupported message format")
 	}
 }
 
@@ -302,7 +309,7 @@ func TestEveryNotificationChannelAdapterOwnsItsConfiguration(t *testing.T) {
 		{"email", map[string]interface{}{"smtp_host": "smtp.example.com", "smtp_port": 587, "from": "notice@example.com", "to": "user@example.com"}, map[string]interface{}{}},
 		{"serverchan", map[string]interface{}{}, map[string]interface{}{"send_key": "SCT123"}},
 		{"bark", map[string]interface{}{"base_url": "https://api.day.app"}, map[string]interface{}{"device_key": "device"}},
-		{"dingtalk", map[string]interface{}{}, map[string]interface{}{"secret": "secret", "token": "token", "targets": "13800138000"}},
+		{"dingtalk", map[string]interface{}{"message_format": "auto", "include_image": true}, map[string]interface{}{"secret": "secret", "token": "token", "targets": "13800138000"}},
 		{"feishu", map[string]interface{}{}, map[string]interface{}{"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/token"}},
 		{"whatsapp", map[string]interface{}{"api_version": "v25.0"}, map[string]interface{}{"access_token": "token", "phone_number_id": "123", "recipient": "8613800000000"}},
 		{"wxpusher", map[string]interface{}{"uids": "UID_one"}, map[string]interface{}{"app_token": "AT_token"}},
