@@ -23,9 +23,13 @@ export function EventsPage() {
   const events = useQuery({
     queryKey: ['webhooks', 'events', integrationID, eventType, page],
     queryFn: () => api.events({ integrationId: selectedIntegration?.id, eventType, limit: pageSize, offset: page * pageSize }),
+    placeholderData: (previousData, previousQuery) => previousQuery?.queryKey[2] === integrationID && previousQuery.queryKey[3] === eventType ? previousData : undefined,
   })
   const total = events.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const pageNumbers = paginationPageNumbers(page, totalPages)
+  const firstItem = total > 0 ? page * pageSize + 1 : 0
+  const lastItem = Math.min((page + 1) * pageSize, total)
 
   useEffect(() => {
     if (events.data && page >= totalPages) setPage(totalPages - 1)
@@ -63,16 +67,46 @@ export function EventsPage() {
           </label>
         </div>
       </Panel>
-      <Panel title="最近消息" description={`共 ${total} 条`}>
-        {events.isPending ? <div className="py-12 text-center text-sm text-neutral-500">正在加载消息…</div> : events.error ? <ErrorState message={errorMessage(events.error)} onRetry={() => void events.refetch()} /> : !events.data?.items.length ? <EmptyState title="还没有 Webhook 消息" description="创建接入实例并向对应地址发送消息后，这里会显示内容。" /> : (
-          <div className="space-y-4">
+      <Panel title="最近消息" description={`共 ${total} 条 · 每页 ${pageSize} 条`}>
+        <div className="space-y-4">
+          {events.error ? <ErrorState message={errorMessage(events.error)} onRetry={() => void events.refetch()} /> : events.isPending || events.isPlaceholderData ? <div className="py-12 text-center text-sm text-neutral-500">正在加载第 {page + 1} 页…</div> : !events.data?.items.length ? <EmptyState title="还没有 Webhook 消息" description="创建接入实例并向对应地址发送消息后，这里会显示内容。" /> : (
+            <div className="space-y-4">
             {events.data.items.map((event) => (
               <Link key={event.id} to={`/events/${event.id}`} className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><EventCard event={event} /></Link>
             ))}
-            {totalPages > 1 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800"><p className="text-sm text-neutral-500">第 {page + 1} / {totalPages} 页</p><div className="flex gap-2"><AppButton size="sm" variant="outline" disabled={page === 0 || events.isFetching} onClick={() => setPage((current) => Math.max(0, current - 1))}>上一页</AppButton><AppButton size="sm" variant="outline" disabled={!events.data.has_more || events.isFetching} onClick={() => setPage((current) => current + 1)}>下一页</AppButton></div></div>}
-          </div>
-        )}
+            </div>
+          )}
+          {events.data && total > 0 && (
+            <nav aria-label="消息分页" className="flex flex-col gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-neutral-500">第 {page + 1} / {totalPages} 页 · 显示第 {firstItem}–{lastItem} 条</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <AppButton size="sm" variant="outline" disabled={page === 0 || events.isFetching} onClick={() => setPage((current) => Math.max(0, current - 1))}>上一页</AppButton>
+                {pageNumbers.map((pageNumber, index) => (
+                  <div key={pageNumber} className="contents">
+                    {index > 0 && pageNumber - pageNumbers[index - 1] > 1 && <span className="px-1 text-sm text-neutral-400" aria-hidden="true">…</span>}
+                    <AppButton
+                      size="sm"
+                      variant={pageNumber === page + 1 ? 'primary' : 'outline'}
+                      aria-label={`第 ${pageNumber} 页`}
+                      aria-current={pageNumber === page + 1 ? 'page' : undefined}
+                      disabled={events.isFetching}
+                      onClick={() => setPage(pageNumber - 1)}
+                    >{pageNumber}</AppButton>
+                  </div>
+                ))}
+                <AppButton size="sm" variant="outline" disabled={page >= totalPages - 1 || events.isFetching} onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}>下一页</AppButton>
+              </div>
+            </nav>
+          )}
+        </div>
       </Panel>
     </div>
   )
+}
+
+function paginationPageNumbers(page: number, totalPages: number) {
+  const currentPage = page + 1
+  return Array.from(new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages]))
+    .filter((pageNumber) => pageNumber >= 1 && pageNumber <= totalPages)
+    .sort((left, right) => left - right)
 }

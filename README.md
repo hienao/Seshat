@@ -67,7 +67,7 @@ npm run dev
 - 日志目录固定派生为 `/cache/logs/app`
 - 接口日志和业务日志固定启用并保存到 `/cache/logs/app/api-logs.db` 的独立数据表中
 - 接口日志、业务日志和外部媒体资料缓存默认保留 7 天，管理员可在“系统管理 → 系统设置”中调整为 1–30 天，保存后立即生效
-- Jellyfin/Emby 会展示剧集层级、客户端、设备、简介和视频流信息；可选配置 TMDB API Read Access Token，按 Provider ID 补充并缓存海报和简介
+- Jellyfin/Emby 会展示剧集层级、客户端、设备、简介和视频流信息；可选配置 TMDB API 密钥，按 Provider ID 补充并缓存海报和简介
 - 登录令牌由前端保存到 LocalStorage，并通过 `Authorization: Bearer <token>` 请求头发送
 - Webhook Secret 以明文保存在业务数据库中；接入列表不批量返回该字段，实例所属用户可在接入卡片中按需查看，查看接口禁止缓存
 - Emby 不支持自定义 Webhook 请求头，因此使用随机接入地址作为凭据；其他 App 按接入说明使用 Secret 请求头或签名
