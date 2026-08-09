@@ -22,7 +22,7 @@ export function EventCardView({ event, model, compact = false, detail = false }:
       </header>
 
       <div className={`mt-4 flex ${compact ? 'gap-3' : 'gap-4 sm:gap-5'}`}>
-        <div className={`relative grid shrink-0 place-items-center overflow-hidden rounded-xl ${visualTone(model.category, event.severity)} ${compact ? 'size-11' : model.imageUrl ? 'h-24 w-16 sm:h-28 sm:w-20' : 'size-14 sm:size-16'}`}>
+        <div className={`relative grid shrink-0 place-items-center overflow-hidden rounded-xl ${visualTone(model.category, event.severity)} ${visualSize(model, compact, detail)}`}>
           {model.imageUrl && !compact ? <img src={model.imageUrl} alt="" className="size-full object-cover" loading="lazy" referrerPolicy="no-referrer" /> : <Icon size={compact ? 22 : 28} />}
         </div>
 
@@ -41,7 +41,10 @@ export function EventCardView({ event, model, compact = false, detail = false }:
 
           {!compact && facts.length > 0 && (
             <dl className="mt-4 grid gap-x-5 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-              {facts.map((fact, index) => <div key={`${fact.label}-${index}`} className="min-w-0"><dt className="text-[11px] text-neutral-400">{fact.label}</dt><dd className="mt-0.5 truncate text-sm font-medium text-neutral-700 dark:text-neutral-200">{maskedFact(fact.label, fact.value)}</dd></div>)}
+              {facts.map((fact, index) => {
+                const wide = model.wideFactLabels?.includes(fact.label)
+                return <div key={`${fact.label}-${index}`} className={`min-w-0 ${wide ? 'sm:col-span-2 xl:col-span-3' : ''}`}><dt className="text-[11px] text-neutral-400">{fact.label}</dt><dd className={`mt-0.5 text-sm font-medium text-neutral-700 dark:text-neutral-200 ${wide ? 'whitespace-normal break-words' : 'truncate'}`}>{maskedFact(fact.label, fact.value)}</dd></div>
+              })}
             </dl>
           )}
 
@@ -61,6 +64,13 @@ export function EventCardView({ event, model, compact = false, detail = false }:
       )}
     </article>
   )
+}
+
+function visualSize(model: EventCardModel, compact: boolean, detail: boolean) {
+  if (compact) return 'size-11'
+  if (!model.imageUrl) return 'size-14 sm:size-16'
+  if (model.imageLayout === 'landscape') return detail ? 'aspect-video w-40 sm:w-64' : 'aspect-video w-28 sm:w-44'
+  return detail ? 'h-44 w-28 sm:h-56 sm:w-40' : 'h-24 w-16 sm:h-28 sm:w-20'
 }
 
 function categoryIcon(category: EventCategory, eventType: string): ComponentType<{ size?: number }> {

@@ -61,6 +61,7 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 	{
 		// 推送消息中的公开详情链接，使用随机访问标识，不需要 JWT。
 		api.GET("/public/events/:token", webhookHandler.GetPublicEvent)
+		api.GET("/public/media-images/:token", webhookHandler.GetPublicMediaImage)
 
 		// Webhook 管理接口需要认证，实际接收接口在 /hooks 下公开提供。
 		webhookAPI := api.Group("/webhooks")
@@ -71,6 +72,9 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 			webhookAPI.POST("/integrations", webhookHandler.CreateIntegration)
 			webhookAPI.GET("/integrations/:id/secret", webhookHandler.GetIntegrationSecret)
 			webhookAPI.POST("/integrations/:id/rotate-secret", webhookHandler.RotateSecret)
+			webhookAPI.GET("/integrations/:id/media-settings", webhookHandler.GetIntegrationMediaSettings)
+			webhookAPI.PUT("/integrations/:id/media-settings", webhookHandler.UpdateIntegrationMediaSettings)
+			webhookAPI.POST("/integrations/:id/media-settings/test", webhookHandler.TestIntegrationMediaSettings)
 			webhookAPI.GET("/integrations/:id/notification-settings", notificationHandler.GetIntegrationSettings)
 			webhookAPI.PUT("/integrations/:id/notification-settings", notificationHandler.UpdateIntegrationSettings)
 			webhookAPI.GET("/events", webhookHandler.ListEvents)

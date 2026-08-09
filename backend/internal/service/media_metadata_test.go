@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -257,5 +259,141 @@ func TestMediaMetadataCanUseTheSystemHTTPProxy(t *testing.T) {
 	media := presentation.Data["media"].(map[string]interface{})
 	if proxyRequests != 1 || media["overview"] != "TMDB 电影简介" {
 		t.Fatalf("TMDB proxy was not used: requests=%d media=%+v", proxyRequests, media)
+	}
+}
+
+func TestJellyfinMetadataTakesPriorityAndCachesProtectedImage(t *testing.T) {
+	setupMediaMetadataTestDB(t)
+	settingsService := NewSettingService()
+	if err := settingsService.InitDefaultSettings(); err != nil {
+		t.Fatal(err)
+	}
+	tmdbKey := "tmdb-key"
+	if err := settingsService.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBAPIKey: &tmdbKey}); err != nil {
+		t.Fatal(err)
+	}
+	mediaRequests, tmdbRequests := 0, 0
+	mediaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		mediaRequests++
+		if request.Header.Get("X-Emby-Token") != "jellyfin-key" {
+			t.Errorf("media API key header = %q", request.Header.Get("X-Emby-Token"))
+		}
+		switch request.URL.Path {
+		case "/Items/item-10":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"Id":"item-10","Name":"服务端标题","Type":"Episode","SeriesName":"服务端剧集","ParentIndexNumber":2,"IndexNumber":3,"ProductionYear":2026,"Overview":"Jellyfin 简介","RunTimeTicks":6000000000,"ProviderIds":{"Tmdb":"88","Tvdb":"99"},"ImageTags":{"Primary":"tag"}}`))
+		case "/Items/item-10/Images/Primary":
+			writer.Header().Set("Content-Type", "image/png")
+			_, _ = writer.Write([]byte("png-image-data"))
+		default:
+			t.Errorf("unexpected Jellyfin request: %s", request.URL.String())
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer mediaServer.Close()
+	tmdbServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		tmdbRequests++
+		writer.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer tmdbServer.Close()
+
+	metadataService := NewMediaMetadataService()
+	metadataService.settings = settingsService
+	metadataService.apiBaseURL = tmdbServer.URL
+	metadataService.httpClient = tmdbServer.Client()
+	metadataService.adapters["jellyfin"].(*jellyfinMediaMetadataAdapter).client = mediaServer.Client()
+	config, _ := json.Marshal(map[string]string{"media_server_url": mediaServer.URL})
+	secretConfig, _ := json.Marshal(map[string]string{"media_api_key": "jellyfin-key"})
+	integration := &model.AppIntegration{ID: 12, AppCode: "jellyfin", Secret: "integration-secret", Config: config, SecretConfig: secretConfig}
+	presentation := webhook.Presentation{Title: "Jellyfin · 播放进度 · 旧标题", Data: map[string]interface{}{
+		"category": "playback", "event_label": "播放进度", "media": map[string]interface{}{"id": "item-10", "type": "Episode", "name": "旧标题", "provider_ids": map[string]interface{}{"tmdb": "1452857"}},
+	}}
+	if err := metadataService.Enrich(&presentation, integration); err != nil {
+		t.Fatal(err)
+	}
+	media := presentation.Data["media"].(map[string]interface{})
+	if media["name"] != "服务端标题" || media["series"] != "服务端剧集" || media["overview"] != "Jellyfin 简介" || media["metadata_source"] != "jellyfin" {
+		t.Fatalf("Jellyfin metadata did not take priority: %+v", media)
+	}
+	imageURL, _ := media["image_url"].(string)
+	if !strings.HasPrefix(imageURL, "/api/public/media-images/") {
+		t.Fatalf("protected image was not cached: %q", imageURL)
+	}
+	token := strings.TrimPrefix(imageURL, "/api/public/media-images/")
+	image, err := metadataService.CachedImage(token)
+	if err != nil || string(image.ImageData) != "png-image-data" || image.ImageType != "image/png" {
+		t.Fatalf("cached image = %+v, error = %v", image, err)
+	}
+	if tmdbRequests != 0 || mediaRequests != 2 {
+		t.Fatalf("requests media=%d tmdb=%d, want media=2 tmdb=0", mediaRequests, tmdbRequests)
+	}
+	if presentation.Title != "Jellyfin · 播放进度 · 服务端剧集 · S02E03 · 服务端标题" {
+		t.Fatalf("presentation title was not refreshed: %q", presentation.Title)
+	}
+}
+
+func TestMediaServerFailureFallsBackToTMDB(t *testing.T) {
+	setupMediaMetadataTestDB(t)
+	settingsService := NewSettingService()
+	if err := settingsService.InitDefaultSettings(); err != nil {
+		t.Fatal(err)
+	}
+	tmdbKey := "tmdb-key"
+	if err := settingsService.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBAPIKey: &tmdbKey}); err != nil {
+		t.Fatal(err)
+	}
+	mediaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) { writer.WriteHeader(http.StatusBadGateway) }))
+	defer mediaServer.Close()
+	tmdbRequests := 0
+	tmdbServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		tmdbRequests++
+		if request.URL.Path != "/movie/42" || request.URL.Query().Get("api_key") != tmdbKey {
+			t.Errorf("unexpected TMDB fallback request: %s", request.URL.String())
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":42,"title":"TMDB title","overview":"TMDB fallback","poster_path":"/fallback.jpg","media_type":"movie"}`))
+	}))
+	defer tmdbServer.Close()
+	metadataService := NewMediaMetadataService()
+	metadataService.settings = settingsService
+	metadataService.apiBaseURL = tmdbServer.URL
+	metadataService.httpClient = tmdbServer.Client()
+	metadataService.adapters["jellyfin"].(*jellyfinMediaMetadataAdapter).client = mediaServer.Client()
+	config, _ := json.Marshal(map[string]string{"media_server_url": mediaServer.URL})
+	secretConfig, _ := json.Marshal(map[string]string{"media_api_key": "jellyfin-key"})
+	presentation := webhook.Presentation{Data: map[string]interface{}{"media": map[string]interface{}{"id": "item-42", "type": "Movie", "provider_ids": map[string]interface{}{"tmdb": "42"}}}}
+	if err := metadataService.Enrich(&presentation, &model.AppIntegration{ID: 3, AppCode: "jellyfin", Secret: "integration-secret", Config: config, SecretConfig: secretConfig}); err != nil {
+		t.Fatal(err)
+	}
+	media := presentation.Data["media"].(map[string]interface{})
+	if tmdbRequests != 1 || media["overview"] != "TMDB fallback" || media["metadata_source"] != "tmdb" {
+		t.Fatalf("TMDB fallback failed: requests=%d media=%+v", tmdbRequests, media)
+	}
+}
+
+func TestEmbyAdapterUsesEmbyPrefixAndHeaderAuthentication(t *testing.T) {
+	requests := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests = append(requests, request.URL.Path)
+		if request.Header.Get("X-Emby-Token") != "emby-key" {
+			t.Errorf("Emby API key header = %q", request.Header.Get("X-Emby-Token"))
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"Id":"emby-item","Name":"Emby item","Type":"Movie"}`))
+	}))
+	defer server.Close()
+	adapter := &embyMediaMetadataAdapter{client: server.Client()}
+	settings, err := normalizeMediaServerSettings(server.URL, "emby-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Test(context.Background(), settings); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adapter.Fetch(context.Background(), settings, "emby-item"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(requests, ",") != "/emby/System/Info,/emby/Items/emby-item" {
+		t.Fatalf("unexpected Emby paths: %v", requests)
 	}
 }

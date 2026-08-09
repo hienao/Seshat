@@ -26,6 +26,12 @@ export interface ServiceChangePasswordRequest {
   old_password: string;
 }
 
+export interface ServiceIntegrationMediaSettingsResponse {
+  api_key?: string;
+  configured?: boolean;
+  server_url?: string;
+}
+
 export interface ServiceLoginRequest {
   password: string;
   username: string;
@@ -89,6 +95,11 @@ export interface ServiceTestTMDBConnectionRequest {
 export interface ServiceTokenResponse {
   expires_at?: number;
   token?: string;
+}
+
+export interface ServiceUpdateIntegrationMediaSettingsRequest {
+  api_key: string;
+  server_url: string;
 }
 
 export interface ServiceUpdateSystemSettingsRequest {
@@ -555,6 +566,22 @@ export class Api<
       }),
 
     /**
+     * No description
+     *
+     * @tags Webhook
+     * @name PublicMediaImagesDetail
+     * @summary 获取缓存媒体图片
+     * @request GET:/api/public/media-images/{token}
+     */
+    publicMediaImagesDetail: (token: string, params: RequestParams = {}) =>
+      this.request<Blob, ResponseResponse>({
+        path: `/api/public/media-images/${token}`,
+        method: "GET",
+        format: "blob",
+        ...params,
+      }),
+
+    /**
      * @description 检查系统是否允许注册（公开接口）
      *
      * @tags 设置
@@ -719,6 +746,90 @@ export class Api<
         path: `/api/user/profile`,
         method: "GET",
         secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Webhook
+     * @name WebhooksIntegrationsMediaSettingsList
+     * @summary 获取实例媒体 API 配置
+     * @request GET:/api/webhooks/integrations/{id}/media-settings
+     * @secure
+     */
+    webhooksIntegrationsMediaSettingsList: (
+      id: number,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: ServiceIntegrationMediaSettingsResponse;
+        },
+        ResponseResponse
+      >({
+        path: `/api/webhooks/integrations/${id}/media-settings`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Webhook
+     * @name WebhooksIntegrationsMediaSettingsUpdate
+     * @summary 保存实例媒体 API 配置
+     * @request PUT:/api/webhooks/integrations/{id}/media-settings
+     * @secure
+     */
+    webhooksIntegrationsMediaSettingsUpdate: (
+      id: number,
+      request: ServiceUpdateIntegrationMediaSettingsRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: ServiceIntegrationMediaSettingsResponse;
+        },
+        ResponseResponse
+      >({
+        path: `/api/webhooks/integrations/${id}/media-settings`,
+        method: "PUT",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Webhook
+     * @name WebhooksIntegrationsMediaSettingsTestCreate
+     * @summary 测试实例媒体 API
+     * @request POST:/api/webhooks/integrations/{id}/media-settings/test
+     * @secure
+     */
+    webhooksIntegrationsMediaSettingsTestCreate: (
+      id: number,
+      request: ServiceUpdateIntegrationMediaSettingsRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: Record<string, string>;
+        },
+        ResponseResponse
+      >({
+        path: `/api/webhooks/integrations/${id}/media-settings/test`,
+        method: "POST",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),

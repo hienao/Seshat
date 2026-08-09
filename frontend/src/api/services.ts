@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, ConnectionTestResult, CreatedIntegration, DisplayWebhookEvent, EventListResponse, EventNotificationStatus, Integration, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TestHTTPProxyInput, TestTMDBConnectionInput, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
+import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, ConnectionTestResult, CreatedIntegration, DisplayWebhookEvent, EventListResponse, EventNotificationStatus, Integration, IntegrationMediaSettings, IntegrationMediaSettingsInput, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TestHTTPProxyInput, TestTMDBConnectionInput, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
 import { readAccessToken } from '@/lib/auth-token'
 
 export const api = {
@@ -37,6 +37,9 @@ export const api = {
   integrationSecret: (id: number) => apiRequest<IntegrationSecret>(`/api/webhooks/integrations/${id}/secret`),
   rotateIntegrationSecret: (id: number) =>
     apiRequest<CreatedIntegration>(`/api/webhooks/integrations/${id}/rotate-secret`, { method: 'POST' }),
+	integrationMediaSettings: (id: number) => apiRequest<IntegrationMediaSettings>(`/api/webhooks/integrations/${id}/media-settings`),
+	updateIntegrationMediaSettings: (id: number, body: IntegrationMediaSettingsInput) => apiRequest<IntegrationMediaSettings>(`/api/webhooks/integrations/${id}/media-settings`, { method: 'PUT', body }),
+	testIntegrationMediaSettings: (id: number, body: IntegrationMediaSettingsInput) => apiRequest<ConnectionTestResult>(`/api/webhooks/integrations/${id}/media-settings/test`, { method: 'POST', body }),
   integrationNotificationSettings: (id: number) => apiRequest<IntegrationNotificationSettings>(`/api/webhooks/integrations/${id}/notification-settings`),
   updateIntegrationNotificationSettings: (id: number, channelId: number | null, enabledEventTypes: string[]) => apiRequest<IntegrationNotificationSettings>(`/api/webhooks/integrations/${id}/notification-settings`, { method: 'PUT', body: { channel_id: channelId, enabled_event_types: enabledEventTypes } }),
   notificationChannels: () => apiRequest<NotificationChannel[]>('/api/notification-channels'),

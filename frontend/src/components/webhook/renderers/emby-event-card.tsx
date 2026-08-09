@@ -20,9 +20,10 @@ function embyModel({ event }: EventCardProps): EventCardModel {
   if (category === 'system') title = text(system.name) || title
   return {
     renderer: 'emby', appName: 'Emby', appInitial: 'E', category, label, title,
-    summary: normalizedSummary(event.summary, `${label}事件`, category, media), imageUrl: safeWebUrl(text(media.image_url)), overview: text(media.overview),
-    facts: event.presentation?.facts ?? [], tags: tagsWithoutMediaType(event.presentation?.tags ?? [], media), percent: number(playback.percent),
+    summary: normalizedSummary(event.summary, `${label}事件`, category, media), imageUrl: safeWebUrl(text(media.image_url)),
+    imageLayout: text(media.type).toLowerCase() === 'episode' ? 'landscape' : 'portrait', overview: text(media.overview),
+    facts: event.presentation?.facts ?? [], wideFactLabels: ['外部 ID'], tags: tagsWithoutMediaType(event.presentation?.tags ?? [], media), percent: number(playback.percent),
     positionLabel: text(playback.position_label), durationLabel: text(media.duration_label),
-    metadataAttribution: text(media.metadata_source) === 'tmdb' ? '媒体资料由 TMDB 提供' : '', rawPreview: '',
+    metadataAttribution: text(media.metadata_source) === 'emby' ? '媒体资料由 Emby 提供' : text(media.metadata_source) === 'tmdb' ? '媒体资料由 TMDB 提供' : '', rawPreview: '',
   }
 }

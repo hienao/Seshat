@@ -1,6 +1,10 @@
 package service
 
 import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	appLogging "seshat/internal/logging"
 	"seshat/internal/model"
 	"seshat/internal/webhook"
 	"seshat/pkg/database"
@@ -29,6 +34,7 @@ type MediaMetadataService struct {
 	proxyTestURL string
 	httpClient   *http.Client
 	settings     *SettingService
+	adapters     map[string]mediaServerMetadataAdapter
 }
 
 type mediaMetadataLookup struct {
@@ -78,12 +84,39 @@ type TestHTTPProxyRequest struct {
 }
 
 func NewMediaMetadataService() *MediaMetadataService {
-	return &MediaMetadataService{
+	service := &MediaMetadataService{
 		apiBaseURL:   defaultTMDBAPIBaseURL,
 		proxyTestURL: defaultProxyTestURL,
 		httpClient:   &http.Client{Timeout: 4 * time.Second},
 		settings:     NewSettingService(),
 	}
+	service.registerAdapter(newJellyfinMediaMetadataAdapter())
+	service.registerAdapter(newEmbyMediaMetadataAdapter())
+	return service
+}
+
+func (s *MediaMetadataService) registerAdapter(adapter mediaServerMetadataAdapter) {
+	if s.adapters == nil {
+		s.adapters = make(map[string]mediaServerMetadataAdapter)
+	}
+	s.adapters[adapter.Code()] = adapter
+}
+
+func (s *MediaMetadataService) adapter(appCode string) (mediaServerMetadataAdapter, bool) {
+	adapter, ok := s.adapters[appCode]
+	return adapter, ok
+}
+
+func (s *MediaMetadataService) TestMediaServer(ctx context.Context, appCode, serverURL, apiKey string) error {
+	adapter, ok := s.adapter(appCode)
+	if !ok {
+		return ErrMediaAPIUnsupported
+	}
+	settings, err := normalizeMediaServerSettings(serverURL, apiKey)
+	if err != nil {
+		return err
+	}
+	return adapter.Test(ctx, settings)
 }
 
 func (s *MediaMetadataService) TestHTTPProxy(request *TestHTTPProxyRequest) error {
@@ -165,7 +198,7 @@ func (s *MediaMetadataService) TestConnection(request *TestTMDBConnectionRequest
 	return nil
 }
 
-func (s *MediaMetadataService) Enrich(presentation *webhook.Presentation) error {
+func (s *MediaMetadataService) Enrich(presentation *webhook.Presentation, integrations ...*model.AppIntegration) error {
 	if presentation == nil {
 		return nil
 	}
@@ -173,26 +206,41 @@ func (s *MediaMetadataService) Enrich(presentation *webhook.Presentation) error 
 	if !ok {
 		return nil
 	}
-	lookup := metadataLookupForMedia(media)
-	if lookup == nil {
-		return nil
-	}
-
 	now := time.Now()
 	retentionDays := s.settings.RetentionDays()
 	retentionCutoff := now.AddDate(0, 0, -retentionDays)
 	defer func() {
 		_ = database.GetDB().Where("expires_at <= ? OR updated_at <= ?", now, retentionCutoff).Delete(&model.MediaMetadataCache{}).Error
 	}()
+
+	if len(integrations) > 0 && integrations[0] != nil {
+		integration := integrations[0]
+		used, err := s.enrichFromMediaServer(context.Background(), integration, presentation, media, now, retentionCutoff, retentionDays)
+		if used {
+			webhook.RefreshMediaPresentation(presentation)
+			return nil
+		}
+		if err != nil {
+			appLogging.Warn("webhook", "媒体服务器信息获取失败，将尝试 TMDB 回退", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "error": err})
+		}
+	}
+	return s.enrichFromTMDB(presentation, media, now, retentionCutoff, retentionDays)
+}
+
+func (s *MediaMetadataService) enrichFromTMDB(presentation *webhook.Presentation, media map[string]interface{}, now, retentionCutoff time.Time, retentionDays int) error {
+	lookup := metadataLookupForMedia(media)
+	if lookup == nil {
+		return nil
+	}
 	var metadata model.MediaMetadataCache
-	err := database.GetDB().Where("cache_key = ? AND expires_at > ? AND updated_at > ?", lookup.cacheKey, now, retentionCutoff).First(&metadata).Error
-	if err == nil {
+	result := database.GetDB().Where("cache_key = ? AND expires_at > ? AND updated_at > ?", lookup.cacheKey, now, retentionCutoff).Limit(1).Find(&metadata)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected > 0 {
 		applyMediaMetadata(media, &metadata)
 		appendMetadataLink(presentation, metadata.SourceURL)
 		return nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
 	}
 	apiKey := s.settings.TMDBAPIKey()
 	if apiKey == "" {
@@ -216,6 +264,112 @@ func (s *MediaMetadataService) Enrich(presentation *webhook.Presentation) error 
 	applyMediaMetadata(media, fetched)
 	appendMetadataLink(presentation, fetched.SourceURL)
 	return nil
+}
+
+func (s *MediaMetadataService) enrichFromMediaServer(ctx context.Context, integration *model.AppIntegration, presentation *webhook.Presentation, media map[string]interface{}, now, retentionCutoff time.Time, retentionDays int) (bool, error) {
+	adapter, ok := s.adapter(integration.AppCode)
+	if !ok {
+		return false, nil
+	}
+	settings, configured := mediaSettingsFromIntegration(integration)
+	if !configured {
+		return false, nil
+	}
+	itemID := stringFromMap(media, "id")
+	if itemID == "" {
+		return false, errors.New("Webhook 消息中没有媒体 Item ID")
+	}
+	itemHash := sha256.Sum256([]byte(itemID))
+	cacheKey := fmt.Sprintf("%s:%d:%x", adapter.Code(), integration.ID, itemHash)
+	var cached model.MediaMetadataCache
+	result := database.GetDB().Where("cache_key = ? AND expires_at > ? AND updated_at > ?", cacheKey, now, retentionCutoff).Limit(1).Find(&cached)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected > 0 {
+		if err := applyMediaServerMetadata(media, &cached); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	fetched, err := adapter.Fetch(ctx, settings, itemID)
+	if err != nil {
+		return false, err
+	}
+	metadataJSON, err := json.Marshal(fetched.Fields)
+	if err != nil {
+		return false, errors.New("无法缓存媒体服务器返回的数据")
+	}
+	item := &model.MediaMetadataCache{
+		CacheKey: cacheKey, Provider: adapter.Code(), ExternalID: firstNonEmpty(fetched.ExternalID, itemID), MediaType: fetched.MediaType,
+		Metadata: metadataJSON, ImageData: fetched.ImageData, ImageType: fetched.ImageType, ExpiresAt: now.AddDate(0, 0, retentionDays),
+	}
+	if title, ok := fetched.Fields["name"].(string); ok {
+		item.Title = title
+	}
+	if overview, ok := fetched.Fields["overview"].(string); ok {
+		item.Overview = overview
+	}
+	if len(item.ImageData) > 0 {
+		var previous model.MediaMetadataCache
+		previousResult := database.GetDB().Select("image_token").Where("cache_key = ?", cacheKey).Limit(1).Find(&previous)
+		if previousResult.Error != nil {
+			return false, previousResult.Error
+		}
+		item.ImageToken = previous.ImageToken
+		if item.ImageToken == "" {
+			item.ImageToken = mediaImageToken(integration.Secret, cacheKey)
+		}
+		item.ImageURL = "/api/public/media-images/" + item.ImageToken
+	}
+	if err := database.GetDB().Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "cache_key"}},
+		DoUpdates: clause.AssignmentColumns([]string{"provider", "external_id", "media_type", "title", "overview", "image_url", "image_token", "image_data", "image_type", "metadata", "expires_at", "updated_at"}),
+	}).Create(item).Error; err != nil {
+		return false, err
+	}
+	if err := applyMediaServerMetadata(media, item); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func mediaImageToken(integrationSecret, cacheKey string) string {
+	digest := hmac.New(sha256.New, []byte(integrationSecret))
+	_, _ = digest.Write([]byte(cacheKey))
+	return base64.RawURLEncoding.EncodeToString(digest.Sum(nil))
+}
+
+func applyMediaServerMetadata(media map[string]interface{}, cached *model.MediaMetadataCache) error {
+	fields := map[string]interface{}{}
+	if len(cached.Metadata) > 0 {
+		if err := json.Unmarshal(cached.Metadata, &fields); err != nil {
+			return errors.New("媒体服务器缓存数据格式无效")
+		}
+	}
+	for key, value := range fields {
+		media[key] = value
+	}
+	if cached.ImageURL != "" {
+		media["image_url"] = cached.ImageURL
+	}
+	media["metadata_source"] = cached.Provider
+	return nil
+}
+
+func (s *MediaMetadataService) CachedImage(token string) (*model.MediaMetadataCache, error) {
+	if len(token) < 32 || len(token) > 100 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var item model.MediaMetadataCache
+	result := database.GetDB().Select("image_data", "image_type", "expires_at").Where("image_token = ? AND expires_at > ?", token, time.Now()).Limit(1).Find(&item)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 || len(item.ImageData) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &item, nil
 }
 
 func metadataLookupForMedia(media map[string]interface{}) *mediaMetadataLookup {
