@@ -65,12 +65,12 @@ npm run dev
 - `SQLite` 路径固定派生为 `/data/db/seshat.db`
 - 日志目录固定派生为 `/cache/logs/app`
 - 接口日志和业务日志固定启用并保存到 `/cache/logs/app/api-logs.db` 的独立数据表中
-- 两类日志默认保留 30 天，管理员可在“系统管理 → 系统设置”中调整为 1–3650 天，保存后立即生效
+- 接口日志、业务日志和外部媒体资料缓存默认保留 7 天，管理员可在“系统管理 → 系统设置”中调整为 1–30 天，保存后立即生效
+- Jellyfin/Emby 会展示剧集层级、客户端、设备、简介和视频流信息；可选配置 TMDB API Read Access Token，按 Provider ID 补充并缓存海报和简介
 - 登录令牌由前端保存到 LocalStorage，并通过 `Authorization: Bearer <token>` 请求头发送
 - Webhook Secret 以明文保存在业务数据库中；接入列表不批量返回该字段，实例所属用户可在接入卡片中按需查看，查看接口禁止缓存
 - Emby 不支持自定义 Webhook 请求头，因此使用随机接入地址作为凭据；其他 App 按接入说明使用 Secret 请求头或签名
-- 推送渠道凭据以明文保存在业务数据库中，但 API 不返回其内容；Webhook、Apprise 和其他可配置 URL 默认只允许公网 HTTPS 目标
-- 管理员可在“系统管理 → 系统设置”中显式允许私有网络推送目标，开启后仍会阻止 link-local 和已知云元数据地址
+- 推送渠道凭据以明文保存在业务数据库中，但 API 不返回其内容；Webhook、Apprise 和其他可配置 URL 支持 HTTP/HTTPS 与私有网络目标，同时阻止链路本地、组播、未指定地址和已知云元数据地址
 - 管理员可在系统设置中保存一个 HTTP/HTTPS 代理；每个推送渠道独立决定是否使用，默认不使用代理
 
 #### DATABASE_URL 格式
@@ -256,6 +256,7 @@ Seshat/
 | GET | /api/webhooks/events | 查询收到的 Webhook 消息 |
 | GET | /api/webhooks/events/:id | 查看消息详情和原始内容 |
 | GET | /api/webhooks/events/:id/notification-status | 查看消息的推送状态 |
+| GET | /api/public/events/:token | 通过随机访问标识查看标准化消息（无需登录） |
 | GET/POST | /api/notification-channels | 查询/创建推送渠道 |
 | PUT/DELETE | /api/notification-channels/:id | 更新/删除推送渠道 |
 | POST | /api/notification-channels/:id/test | 发送测试通知 |
@@ -270,6 +271,8 @@ Seshat/
 | GET | /api/admin/application-logs/:id | 查看业务日志详情（管理员） |
 | GET | /api/admin/application-logs/export | 导出业务日志 CSV/JSONL（管理员） |
 | POST | /api/admin/application-logs/clear | 按条件清空业务日志（管理员） |
+
+启用消息推送前，请在“系统管理 → 系统设置”中配置用户可访问的“对外访问地址”，例如 `https://seshat.example.com`。每条实际推送的消息末尾会附加不可猜测的公开详情链接；该页面只返回标准化展示，不包含原始 Webhook 内容、接入实例、推送状态或日志信息。该链接本身具有访问权限，请勿公开转发。
 
 ## 记录业务日志
 

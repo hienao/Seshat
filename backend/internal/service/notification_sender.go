@@ -49,6 +49,7 @@ type outboundMessage struct {
 	EventID         uint
 	EventType       string
 	ReceivedAt      time.Time
+	DetailURL       string
 }
 
 func (s *NotificationService) TestChannel(ownerID, id uint) (*NotificationChannelResponse, error) {
@@ -189,6 +190,16 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 	if message.Body == "" {
 		message.Body = "收到一条新的 Webhook 消息"
 	}
+	if err := ensurePublicEventToken(&event); err != nil {
+		w.fail(delivery, 0, errors.New("生成消息详情链接失败"), true, 0)
+		return
+	}
+	publicBaseURL := NewSettingService().PublicBaseURL()
+	if publicBaseURL == "" {
+		w.fail(delivery, 0, errors.New("系统尚未配置对外访问地址"), false, 0)
+		return
+	}
+	message.DetailURL = publicBaseURL + "/public/events/" + url.PathEscape(event.PublicToken)
 	allowPrivate, proxyURL, policyErr := notificationNetworkPolicyForChannel(&channel)
 	err := policyErr
 	if err == nil {
@@ -250,15 +261,15 @@ func retryDelay(attempt int) time.Duration {
 }
 
 func sendChannel(ctx context.Context, channel *model.NotificationChannel, message outboundMessage, allowPrivate bool, proxyURL string) error {
-	if channel.Type == "email" {
-		return sendEmailChannel(ctx, channel, message, allowPrivate, proxyURL)
+	adapter, ok := defaultNotificationChannelRegistry.Get(channel.Type)
+	if !ok {
+		return &deliveryError{message: "不支持的推送渠道类型"}
 	}
-	spec, err := buildNotificationHTTPRequest(channel, message)
-	if err != nil {
-		return err
-	}
-	requirePublicHost := channelRequiresPublicHost(channel.Type)
-	endpointAllowsPrivate := allowPrivate && !requirePublicHost
+	return adapter.Send(ctx, channel, message, notificationSendOptions{allowPrivate: allowPrivate, proxyURL: proxyURL})
+}
+
+func sendNotificationHTTPRequest(ctx context.Context, spec *notificationRequestSpec, options notificationSendOptions, validateResponse func([]byte) error) error {
+	endpointAllowsPrivate := options.allowPrivate && !spec.requirePublicHost
 	if err := validateOutboundURL(spec.endpoint, endpointAllowsPrivate); err != nil {
 		return &deliveryError{message: err.Error()}
 	}
@@ -269,7 +280,7 @@ func sendChannel(ctx context.Context, channel *model.NotificationChannel, messag
 	for key, value := range spec.headers {
 		request.Header.Set(key, value)
 	}
-	client, err := notificationHTTPClient(requirePublicHost, allowPrivate, proxyURL)
+	client, err := notificationHTTPClient(spec.requirePublicHost, options.allowPrivate, options.proxyURL)
 	if err != nil {
 		return &deliveryError{message: "系统 HTTP 代理配置无效"}
 	}
@@ -291,7 +302,7 @@ func sendChannel(ctx context.Context, channel *model.NotificationChannel, messag
 	defer response.Body.Close()
 	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, notificationResponseLimit))
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return validateNotificationAPIResponse(channel.Type, responseBody)
+		return validateResponse(responseBody)
 	}
 	retryable := response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500
 	retryAfter := time.Duration(0)
@@ -304,15 +315,6 @@ func sendChannel(ctx context.Context, channel *model.NotificationChannel, messag
 	}
 	messageText := fmt.Sprintf("推送渠道返回 HTTP %d", response.StatusCode)
 	return &deliveryError{message: messageText, statusCode: response.StatusCode, retryable: retryable, retryAfter: retryAfter}
-}
-
-func channelRequiresPublicHost(channelType string) bool {
-	switch channelType {
-	case "telegram", "serverchan", "whatsapp", "wxpusher":
-		return true
-	default:
-		return false
-	}
 }
 
 func notificationHTTPClient(requirePublicHost bool, allowPrivate bool, proxyURL string) (*http.Client, error) {
@@ -357,7 +359,10 @@ func validateOutboundURL(rawURL string, allowPrivate bool) error {
 		return errors.New("推送目标 URL 无效")
 	}
 	if parsed.Scheme != "https" && !(allowPrivate && parsed.Scheme == "http") {
-		return errors.New("推送目标必须使用 HTTPS；私有网络开启后可使用 HTTP")
+		if allowPrivate {
+			return errors.New("推送目标必须使用 HTTP 或 HTTPS")
+		}
+		return errors.New("推送目标必须使用 HTTPS")
 	}
 	ips, err := net.LookupIP(parsed.Hostname())
 	if err != nil || len(ips) == 0 {
@@ -383,12 +388,8 @@ func validateOutboundIP(ip net.IP, allowPrivate bool) error {
 	return nil
 }
 
-func allowPrivateNotificationTargets() bool {
-	return NewSettingService().AllowPrivateNotificationTargets()
-}
-
 func notificationNetworkPolicyForChannel(channel *model.NotificationChannel) (bool, string, error) {
-	allowPrivate := allowPrivateNotificationTargets()
+	const allowPrivate = true
 	config := map[string]interface{}{}
 	_ = json.Unmarshal(channel.Config, &config)
 	useProxy, _ := config["use_proxy"].(bool)
@@ -400,18 +401,6 @@ func notificationNetworkPolicyForChannel(channel *model.NotificationChannel) (bo
 		return allowPrivate, "", &deliveryError{message: "渠道已启用代理，但系统尚未配置 HTTP 代理"}
 	}
 	return allowPrivate, proxyURL, nil
-}
-func appriseSeverity(value string) string {
-	switch strings.ToLower(value) {
-	case "success":
-		return "success"
-	case "warning", "warn":
-		return "warning"
-	case "error", "critical":
-		return "failure"
-	default:
-		return "info"
-	}
 }
 func truncateNotificationError(value string) string {
 	value = strings.TrimSpace(value)

@@ -31,6 +31,20 @@ export interface ServiceLoginRequest {
   username: string;
 }
 
+export interface ServicePublicEventResponse {
+  app_code?: string;
+  display_event_type?: string;
+  is_fallback?: boolean;
+  occurred_at?: string;
+  presentation?: WebhookPresentation;
+  presentation_version?: number;
+  received_at?: string;
+  severity?: string;
+  source_event_type?: string;
+  summary?: string;
+  title?: string;
+}
+
 export interface ServiceRegisterRequest {
   /** @minLength 6 */
   password: string;
@@ -52,11 +66,12 @@ export interface ServiceSetupAdminRequest {
 }
 
 export interface ServiceSystemSettingsResponse {
-  allow_private_notification_targets?: boolean;
   allow_register?: boolean;
   api_log_retention_days?: number;
   http_proxy_configured?: boolean;
   http_proxy_display?: string;
+  public_base_url?: string;
+  tmdb_configured?: boolean;
 }
 
 export interface ServiceTokenResponse {
@@ -65,11 +80,13 @@ export interface ServiceTokenResponse {
 }
 
 export interface ServiceUpdateSystemSettingsRequest {
-  allow_private_notification_targets?: boolean;
   allow_register?: boolean;
   api_log_retention_days?: number;
   clear_http_proxy?: boolean;
+  clear_tmdb_token?: boolean;
   http_proxy_url?: string;
+  public_base_url?: string;
+  tmdb_read_access_token?: string;
 }
 
 export interface ServiceUserResponse {
@@ -78,6 +95,17 @@ export interface ServiceUserResponse {
   is_admin?: boolean;
   requires_admin_setup?: boolean;
   username?: string;
+}
+
+export interface WebhookPresentation {
+  data?: Record<string, any>;
+  facts?: Record<string, string>[];
+  links?: Record<string, string>[];
+  schema_version?: number;
+  severity?: string;
+  summary?: string;
+  tags?: string[];
+  title?: string;
 }
 
 export type QueryParamsType = Record<string | number, any>;
@@ -141,7 +169,7 @@ export class HttpClient<SecurityDataType = unknown> {
     fetch(...fetchParams);
 
   private baseApiParams: RequestParams = {
-    credentials: "omit",
+    credentials: "same-origin",
     headers: {},
     redirect: "follow",
     referrerPolicy: "no-referrer",
@@ -488,6 +516,27 @@ export class Api<
         body: request,
         secure: true,
         type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description 通过不可猜测的访问标识获取标准化展示，不返回原始消息或内部信息
+     *
+     * @tags Webhook
+     * @name PublicEventsDetail
+     * @summary 获取公开消息详情
+     * @request GET:/api/public/events/{token}
+     */
+    publicEventsDetail: (token: string, params: RequestParams = {}) =>
+      this.request<
+        ResponseResponse & {
+          data?: ServicePublicEventResponse;
+        },
+        ResponseResponse
+      >({
+        path: `/api/public/events/${token}`,
+        method: "GET",
         format: "json",
         ...params,
       }),

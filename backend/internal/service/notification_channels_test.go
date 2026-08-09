@@ -13,6 +13,30 @@ import (
 	"seshat/internal/model"
 )
 
+func buildTestNotificationRequest(channel *model.NotificationChannel, message outboundMessage) (*notificationRequestSpec, error) {
+	adapter, ok := defaultNotificationChannelRegistry.Get(channel.Type)
+	if !ok {
+		return nil, errors.New("adapter not found")
+	}
+	httpAdapter, ok := adapter.(notificationHTTPChannelAdapter)
+	if !ok {
+		return nil, errors.New("adapter is not HTTP based")
+	}
+	return httpAdapter.BuildRequest(channel, message)
+}
+
+func validateTestNotificationResponse(channelType string, body []byte) error {
+	adapter, ok := defaultNotificationChannelRegistry.Get(channelType)
+	if !ok {
+		return errors.New("adapter not found")
+	}
+	httpAdapter, ok := adapter.(notificationHTTPChannelAdapter)
+	if !ok {
+		return errors.New("adapter is not HTTP based")
+	}
+	return httpAdapter.ValidateResponse(body)
+}
+
 func TestBarkSenderChecksBusinessResponse(t *testing.T) {
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -93,7 +117,7 @@ func TestBuildAdditionalNotificationRequests(t *testing.T) {
 		ReceivedAt:      time.Now(),
 	}
 
-	serverChan, err := buildNotificationHTTPRequest(&model.NotificationChannel{Type: "serverchan", Config: []byte(`{}`), SecretConfig: []byte(`{"send_key":"SCT123"}`)}, message)
+	serverChan, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "serverchan", Config: []byte(`{}`), SecretConfig: []byte(`{"send_key":"SCT123"}`)}, message)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +129,7 @@ func TestBuildAdditionalNotificationRequests(t *testing.T) {
 		t.Fatalf("unexpected ServerChan payload: %s", serverChan.body)
 	}
 
-	bark, err := buildNotificationHTTPRequest(&model.NotificationChannel{Type: "bark", Config: []byte(`{"base_url":"https://api.day.app","group":"Seshat","sound":"bell"}`), SecretConfig: []byte(`{"device_key":"device-key"}`)}, message)
+	bark, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "bark", Config: []byte(`{"base_url":"https://api.day.app","group":"Seshat","sound":"bell"}`), SecretConfig: []byte(`{"device_key":"device-key"}`)}, message)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +139,7 @@ func TestBuildAdditionalNotificationRequests(t *testing.T) {
 		t.Fatalf("unexpected Bark request: %s %s", bark.endpoint, bark.body)
 	}
 
-	dingTalk, err := buildNotificationHTTPRequest(&model.NotificationChannel{Type: "dingtalk", Config: []byte(`{}`), SecretConfig: []byte(`{"webhook_url":"https://oapi.dingtalk.com/robot/send?access_token=token","signing_secret":"SEC-test"}`)}, message)
+	dingTalk, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "dingtalk", Config: []byte(`{}`), SecretConfig: []byte(`{"webhook_url":"https://oapi.dingtalk.com/robot/send?access_token=token","signing_secret":"SEC-test"}`)}, message)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +148,7 @@ func TestBuildAdditionalNotificationRequests(t *testing.T) {
 		t.Fatalf("unexpected DingTalk request: %s %s", dingTalk.endpoint, dingTalk.body)
 	}
 
-	feishu, err := buildNotificationHTTPRequest(&model.NotificationChannel{Type: "feishu", Config: []byte(`{}`), SecretConfig: []byte(`{"webhook_url":"https://open.feishu.cn/open-apis/bot/v2/hook/token","signing_secret":"secret"}`)}, message)
+	feishu, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "feishu", Config: []byte(`{}`), SecretConfig: []byte(`{"webhook_url":"https://open.feishu.cn/open-apis/bot/v2/hook/token","signing_secret":"secret"}`)}, message)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +158,7 @@ func TestBuildAdditionalNotificationRequests(t *testing.T) {
 		t.Fatalf("unexpected Feishu payload: %s", feishu.body)
 	}
 
-	whatsApp, err := buildNotificationHTTPRequest(&model.NotificationChannel{Type: "whatsapp", Config: []byte(`{"api_version":"v25.0"}`), SecretConfig: []byte(`{"access_token":"access-token","phone_number_id":"1234","recipient":"8613800000000"}`)}, message)
+	whatsApp, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "whatsapp", Config: []byte(`{"api_version":"v25.0"}`), SecretConfig: []byte(`{"access_token":"access-token","phone_number_id":"1234","recipient":"8613800000000"}`)}, message)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +166,7 @@ func TestBuildAdditionalNotificationRequests(t *testing.T) {
 		t.Fatalf("unexpected WhatsApp request: %s %s", whatsApp.endpoint, whatsApp.body)
 	}
 
-	wxPusher, err := buildNotificationHTTPRequest(&model.NotificationChannel{Type: "wxpusher", Config: []byte(`{"uids":"UID_one,UID_two","topic_ids":"42,43"}`), SecretConfig: []byte(`{"app_token":"AT_test"}`)}, message)
+	wxPusher, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "wxpusher", Config: []byte(`{"uids":"UID_one,UID_two","topic_ids":"42,43"}`), SecretConfig: []byte(`{"app_token":"AT_test"}`)}, message)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,12 +196,80 @@ func TestNotificationAPIResponseValidation(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.channelType+test.body, func(t *testing.T) {
-			err := validateNotificationAPIResponse(test.channelType, []byte(test.body))
+			err := validateTestNotificationResponse(test.channelType, []byte(test.body))
 			if (err != nil) != test.wantError {
 				t.Fatalf("error = %v, wantError = %v", err, test.wantError)
 			}
 		})
 	}
+}
+
+func TestNotificationChannelRegistryKeepsAdaptersIndependent(t *testing.T) {
+	expected := []string{"apprise", "bark", "dingtalk", "email", "feishu", "serverchan", "telegram", "webhook", "whatsapp", "wxpusher"}
+	actual := defaultNotificationChannelRegistry.Types()
+	if strings.Join(actual, ",") != strings.Join(expected, ",") {
+		t.Fatalf("registered adapters = %v, want %v", actual, expected)
+	}
+	telegram, _ := defaultNotificationChannelRegistry.Get("telegram")
+	if _, _, err := telegram.Sanitize(map[string]interface{}{"base_url": "https://example.com"}, map[string]interface{}{}); err == nil {
+		t.Fatal("Telegram adapter accepted an Apprise-only field")
+	}
+	bark, _ := defaultNotificationChannelRegistry.Get("bark")
+	if _, _, err := bark.Sanitize(map[string]interface{}{}, map[string]interface{}{"bot_token": "secret"}); err == nil {
+		t.Fatal("Bark adapter accepted a Telegram-only credential")
+	}
+}
+
+func TestEveryNotificationChannelAdapterOwnsItsConfiguration(t *testing.T) {
+	tests := []struct {
+		channelType string
+		config      map[string]interface{}
+		credentials map[string]interface{}
+	}{
+		{"webhook", map[string]interface{}{}, map[string]interface{}{"url": "https://example.com/notify"}},
+		{"telegram", map[string]interface{}{"chat_id": "42"}, map[string]interface{}{"bot_token": "token"}},
+		{"apprise", map[string]interface{}{"base_url": "https://apprise.example.com"}, map[string]interface{}{"config_id": "main"}},
+		{"email", map[string]interface{}{"smtp_host": "smtp.example.com", "smtp_port": 587, "from": "notice@example.com", "to": "user@example.com"}, map[string]interface{}{}},
+		{"serverchan", map[string]interface{}{}, map[string]interface{}{"send_key": "SCT123"}},
+		{"bark", map[string]interface{}{"base_url": "https://api.day.app"}, map[string]interface{}{"device_key": "device"}},
+		{"dingtalk", map[string]interface{}{}, map[string]interface{}{"webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=token"}},
+		{"feishu", map[string]interface{}{}, map[string]interface{}{"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/token"}},
+		{"whatsapp", map[string]interface{}{"api_version": "v25.0"}, map[string]interface{}{"access_token": "token", "phone_number_id": "123", "recipient": "8613800000000"}},
+		{"wxpusher", map[string]interface{}{"uids": "UID_one"}, map[string]interface{}{"app_token": "AT_token"}},
+	}
+	for _, test := range tests {
+		t.Run(test.channelType, func(t *testing.T) {
+			adapter, ok := defaultNotificationChannelRegistry.Get(test.channelType)
+			if !ok {
+				t.Fatal("adapter not registered")
+			}
+			config, credentials, err := adapter.Sanitize(test.config, test.credentials)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := adapter.Validate(config, credentials); err != nil {
+				t.Fatal(err)
+			}
+			foreignConfig := cloneNotificationTestValues(test.config)
+			foreignConfig["foreign_channel_field"] = true
+			if _, _, err := adapter.Sanitize(foreignConfig, test.credentials); err == nil {
+				t.Fatal("adapter accepted a foreign config field")
+			}
+			foreignCredentials := cloneNotificationTestValues(test.credentials)
+			foreignCredentials["foreign_channel_secret"] = "secret"
+			if _, _, err := adapter.Sanitize(test.config, foreignCredentials); err == nil {
+				t.Fatal("adapter accepted a foreign credential field")
+			}
+		})
+	}
+}
+
+func cloneNotificationTestValues(values map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{}, len(values)+1)
+	for key, value := range values {
+		result[key] = value
+	}
+	return result
 }
 
 func TestNotificationChannelInputValidationEdges(t *testing.T) {

@@ -305,6 +305,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/public/events/{token}": {
+            "get": {
+                "description": "通过不可猜测的访问标识获取标准化展示，不返回原始消息或内部信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "获取公开消息详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "公开访问标识",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/service.PublicEventResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/settings/registration-status": {
             "get": {
                 "description": "检查系统是否允许注册（公开接口）",
@@ -573,6 +620,44 @@ const docTemplate = `{
                 }
             }
         },
+        "service.PublicEventResponse": {
+            "type": "object",
+            "properties": {
+                "app_code": {
+                    "type": "string"
+                },
+                "display_event_type": {
+                    "type": "string"
+                },
+                "is_fallback": {
+                    "type": "boolean"
+                },
+                "occurred_at": {
+                    "type": "string"
+                },
+                "presentation": {
+                    "$ref": "#/definitions/webhook.Presentation"
+                },
+                "presentation_version": {
+                    "type": "integer"
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "source_event_type": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
         "service.RegisterRequest": {
             "type": "object",
             "required": [
@@ -612,9 +697,6 @@ const docTemplate = `{
         "service.SystemSettingsResponse": {
             "type": "object",
             "properties": {
-                "allow_private_notification_targets": {
-                    "type": "boolean"
-                },
                 "allow_register": {
                     "type": "boolean"
                 },
@@ -626,6 +708,12 @@ const docTemplate = `{
                 },
                 "http_proxy_display": {
                     "type": "string"
+                },
+                "public_base_url": {
+                    "type": "string"
+                },
+                "tmdb_configured": {
+                    "type": "boolean"
                 }
             }
         },
@@ -643,9 +731,6 @@ const docTemplate = `{
         "service.UpdateSystemSettingsRequest": {
             "type": "object",
             "properties": {
-                "allow_private_notification_targets": {
-                    "type": "boolean"
-                },
                 "allow_register": {
                     "type": "boolean"
                 },
@@ -655,7 +740,16 @@ const docTemplate = `{
                 "clear_http_proxy": {
                     "type": "boolean"
                 },
+                "clear_tmdb_token": {
+                    "type": "boolean"
+                },
                 "http_proxy_url": {
+                    "type": "string"
+                },
+                "public_base_url": {
+                    "type": "string"
+                },
+                "tmdb_read_access_token": {
                     "type": "string"
                 }
             }
@@ -676,6 +770,51 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhook.Presentation": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "facts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "links": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "schema_version": {
+                    "type": "integer"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
                     "type": "string"
                 }
             }

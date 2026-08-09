@@ -104,6 +104,30 @@ func (h *WebhookHandler) GetEvent(c *gin.Context) {
 	response.Success(c, item)
 }
 
+// GetPublicEvent 获取公开消息的标准化展示
+// @Summary 获取公开消息详情
+// @Description 通过不可猜测的访问标识获取标准化展示，不返回原始消息或内部信息
+// @Tags Webhook
+// @Produce json
+// @Param token path string true "公开访问标识"
+// @Success 200 {object} response.Response{data=service.PublicEventResponse}
+// @Failure 404 {object} response.Response
+// @Router /api/public/events/{token} [get]
+func (h *WebhookHandler) GetPublicEvent(c *gin.Context) {
+	item, err := h.service.GetPublicEvent(c.Param("token"))
+	if err != nil {
+		if errors.Is(err, service.ErrPublicEventNotFound) {
+			response.NotFound(c, "消息不存在")
+			return
+		}
+		response.InternalError(c, "读取消息失败")
+		return
+	}
+	c.Header("Cache-Control", "private, no-store")
+	c.Header("Referrer-Policy", "no-referrer")
+	response.Success(c, item)
+}
+
 func (h *WebhookHandler) Receive(c *gin.Context) {
 	headers := make(map[string]string)
 	for key, values := range c.Request.Header {

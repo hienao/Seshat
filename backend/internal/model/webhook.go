@@ -26,6 +26,7 @@ func (AppIntegration) TableName() string { return "app_integrations" }
 // WebhookEvent 是一次收到的 Webhook 消息及其归一化结果。
 type WebhookEvent struct {
 	ID                  uint           `gorm:"primarykey" json:"id"`
+	PublicToken         string         `gorm:"uniqueIndex;size:64;default:null" json:"-"`
 	IntegrationID       uint           `gorm:"index;not null" json:"integration_id"`
 	AppCode             string         `gorm:"size:50;index;not null" json:"app_code"`
 	SourceEventType     string         `gorm:"size:150;index" json:"source_event_type"`
@@ -49,6 +50,24 @@ type WebhookEvent struct {
 }
 
 func (WebhookEvent) TableName() string { return "webhook_events" }
+
+// MediaMetadataCache 持久化外部媒体平台返回的展示信息，避免重复查询。
+type MediaMetadataCache struct {
+	ID         uint      `gorm:"primarykey"`
+	CacheKey   string    `gorm:"uniqueIndex;size:220;not null"`
+	Provider   string    `gorm:"index;size:30;not null"`
+	ExternalID string    `gorm:"index;size:100;not null"`
+	MediaType  string    `gorm:"size:30"`
+	Title      string    `gorm:"size:500"`
+	Overview   string    `gorm:"type:text"`
+	ImageURL   string    `gorm:"size:1000"`
+	SourceURL  string    `gorm:"size:1000"`
+	ExpiresAt  time.Time `gorm:"index;not null"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+func (MediaMetadataCache) TableName() string { return "media_metadata_cache" }
 
 type NotificationChannel struct {
 	ID             uint           `gorm:"primarykey" json:"id"`

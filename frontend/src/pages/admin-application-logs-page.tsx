@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { api } from '@/api/services'
 import type { ApplicationLogLevel } from '@/api/types'
 import { AppButton } from '@/components/common/app-button'
+import { ConfirmDialog } from '@/components/common/confirm-dialog'
 import { EmptyState, ErrorState, Message } from '@/components/common/feedback'
 import { PageHeader } from '@/components/common/page-header'
 import { Panel } from '@/components/common/panel'
@@ -53,7 +54,6 @@ export function AdminApplicationLogsPage() {
   const queryClient = useQueryClient()
   const [filters, setFilters] = useState<Filters>(initialFilters)
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [clearText, setClearText] = useState('')
   const current = apiFilters(filters)
   const logs = useQuery({ queryKey: ['admin', 'application-logs', current], queryFn: () => api.applicationLogs(current) })
   const summary = useQuery({ queryKey: ['admin', 'application-log-summary', current], queryFn: () => api.applicationLogSummary(current) })
@@ -61,7 +61,6 @@ export function AdminApplicationLogsPage() {
   const clear = useMutation({
     mutationFn: () => api.clearApplicationLogs({ start_at: current.startAt, end_at: current.endAt, level: current.level, source: current.source, request_id: current.requestId, keyword: current.keyword, confirmation: 'CLEAR_APPLICATION_LOGS' }),
     onSuccess: () => {
-      setClearText('')
       void queryClient.invalidateQueries({ queryKey: ['admin', 'application-logs'] })
       void queryClient.invalidateQueries({ queryKey: ['admin', 'application-log-summary'] })
     },
@@ -81,11 +80,6 @@ export function AdminApplicationLogsPage() {
   function update<K extends keyof Filters>(key: K, value: Filters[K]) {
     setFilters((previous) => ({ ...previous, [key]: value }))
   }
-  function clearLogs() {
-    if (clearText !== 'CLEAR_APPLICATION_LOGS') return
-    if (window.confirm('确定清空当前筛选范围内的业务日志吗？该操作不可恢复。')) clear.mutate()
-  }
-
   return (
     <div className="mx-auto max-w-7xl space-y-7 px-4 py-10 sm:px-6">
       <PageHeader eyebrow="Administration / Observability" title="业务日志" description="查看代码主动记录的运行信息，并按日志等级、来源和关键字定位业务问题。" action={<AppButton size="sm" variant="outline" disabled={logs.isFetching} onClick={() => void logs.refetch()}><Refresh size={16} />刷新</AppButton>} />
@@ -131,7 +125,15 @@ export function AdminApplicationLogsPage() {
       </Panel>
 
       <Panel title="清空业务日志" description="只清空当前筛选范围；管理员清空操作仍会保留在不可清除的审计记录中。" icon={<Trash size={20} />}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end"><label className="max-w-md flex-1 space-y-2 text-sm font-medium"><span>输入 CLEAR_APPLICATION_LOGS 确认</span><Input value={clearText} onChange={(event) => setClearText(event.target.value)} placeholder="CLEAR_APPLICATION_LOGS" /></label><AppButton variant="destructive" disabled={clearText !== 'CLEAR_APPLICATION_LOGS' || clear.isPending} onClick={clearLogs}><Trash size={16} />清空当前范围</AppButton></div>
+        <ConfirmDialog
+          title="确认清空业务日志？"
+          description="将永久删除当前筛选范围内的业务日志，该操作不可恢复。"
+          confirmLabel="确认清空"
+          destructive
+          busy={clear.isPending}
+          onConfirm={() => clear.mutate()}
+          trigger={<AppButton variant="destructive" disabled={clear.isPending}><Trash size={16} />清空当前范围</AppButton>}
+        />
       </Panel>
 
       {selectedId !== null && <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedId(null)}><aside className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl dark:bg-neutral-950" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-widest text-emerald-700">Application Log</p><h2 className="mt-1 text-xl font-bold">业务日志详情</h2></div><AppButton size="sm" variant="outline" onClick={() => setSelectedId(null)}>关闭</AppButton></div>{detail.isPending ? <p className="mt-8 text-sm text-neutral-500">正在加载详情…</p> : detail.error ? <div className="mt-8"><Message variant="error" title={errorMessage(detail.error)} /></div> : detail.data ? <div className="mt-6 space-y-5"><div className="flex items-center gap-3"><Badge variant={levelVariant(detail.data.level)}>{detail.data.level}</Badge><span className="font-mono text-sm text-neutral-500">{detail.data.source || '未指定来源'}</span></div><div><h3 className="text-sm font-semibold">日志消息</h3><p className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-neutral-50 p-4 text-sm leading-7 dark:bg-neutral-900">{detail.data.message}</p></div><div className="grid grid-cols-2 gap-3 text-sm">{[['时间', formatDate(detail.data.occurred_at)], ['Request ID', detail.data.request_id || '-'], ['用户 ID', detail.data.user_id ? `#${detail.data.user_id}` : '-'], ['App', detail.data.app_code || '-'], ['接入实例', detail.data.integration_id ? `#${detail.data.integration_id}` : '-'], ['消息 ID', detail.data.event_id ? `#${detail.data.event_id}` : '-']].map(([label, value]) => <div key={label} className="rounded-lg bg-neutral-50 p-3 dark:bg-neutral-900"><p className="text-xs text-neutral-500">{label}</p><p className="mt-1 break-all text-sm font-medium">{value}</p></div>)}</div>{detail.data.fields && <section><h3 className="mb-2 text-sm font-semibold">结构化字段</h3><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-neutral-950 p-4 text-xs leading-6 text-emerald-100">{formatFields(detail.data.fields)}</pre></section>}</div> : null}</aside></div>}

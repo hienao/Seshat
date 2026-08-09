@@ -71,7 +71,7 @@ func (h *SettingHandler) UpdateSystemSettings(c *gin.Context) {
 	}
 
 	if err := h.settingService.UpdateSystemSettings(&req); err != nil {
-		if errors.Is(err, service.ErrInvalidAPILogRetentionDays) || errors.Is(err, service.ErrInvalidHTTPProxyURL) || errors.Is(err, service.ErrConflictingHTTPProxyUpdate) {
+		if errors.Is(err, service.ErrInvalidAPILogRetentionDays) || errors.Is(err, service.ErrInvalidHTTPProxyURL) || errors.Is(err, service.ErrConflictingHTTPProxyUpdate) || errors.Is(err, service.ErrConflictingTMDBTokenUpdate) || errors.Is(err, service.ErrInvalidTMDBToken) || errors.Is(err, service.ErrInvalidPublicBaseURL) {
 			response.BadRequest(c, err.Error())
 			return
 		}

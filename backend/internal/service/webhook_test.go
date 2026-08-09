@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -79,6 +80,9 @@ func TestWebhookUsesAppDefaultEventType(t *testing.T) {
 	if event.RawBody != string(body) {
 		t.Fatal("raw body was not preserved")
 	}
+	if len(event.PublicToken) < 32 {
+		t.Fatal("public event token was not generated")
+	}
 	if result.AppCode != "generic" || result.IntegrationID != integration.ID || result.EventID != event.ID {
 		t.Fatalf("unexpected ingest result: %+v", result)
 	}
@@ -88,6 +92,46 @@ func TestWebhookUsesAppDefaultEventType(t *testing.T) {
 	}
 	if presentation["schema_version"] != float64(1) {
 		t.Fatal("missing presentation schema version")
+	}
+	publicEvent, err := service.GetPublicEvent(event.PublicToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if publicEvent.Presentation.Data["raw_preview"] != nil {
+		t.Fatal("public event exposed raw preview")
+	}
+	publicJSON, _ := json.Marshal(publicEvent)
+	if bytes.Contains(publicJSON, []byte("hello")) || bytes.Contains(publicJSON, []byte(event.PublicToken)) || bytes.Contains(publicJSON, []byte(`"integration_id"`)) {
+		t.Fatalf("public event exposed private data: %s", publicJSON)
+	}
+}
+
+func TestPublicEventRejectsInvalidTokens(t *testing.T) {
+	setupWebhookTestDB(t)
+	if _, err := NewWebhookService().GetPublicEvent("1"); !errors.Is(err, ErrPublicEventNotFound) {
+		t.Fatalf("error = %v, want ErrPublicEventNotFound", err)
+	}
+}
+
+func TestEnsurePublicEventTokenSupportsEventsCreatedBeforeMigration(t *testing.T) {
+	setupWebhookTestDB(t)
+	integration := model.AppIntegration{OwnerID: 7, AppCode: "generic", Name: "Generic", EndpointKey: "legacy-event", Secret: "secret", Enabled: true}
+	if err := database.GetDB().Create(&integration).Error; err != nil {
+		t.Fatal(err)
+	}
+	event := model.WebhookEvent{IntegrationID: integration.ID, AppCode: "generic", DisplayEventType: "__default__", DedupeKey: "legacy", Status: "processed", PresentationVersion: 1, Presentation: []byte(`{"schema_version":1,"title":"Legacy","severity":"info","data":{"category":"raw","raw_preview":"private"}}`), ReceivedAt: time.Now()}
+	if err := database.GetDB().Create(&event).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := ensurePublicEventToken(&event); err != nil {
+		t.Fatal(err)
+	}
+	if len(event.PublicToken) < 32 {
+		t.Fatal("legacy event did not receive a public token")
+	}
+	publicEvent, err := NewWebhookService().GetPublicEvent(event.PublicToken)
+	if err != nil || publicEvent.Presentation.Data["raw_preview"] != nil {
+		t.Fatalf("legacy public event = %+v, error = %v", publicEvent, err)
 	}
 }
 

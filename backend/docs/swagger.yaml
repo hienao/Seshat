@@ -34,6 +34,31 @@ definitions:
     - password
     - username
     type: object
+  service.PublicEventResponse:
+    properties:
+      app_code:
+        type: string
+      display_event_type:
+        type: string
+      is_fallback:
+        type: boolean
+      occurred_at:
+        type: string
+      presentation:
+        $ref: '#/definitions/webhook.Presentation'
+      presentation_version:
+        type: integer
+      received_at:
+        type: string
+      severity:
+        type: string
+      source_event_type:
+        type: string
+      summary:
+        type: string
+      title:
+        type: string
+    type: object
   service.RegisterRequest:
     properties:
       password:
@@ -62,8 +87,6 @@ definitions:
     type: object
   service.SystemSettingsResponse:
     properties:
-      allow_private_notification_targets:
-        type: boolean
       allow_register:
         type: boolean
       api_log_retention_days:
@@ -72,6 +95,10 @@ definitions:
         type: boolean
       http_proxy_display:
         type: string
+      public_base_url:
+        type: string
+      tmdb_configured:
+        type: boolean
     type: object
   service.TokenResponse:
     properties:
@@ -82,15 +109,19 @@ definitions:
     type: object
   service.UpdateSystemSettingsRequest:
     properties:
-      allow_private_notification_targets:
-        type: boolean
       allow_register:
         type: boolean
       api_log_retention_days:
         type: integer
       clear_http_proxy:
         type: boolean
+      clear_tmdb_token:
+        type: boolean
       http_proxy_url:
+        type: string
+      public_base_url:
+        type: string
+      tmdb_read_access_token:
         type: string
     type: object
   service.UserResponse:
@@ -104,6 +135,36 @@ definitions:
       requires_admin_setup:
         type: boolean
       username:
+        type: string
+    type: object
+  webhook.Presentation:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+      facts:
+        items:
+          additionalProperties:
+            type: string
+          type: object
+        type: array
+      links:
+        items:
+          additionalProperties:
+            type: string
+          type: object
+        type: array
+      schema_version:
+        type: integer
+      severity:
+        type: string
+      summary:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
         type: string
     type: object
 host: localhost:8080
@@ -286,6 +347,34 @@ paths:
       summary: 设置正式管理员凭据
       tags:
       - 认证
+  /api/public/events/{token}:
+    get:
+      description: 通过不可猜测的访问标识获取标准化展示，不返回原始消息或内部信息
+      parameters:
+      - description: 公开访问标识
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.PublicEventResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Response'
+      summary: 获取公开消息详情
+      tags:
+      - Webhook
   /api/settings/registration-status:
     get:
       description: 检查系统是否允许注册（公开接口）

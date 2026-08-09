@@ -20,14 +20,17 @@ import { useAuthStore } from '@/stores/auth'
 export function AdminPage() {
   const currentUser = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
-  const [retentionDays, setRetentionDays] = useState('30')
+  const [retentionDays, setRetentionDays] = useState('7')
   const [httpProxyURL, setHTTPProxyURL] = useState('')
+  const [tmdbToken, setTMDBToken] = useState('')
+  const [publicBaseURL, setPublicBaseURL] = useState('')
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: api.users })
   const settings = useQuery({ queryKey: ['admin', 'settings'], queryFn: api.systemSettings })
   const updateSettings = useMutation({
     mutationFn: api.updateSystemSettings,
     onSuccess: (_, variables) => {
       if (variables.http_proxy_url !== undefined || variables.clear_http_proxy) setHTTPProxyURL('')
+      if (variables.tmdb_read_access_token !== undefined || variables.clear_tmdb_token) setTMDBToken('')
       void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] })
     },
   })
@@ -37,11 +40,15 @@ export function AdminPage() {
   })
 
   useEffect(() => {
-    if (settings.data) setRetentionDays(String(settings.data.api_log_retention_days))
+    if (settings.data) {
+      setRetentionDays(String(settings.data.api_log_retention_days))
+      setPublicBaseURL(settings.data.public_base_url || window.location.origin)
+    }
   }, [settings.data])
 
   const parsedRetentionDays = Number(retentionDays)
-  const retentionDaysValid = Number.isInteger(parsedRetentionDays) && parsedRetentionDays >= 1 && parsedRetentionDays <= 3650
+  const retentionDaysValid = Number.isInteger(parsedRetentionDays) && parsedRetentionDays >= 1 && parsedRetentionDays <= 30
+  const publicBaseURLValid = validPublicBaseURL(publicBaseURL)
 
   const columns = useMemo<ColumnDef<UserModel, unknown>[]>(() => [
     {
@@ -77,13 +84,17 @@ export function AdminPage() {
       <Panel title="系统设置" description="设置保存后立即生效" icon={<Settings size={20} />}>
         {settings.isPending ? <div className="grid min-h-28 place-items-center"><Spinner className="size-7" /></div> : settings.error ? <ErrorState message={errorMessage(settings.error)} onRetry={() => void settings.refetch()} /> : (
           <div className="space-y-3">
+            <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
+              <label className="min-w-0 flex-1 space-y-2 text-sm font-medium">
+                <span>对外访问地址</span>
+                <Input type="url" value={publicBaseURL} disabled={updateSettings.isPending} onChange={(event) => setPublicBaseURL(event.target.value)} placeholder="https://seshat.example.com" />
+                <span className={`block text-xs ${publicBaseURL && !publicBaseURLValid ? 'text-red-600' : 'text-neutral-500'}`}>推送消息使用该地址生成无需登录的详情链接，请填写用户可访问的 Seshat 完整地址。</span>
+              </label>
+              <AppButton disabled={updateSettings.isPending || !publicBaseURLValid || publicBaseURL.trim().replace(/\/$/, '') === settings.data?.public_base_url} onClick={() => updateSettings.mutate({ public_base_url: publicBaseURL.trim().replace(/\/$/, '') })}>{updateSettings.isPending ? '正在保存…' : '保存访问地址'}</AppButton>
+            </div>
             <div className="flex items-center justify-between gap-5 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900">
               <div><h3 className="font-semibold">允许用户注册</h3><p className="mt-1 text-sm text-neutral-500">开启后，访客可以自行创建账户并登录。</p></div>
               <Switch size="lg" aria-label="允许用户注册" checked={settings.data?.allow_register ?? false} disabled={updateSettings.isPending} onCheckedChange={(checked) => updateSettings.mutate({ allow_register: checked })} />
-            </div>
-            <div className="flex items-center justify-between gap-5 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900">
-              <div><h3 className="font-semibold">允许推送到私有网络</h3><p className="mt-1 text-sm text-neutral-500">默认仅允许公网 HTTPS。开启后可访问内网地址和 HTTP，请仅在可信部署环境中使用。</p></div>
-              <Switch size="lg" aria-label="允许推送到私有网络" checked={settings.data?.allow_private_notification_targets ?? false} disabled={updateSettings.isPending} onCheckedChange={(checked) => updateSettings.mutate({ allow_private_notification_targets: checked })} />
             </div>
             <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
               <label className="min-w-0 flex-1 space-y-2 text-sm font-medium">
@@ -97,10 +108,22 @@ export function AdminPage() {
               </div>
             </div>
             <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
+              <label className="min-w-0 flex-1 space-y-2 text-sm font-medium">
+                <span>TMDB API Read Access Token</span>
+                <Input type="password" autoComplete="off" value={tmdbToken} disabled={updateSettings.isPending} onChange={(event) => setTMDBToken(event.target.value)} placeholder={settings.data?.tmdb_configured ? '已配置（留空保持原值）' : '用于按 Provider ID 获取海报和补充简介'} />
+                <span className="block text-xs text-neutral-500">可选。配置后会补充 Jellyfin/Emby 媒体海报与简介，Token 不会通过设置接口返回。</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {settings.data?.tmdb_configured && <ConfirmDialog title="清空 TMDB Token？" description="清空后不再获取新的外部媒体资料，已缓存内容会保留至到期。" confirmLabel="清空 Token" destructive busy={updateSettings.isPending} onConfirm={() => updateSettings.mutate({ clear_tmdb_token: true })} trigger={<AppButton variant="outline" disabled={updateSettings.isPending}>清空 Token</AppButton>} />}
+                <AppButton disabled={updateSettings.isPending || !tmdbToken.trim()} onClick={() => updateSettings.mutate({ tmdb_read_access_token: tmdbToken.trim() })}>{updateSettings.isPending ? '正在保存…' : '保存 Token'}</AppButton>
+              </div>
+              <p className="text-xs text-neutral-400 sm:max-w-52">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+            </div>
+            <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
               <label className="max-w-xs flex-1 space-y-2 text-sm font-medium">
                 <span>日志保留天数</span>
-                <Input type="number" min={1} max={3650} step={1} value={retentionDays} disabled={updateSettings.isPending} onChange={(event) => setRetentionDays(event.target.value)} />
-                <span className={`block text-xs ${retentionDaysValid ? 'text-neutral-500' : 'text-red-600'}`}>{retentionDaysValid ? '接口日志和业务日志统一保留，默认 30 天，可设置 1–3650 天。' : '请输入 1–3650 之间的整数。'}</span>
+                <Input type="number" min={1} max={30} step={1} value={retentionDays} disabled={updateSettings.isPending} onChange={(event) => setRetentionDays(event.target.value)} />
+                <span className={`block text-xs ${retentionDaysValid ? 'text-neutral-500' : 'text-red-600'}`}>{retentionDaysValid ? '接口日志、业务日志和媒体资料缓存统一保留，默认 7 天，可设置 1–30 天。' : '请输入 1–30 之间的整数。'}</span>
               </label>
               <AppButton disabled={updateSettings.isPending || !retentionDaysValid || parsedRetentionDays === settings.data?.api_log_retention_days} onClick={() => updateSettings.mutate({ api_log_retention_days: parsedRetentionDays })}>{updateSettings.isPending ? '正在保存…' : '保存保留周期'}</AppButton>
             </div>
@@ -115,4 +138,19 @@ export function AdminPage() {
       <div className="flex items-center gap-2 text-xs text-neutral-500"><ShieldCheck size={15} />为避免误锁定，当前登录用户不能撤销自己的管理员权限。</div>
     </div>
   )
+}
+
+function validPublicBaseURL(value: string) {
+  try {
+    const parsed = new URL(value.trim())
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+      && Boolean(parsed.hostname)
+      && !parsed.username
+      && !parsed.password
+      && (parsed.pathname === '/' || parsed.pathname === '')
+      && !parsed.search
+      && !parsed.hash
+  } catch {
+    return false
+  }
 }

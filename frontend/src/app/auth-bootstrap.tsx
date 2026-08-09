@@ -7,13 +7,14 @@ import { useAuthStore } from '@/stores/auth'
 import { AdminSetupDialog } from '@/components/auth/admin-setup-dialog'
 
 export function AuthBootstrap({ children }: { children: React.ReactNode }) {
+  const publicEventView = window.location.pathname.startsWith('/public/events/')
   const accessToken = useAuthStore((state) => state.accessToken)
   const setUser = useAuthStore((state) => state.setUser)
   const clearSession = useAuthStore((state) => state.clearSession)
   const profile = useQuery({
     queryKey: ['profile'],
     queryFn: api.profile,
-    enabled: Boolean(accessToken),
+    enabled: Boolean(accessToken) && !publicEventView,
   })
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export function AuthBootstrap({ children }: { children: React.ReactNode }) {
     if (profile.error instanceof ApiError && profile.error.status === 401) clearSession()
   }, [profile.data, profile.error, setUser, clearSession])
 
-  if (accessToken && profile.isPending) {
+  if (!publicEventView && accessToken && profile.isPending) {
     return (
       <div className="grid min-h-screen place-items-center" aria-label="正在加载账户信息">
         <Spinner className="size-8" />
@@ -29,5 +30,5 @@ export function AuthBootstrap({ children }: { children: React.ReactNode }) {
     )
   }
 
-  return <>{children}<AdminSetupDialog /></>
+  return <>{children}{!publicEventView && <AdminSetupDialog />}</>
 }

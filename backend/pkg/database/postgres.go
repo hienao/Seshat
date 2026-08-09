@@ -50,7 +50,7 @@ func Init(cfg *config.Config) {
 	}
 
 	// 自动迁移
-	if err := DB.AutoMigrate(&model.User{}, &model.SystemSetting{}, &model.UserSetting{}, &model.NotificationChannel{}, &model.AppIntegration{}, &model.WebhookEvent{}, &model.IntegrationNotificationRule{}, &model.NotificationDelivery{}, &model.AdminAuditLog{}); err != nil {
+	if err := DB.AutoMigrate(&model.User{}, &model.SystemSetting{}, &model.UserSetting{}, &model.NotificationChannel{}, &model.AppIntegration{}, &model.WebhookEvent{}, &model.MediaMetadataCache{}, &model.IntegrationNotificationRule{}, &model.NotificationDelivery{}, &model.AdminAuditLog{}); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 

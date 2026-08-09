@@ -52,10 +52,11 @@ func (r *SettingRepository) GetAllSystemSettings() ([]model.SystemSetting, error
 // InitDefaultSettings 初始化默认设置
 func (r *SettingRepository) InitDefaultSettings() error {
 	defaults := map[string]string{
-		"allow_register":                     "false",
-		"api_log_retention_days":             "30",
-		"allow_private_notification_targets": "false",
-		"http_proxy_url":                     "",
+		"allow_register":         "false",
+		"api_log_retention_days": "7",
+		"http_proxy_url":         "",
+		"tmdb_read_access_token": "",
+		"public_base_url":        "",
 	}
 
 	for key, value := range defaults {

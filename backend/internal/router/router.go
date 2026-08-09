@@ -59,6 +59,9 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 	// API 路由组
 	api := r.Group("/api")
 	{
+		// 推送消息中的公开详情链接，使用随机访问标识，不需要 JWT。
+		api.GET("/public/events/:token", webhookHandler.GetPublicEvent)
+
 		// Webhook 管理接口需要认证，实际接收接口在 /hooks 下公开提供。
 		webhookAPI := api.Group("/webhooks")
 		webhookAPI.Use(middleware.JWTAuth(cfg), middleware.AdminSetupComplete())

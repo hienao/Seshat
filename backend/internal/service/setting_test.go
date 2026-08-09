@@ -62,7 +62,7 @@ func TestSettingServiceUpdatesLogRetentionImmediately(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	days := 90
+	days := 14
 	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{APILogRetentionDays: &days}); err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +85,18 @@ func TestSettingServiceRejectsInvalidLogRetention(t *testing.T) {
 	days := 0
 	err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{APILogRetentionDays: &days})
 	if !errors.Is(err, ErrInvalidAPILogRetentionDays) {
+		t.Fatalf("error = %v, want ErrInvalidAPILogRetentionDays", err)
+	}
+}
+
+func TestSettingServiceRejectsRetentionAboveThirtyDays(t *testing.T) {
+	setupSettingTestDB(t)
+	settingService := NewSettingService()
+	if err := settingService.InitDefaultSettings(); err != nil {
+		t.Fatal(err)
+	}
+	days := 31
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{APILogRetentionDays: &days}); !errors.Is(err, ErrInvalidAPILogRetentionDays) {
 		t.Fatalf("error = %v, want ErrInvalidAPILogRetentionDays", err)
 	}
 }
@@ -124,5 +136,54 @@ func TestSettingServiceRejectsInvalidHTTPProxy(t *testing.T) {
 	invalid := "socks5://127.0.0.1:1080"
 	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{HTTPProxyURL: &invalid}); !errors.Is(err, ErrInvalidHTTPProxyURL) {
 		t.Fatalf("error = %v, want ErrInvalidHTTPProxyURL", err)
+	}
+}
+
+func TestSettingServiceStoresPublicBaseURL(t *testing.T) {
+	setupSettingTestDB(t)
+	settingService := NewSettingService()
+	if err := settingService.InitDefaultSettings(); err != nil {
+		t.Fatal(err)
+	}
+	publicBaseURL := "https://seshat.example.com/"
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{PublicBaseURL: &publicBaseURL}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := settingService.GetSystemSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.PublicBaseURL != "https://seshat.example.com" || settingService.PublicBaseURL() != settings.PublicBaseURL {
+		t.Fatalf("unexpected public base URL: %+v", settings)
+	}
+	invalid := "https://user:password@seshat.example.com/path"
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{PublicBaseURL: &invalid}); !errors.Is(err, ErrInvalidPublicBaseURL) {
+		t.Fatalf("error = %v, want ErrInvalidPublicBaseURL", err)
+	}
+}
+
+func TestSettingServiceStoresAndRedactsTMDBToken(t *testing.T) {
+	setupSettingTestDB(t)
+	settingService := NewSettingService()
+	if err := settingService.InitDefaultSettings(); err != nil {
+		t.Fatal(err)
+	}
+	token := "tmdb-read-access-token"
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBReadAccessToken: &token}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := settingService.GetSystemSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !settings.TMDBConfigured || settingService.TMDBReadAccessToken() != token {
+		t.Fatalf("unexpected TMDB settings: %+v", settings)
+	}
+	clear := true
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{ClearTMDBToken: &clear}); err != nil {
+		t.Fatal(err)
+	}
+	if settingService.TMDBReadAccessToken() != "" {
+		t.Fatal("TMDB token was not cleared")
 	}
 }
