@@ -12,5 +12,5 @@ export const feishuChannelAdapter: NotificationChannelAdapter = {
     const signingSecret = textField(fields, 'signingSecret').trim()
     return channelPayload(common, {}, { webhook_url: webhookUrl, signing_secret: signingSecret })
   },
-  Form: (props) => <RobotChannelForm providerName="飞书" {...props} />,
+  Form: (props) => <RobotChannelForm providerName="Feishu" {...props} />,
 }

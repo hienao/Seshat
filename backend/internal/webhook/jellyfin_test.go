@@ -74,7 +74,7 @@ func TestJellyfinMediaPresentationDoesNotRepeatMediaType(t *testing.T) {
 	if len(presentation.Tags) != 0 {
 		t.Fatalf("media type must not be repeated as tags: %+v", presentation.Tags)
 	}
-	if len(presentation.Facts) != 1 || presentation.Facts[0]["label"] != "类型" || presentation.Facts[0]["value"] != "Episode" {
+	if len(presentation.Facts) != 1 || presentation.Facts[0]["label_key"] != "events.facts.media_type" || presentation.Facts[0]["label"] != "类型" || presentation.Facts[0]["value"] != "Episode" {
 		t.Fatalf("media type must remain as one fact: %+v", presentation.Facts)
 	}
 }

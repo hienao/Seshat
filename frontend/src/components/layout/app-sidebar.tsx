@@ -1,6 +1,7 @@
 import { Button } from '@appica/ui-react/button'
 import { Logout, X } from '@appica/icons-react'
 import { Link, NavLink } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/features/auth/use-auth'
 import { getNavigationSections, profileItem, type AppNavigationItem } from './app-navigation'
 
@@ -13,10 +14,11 @@ const navigationClass = ({ isActive }: { isActive: boolean }) =>
 
 function NavigationLink({ item, onNavigate }: { item: AppNavigationItem; onNavigate?: () => void }) {
   const Icon = item.icon
+  const { t } = useTranslation()
   return (
     <NavLink to={item.to} end={item.end} className={navigationClass} onClick={onNavigate}>
       <Icon className="shrink-0" size={18} />
-      <span>{item.label}</span>
+      <span>{t(item.labelKey)}</span>
     </NavLink>
   )
 }
@@ -28,12 +30,13 @@ export function AppSidebar({ className = '', mobile = false, onClose, onNavigate
   onNavigate?: () => void
 }) {
   const { user, isAdmin, logout } = useAuth()
+  const { t } = useTranslation()
   const sections = getNavigationSections(isAdmin)
 
   return (
     <aside
       className={`w-60 flex-col border-r border-neutral-200/80 bg-white/88 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/88 ${className}`}
-      aria-label="应用导航"
+      aria-label={t('navigation.aria')}
       aria-modal={mobile || undefined}
       role={mobile ? 'dialog' : undefined}
     >
@@ -43,7 +46,7 @@ export function AppSidebar({ className = '', mobile = false, onClose, onNavigate
           <span className="truncate font-bold tracking-tight text-neutral-950 dark:text-white">Seshat</span>
         </Link>
         {mobile && (
-          <Button variant="ghost" size="icon-md" aria-label="关闭导航菜单" autoFocus onClick={onClose}>
+          <Button variant="ghost" size="icon-md" aria-label={t('navigation.close')} autoFocus onClick={onClose}>
             <X size={20} />
           </Button>
         )}
@@ -52,9 +55,9 @@ export function AppSidebar({ className = '', mobile = false, onClose, onNavigate
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <div className="space-y-6">
           {sections.map((section) => (
-            <section key={section.label} aria-labelledby={`navigation-${section.label}`}>
-              <p id={`navigation-${section.label}`} className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-400 dark:text-neutral-600">
-                {section.label}
+            <section key={section.labelKey} aria-labelledby={`navigation-${section.labelKey}`}>
+              <p id={`navigation-${section.labelKey}`} className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-400 dark:text-neutral-600">
+                {t(section.labelKey)}
               </p>
               <div className="space-y-1">
                 {section.items.map((item) => <NavigationLink key={item.to} item={item} onNavigate={onNavigate} />)}
@@ -72,12 +75,12 @@ export function AppSidebar({ className = '', mobile = false, onClose, onNavigate
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-neutral-900 dark:text-white">{user?.username}</p>
-            <p className="text-xs text-neutral-500">{isAdmin ? '管理员' : '普通用户'}</p>
+            <p className="text-xs text-neutral-500">{t(isAdmin ? 'navigation.administrator' : 'navigation.user')}</p>
           </div>
         </div>
         {mobile && (
           <Button className="mt-2 w-full justify-start gap-2" variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending}>
-            <Logout size={17} />退出登录
+            <Logout size={17} />{t('navigation.logout')}
           </Button>
         )}
       </div>

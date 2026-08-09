@@ -17,6 +17,7 @@ export interface HandlerSetUserRoleRequest {
 export interface ResponseResponse {
   code?: number;
   data?: any;
+  error_code?: string;
   message?: string;
 }
 

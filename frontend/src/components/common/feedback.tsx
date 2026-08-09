@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertIcon, AlertTitle } from '@appica/ui-react/alert'
 import { AlertCircle, CircleCheck, Refresh } from '@appica/icons-react'
 import { AppButton } from './app-button'
+import { useTranslation } from 'react-i18next'
 
 export function Message({ variant, title, description }: {
   variant: 'error' | 'success' | 'info' | 'warning'
@@ -18,21 +19,23 @@ export function Message({ variant, title, description }: {
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useTranslation()
   return (
     <div className="grid place-items-center py-10 text-center">
       <AlertCircle size={34} className="text-red-500" />
-      <p className="mt-3 font-medium">加载失败</p>
+      <p className="mt-3 font-medium">{t('common.feedback.loadFailed')}</p>
       <p className="mt-1 text-sm text-neutral-500">{message}</p>
-      {onRetry && <AppButton className="mt-4" variant="outline" size="sm" onClick={onRetry}><Refresh size={16} />重新加载</AppButton>}
+      {onRetry && <AppButton className="mt-4" variant="outline" size="sm" onClick={onRetry}><Refresh size={16} />{t('common.actions.reload')}</AppButton>}
     </div>
   )
 }
 
-export function EmptyState({ title = '暂无数据', description }: { title?: string; description?: string }) {
+export function EmptyState({ title, description }: { title?: string; description?: string }) {
+  const { t } = useTranslation()
   return (
     <div className="grid place-items-center py-12 text-center">
       <div className="grid size-12 place-items-center rounded-full bg-neutral-100 text-neutral-400 dark:bg-neutral-800"><span className="text-xl">0</span></div>
-      <p className="mt-3 font-medium">{title}</p>
+      <p className="mt-3 font-medium">{title ?? t('common.feedback.noData')}</p>
       {description && <p className="mt-1 text-sm text-neutral-500">{description}</p>}
     </div>
   )

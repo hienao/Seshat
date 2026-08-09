@@ -2,6 +2,7 @@ import { Input } from '@appica/ui-react/input'
 import { SecretInput } from '../secret-input'
 import type { NotificationChannelAdapter } from '../types'
 import { channelPayload, credentialTextField, textField } from '../types'
+import { useTranslation } from 'react-i18next'
 
 export const barkChannelAdapter: NotificationChannelAdapter = {
   type: 'bark',
@@ -12,10 +13,11 @@ export const barkChannelAdapter: NotificationChannelAdapter = {
     const deviceKey = textField(fields, 'deviceKey').trim()
     return channelPayload(common, { base_url: textField(fields, 'baseUrl').trim(), group: textField(fields, 'group').trim(), sound: textField(fields, 'sound').trim() }, { device_key: deviceKey })
   },
-  Form: ({ fields, update }) => (
-    <>
+  Form: ({ fields, update }) => {
+    const { t } = useTranslation()
+    return <>
       <label className="block space-y-2 text-sm font-medium">
-        <span>Bark 服务地址</span>
+        <span>{t('notifications.forms.barkUrl')}</span>
         <Input type="url" value={textField(fields, 'baseUrl')} onChange={(event) => update('baseUrl', event.target.value)} required placeholder="https://api.day.app" />
       </label>
       <label className="block space-y-2 text-sm font-medium">
@@ -24,14 +26,14 @@ export const barkChannelAdapter: NotificationChannelAdapter = {
       </label>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block space-y-2 text-sm font-medium">
-          <span>分组（可选）</span>
+          <span>{t('notifications.forms.groupOptional')}</span>
           <Input value={textField(fields, 'group')} onChange={(event) => update('group', event.target.value)} />
         </label>
         <label className="block space-y-2 text-sm font-medium">
-          <span>声音（可选）</span>
+          <span>{t('notifications.forms.soundOptional')}</span>
           <Input value={textField(fields, 'sound')} onChange={(event) => update('sound', event.target.value)} />
         </label>
       </div>
     </>
-  ),
+  },
 }

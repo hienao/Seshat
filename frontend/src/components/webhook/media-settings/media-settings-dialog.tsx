@@ -2,6 +2,7 @@ import { Input } from '@appica/ui-react/input'
 import { Dialog, DialogBody, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@appica/ui-react/dialog'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/api/services'
 import type { Integration } from '@/api/types'
 import { AppButton } from '@/components/common/app-button'
@@ -17,6 +18,7 @@ export function MediaSettingsDialog({ integration, open, onOpenChange, onSaved }
 	onOpenChange: (open: boolean) => void
 	onSaved: () => void
 }) {
+	const { t } = useTranslation()
 	const definition = integration ? mediaSettingsDefinition(integration.app_code) : undefined
 	const settings = useQuery({
 		queryKey: ['webhooks', 'integrations', integration?.id, 'media-settings'],
@@ -50,26 +52,26 @@ export function MediaSettingsDialog({ integration, open, onOpenChange, onSaved }
 			<DialogContent className="max-w-xl">
 				<form onSubmit={submit}>
 					<DialogHeader>
-						<DialogTitle>{definition.appName} 媒体 API</DialogTitle>
-						<DialogDescription>保存后优先使用该实例的媒体资料；请求失败时才回退到系统 TMDB API。</DialogDescription>
+						<DialogTitle>{t('integrations.mediaSettings.title', { app: definition.appName })}</DialogTitle>
+						<DialogDescription>{t('integrations.mediaSettings.description')}</DialogDescription>
 					</DialogHeader>
 					<DialogBody className="space-y-5">
-						{settings.isPending ? <p className="py-6 text-center text-sm text-neutral-500">正在读取配置…</p> : settings.error ? <Message variant="error" title={errorMessage(settings.error, '读取媒体 API 配置失败')} /> : <>
-							<FormField label="服务器地址" description={definition.serverHelp}>
+						{settings.isPending ? <p className="py-6 text-center text-sm text-neutral-500">{t('integrations.mediaSettings.loading')}</p> : settings.error ? <Message variant="error" title={errorMessage(settings.error, t('integrations.mediaSettings.readFailed'))} /> : <>
+							<FormField label={t('integrations.mediaSettings.serverUrl')} description={t(`integrations.mediaSettings.${definition.appCode}ServerHelp`, { defaultValue: definition.serverHelp })}>
 								<Input type="url" value={serverUrl} onChange={(event) => { setServerUrl(event.target.value); setTested(false) }} placeholder={definition.serverPlaceholder} required autoComplete="url" />
 							</FormField>
-							<FormField label="API Key" description={definition.apiKeyHelp}>
+							<FormField label={t('integrations.mediaSettings.apiKey')} description={t(`integrations.mediaSettings.${definition.appCode}KeyHelp`, { defaultValue: definition.apiKeyHelp })}>
 								<SecretInput revealLabel={`${definition.appName} API Key`} value={apiKey} onChange={(event) => { setAPIKey(event.target.value); setTested(false) }} required autoComplete="off" />
 							</FormField>
 						</>}
-						{tested && <Message variant="success" title="连接成功" />}
-						{test.error && <Message variant="error" title={errorMessage(test.error, '连接测试失败')} />}
-						{save.error && <Message variant="error" title={errorMessage(save.error, '保存媒体 API 配置失败')} />}
+						{tested && <Message variant="success" title={t('common.feedback.connectionSuccess')} />}
+						{test.error && <Message variant="error" title={errorMessage(test.error, t('integrations.mediaSettings.testFailed'))} />}
+						{save.error && <Message variant="error" title={errorMessage(save.error, t('integrations.mediaSettings.saveFailed'))} />}
 					</DialogBody>
 					<DialogFooter>
-						<DialogClose render={<AppButton type="button" variant="ghost">取消</AppButton>} />
-						<AppButton type="button" variant="outline" disabled={!valid || test.isPending || settings.isPending} onClick={() => test.mutate()}>{test.isPending ? '测试中…' : '测试连接'}</AppButton>
-						<AppButton type="submit" disabled={!valid || save.isPending || settings.isPending}>{save.isPending ? '保存中…' : '保存'}</AppButton>
+						<DialogClose render={<AppButton type="button" variant="ghost">{t('common.actions.cancel')}</AppButton>} />
+						<AppButton type="button" variant="outline" disabled={!valid || test.isPending || settings.isPending} onClick={() => test.mutate()}>{t(test.isPending ? 'common.states.testing' : 'common.actions.testConnection')}</AppButton>
+						<AppButton type="submit" disabled={!valid || save.isPending || settings.isPending}>{t(save.isPending ? 'common.states.saving' : 'common.actions.save')}</AppButton>
 					</DialogFooter>
 				</form>
 			</DialogContent>

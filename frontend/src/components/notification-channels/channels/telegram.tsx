@@ -3,6 +3,7 @@ import { Switch } from '@appica/ui-react/switch'
 import { SecretInput } from '../secret-input'
 import type { NotificationChannelAdapter } from '../types'
 import { booleanField, channelPayload, credentialTextField, textField } from '../types'
+import { useTranslation } from 'react-i18next'
 
 export const telegramChannelAdapter: NotificationChannelAdapter = {
   type: 'telegram',
@@ -14,8 +15,9 @@ export const telegramChannelAdapter: NotificationChannelAdapter = {
     const threadId = textField(fields, 'threadId').trim()
     return channelPayload(common, { chat_id: textField(fields, 'chatId').trim(), silent: booleanField(fields, 'silent'), ...(threadId ? { message_thread_id: Number(threadId) } : {}) }, { bot_token: token })
   },
-  Form: ({ fields, update }) => (
-    <>
+  Form: ({ fields, update }) => {
+    const { t } = useTranslation()
+    return <>
       <label className="block space-y-2 text-sm font-medium">
         <span>Bot Token</span>
         <SecretInput revealLabel="Bot Token" value={textField(fields, 'botToken')} onChange={(event) => update('botToken', event.target.value)} required />
@@ -25,13 +27,13 @@ export const telegramChannelAdapter: NotificationChannelAdapter = {
         <Input value={textField(fields, 'chatId')} onChange={(event) => update('chatId', event.target.value)} required />
       </label>
       <label className="block space-y-2 text-sm font-medium">
-        <span>Message Thread ID（可选）</span>
+        <span>{t('notifications.forms.threadId')}</span>
         <Input type="number" value={textField(fields, 'threadId')} onChange={(event) => update('threadId', event.target.value)} />
       </label>
       <div className="flex items-center justify-between gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900">
-        <p className="text-sm font-medium">静默发送</p>
+        <p className="text-sm font-medium">{t('notifications.forms.silent')}</p>
         <Switch checked={booleanField(fields, 'silent')} onCheckedChange={(checked) => update('silent', checked)} />
       </div>
     </>
-  ),
+  },
 }

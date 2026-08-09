@@ -18,7 +18,6 @@ export interface EventCardModel {
   title: string
   summary: string
   imageUrl: string
-  imageLayout?: 'portrait' | 'landscape'
   overview: string
   facts: Array<Record<string, string>>
   wideFactLabels?: string[]

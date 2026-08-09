@@ -10,6 +10,7 @@ import { webhookChannelAdapter } from './channels/webhook'
 import { whatsAppChannelAdapter } from './channels/whatsapp'
 import { wxPusherChannelAdapter } from './channels/wxpusher'
 import type { NotificationChannelAdapter } from './types'
+import { i18n } from '@/i18n'
 
 const adapters: NotificationChannelAdapter[] = [
   webhookChannelAdapter,
@@ -41,5 +42,5 @@ export function notificationChannelAdapter(type: NotificationChannelType): Notif
 }
 
 export function notificationChannelLabel(type: NotificationChannelType): string {
-  return notificationChannelAdapter(type).label
+  return i18n.t(`notifications.types.${type}`, { defaultValue: notificationChannelAdapter(type).label })
 }

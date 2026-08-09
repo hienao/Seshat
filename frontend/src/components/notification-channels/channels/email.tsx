@@ -2,6 +2,7 @@ import { Input } from '@appica/ui-react/input'
 import { SecretInput } from '../secret-input'
 import type { NotificationChannelAdapter } from '../types'
 import { channelInputClass, channelPayload, credentialTextField, textField } from '../types'
+import { useTranslation } from 'react-i18next'
 
 type SMTPEncryption = 'starttls' | 'tls' | 'none'
 
@@ -11,7 +12,7 @@ function smtpEncryption(value: unknown): SMTPEncryption {
 
 export const emailChannelAdapter: NotificationChannelAdapter = {
   type: 'email',
-  label: '邮箱通知',
+  label: 'Email',
   defaultFields: () => ({ host: '', port: '587', encryption: 'starttls', from: '', to: '', username: '', password: '' }),
   fieldsFromChannel: (channel) => ({
     host: String(channel.config.smtp_host ?? ''),
@@ -27,43 +28,44 @@ export const emailChannelAdapter: NotificationChannelAdapter = {
     const password = textField(fields, 'password')
     return channelPayload(common, { smtp_host: textField(fields, 'host').trim(), smtp_port: Number(textField(fields, 'port')), encryption: smtpEncryption(fields.encryption), from: textField(fields, 'from').trim(), to: textField(fields, 'to').trim() }, { username, password })
   },
-  Form: ({ fields, update }) => (
-    <>
+  Form: ({ fields, update }) => {
+    const { t } = useTranslation()
+    return <>
       <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
         <label className="block space-y-2 text-sm font-medium">
-          <span>SMTP 主机</span>
+          <span>{t('notifications.forms.smtpHost')}</span>
           <Input value={textField(fields, 'host')} onChange={(event) => update('host', event.target.value)} required placeholder="smtp.example.com" />
         </label>
         <label className="block space-y-2 text-sm font-medium">
-          <span>端口</span>
+          <span>{t('notifications.forms.port')}</span>
           <Input type="number" min="1" max="65535" value={textField(fields, 'port')} onChange={(event) => update('port', event.target.value)} required />
         </label>
       </div>
       <label className="block space-y-2 text-sm font-medium">
-        <span>连接加密</span>
+        <span>{t('notifications.forms.encryption')}</span>
         <select className={channelInputClass} value={smtpEncryption(fields.encryption)} onChange={(event) => update('encryption', event.target.value)}>
-          <option value="starttls">STARTTLS（常用端口 587）</option>
-          <option value="tls">TLS（常用端口 465）</option>
-          <option value="none">不加密（仅可信网络）</option>
+          <option value="starttls">{t('notifications.forms.starttls')}</option>
+          <option value="tls">{t('notifications.forms.tls')}</option>
+          <option value="none">{t('notifications.forms.noEncryption')}</option>
         </select>
       </label>
       <label className="block space-y-2 text-sm font-medium">
-        <span>发件人</span>
+        <span>{t('notifications.forms.sender')}</span>
         <Input type="email" value={textField(fields, 'from')} onChange={(event) => update('from', event.target.value)} required placeholder="notice@example.com" />
       </label>
       <label className="block space-y-2 text-sm font-medium">
-        <span>收件人</span>
+        <span>{t('notifications.forms.recipients')}</span>
         <Input value={textField(fields, 'to')} onChange={(event) => update('to', event.target.value)} required placeholder="a@example.com, b@example.com" />
-        <span className="block text-xs font-normal text-neutral-500">多个地址使用逗号或分号分隔。</span>
+        <span className="block text-xs font-normal text-neutral-500">{t('notifications.forms.recipientsHelp')}</span>
       </label>
       <label className="block space-y-2 text-sm font-medium">
-        <span>SMTP 用户名（可选，与密码同时填写）</span>
-        <SecretInput revealLabel="SMTP 用户名" value={textField(fields, 'username')} onChange={(event) => update('username', event.target.value)} autoComplete="off" />
+        <span>{t('notifications.forms.smtpUsername')}</span>
+        <SecretInput revealLabel={t('notifications.forms.smtpUsername')} value={textField(fields, 'username')} onChange={(event) => update('username', event.target.value)} autoComplete="off" />
       </label>
       <label className="block space-y-2 text-sm font-medium">
-        <span>SMTP 密码（可选，与用户名同时填写）</span>
-        <SecretInput revealLabel="SMTP 密码" value={textField(fields, 'password')} onChange={(event) => update('password', event.target.value)} autoComplete="new-password" />
+        <span>{t('notifications.forms.smtpPassword')}</span>
+        <SecretInput revealLabel={t('notifications.forms.smtpPassword')} value={textField(fields, 'password')} onChange={(event) => update('password', event.target.value)} autoComplete="new-password" />
       </label>
     </>
-  ),
+  },
 }

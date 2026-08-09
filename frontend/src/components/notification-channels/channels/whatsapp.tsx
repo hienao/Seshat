@@ -3,6 +3,7 @@ import { Message } from '@/components/common/feedback'
 import { SecretInput } from '../secret-input'
 import type { NotificationChannelAdapter } from '../types'
 import { channelPayload, credentialTextField, textField } from '../types'
+import { useTranslation } from 'react-i18next'
 
 export const whatsAppChannelAdapter: NotificationChannelAdapter = {
   type: 'whatsapp',
@@ -15,11 +16,12 @@ export const whatsAppChannelAdapter: NotificationChannelAdapter = {
     const recipient = textField(fields, 'recipient').trim()
     return channelPayload(common, { api_version: textField(fields, 'version').trim() }, { access_token: token, phone_number_id: phoneNumberId, recipient })
   },
-  Form: ({ fields, update }) => (
-    <>
-      <Message variant="warning" title="当前发送普通文本消息" description="需要满足 WhatsApp Cloud API 的会话窗口要求；超出窗口时应使用已审核的消息模板。" />
+  Form: ({ fields, update }) => {
+    const { t } = useTranslation()
+    return <>
+      <Message variant="warning" title={t('notifications.forms.whatsappWarning')} description={t('notifications.forms.whatsappWarningDescription')} />
       <label className="block space-y-2 text-sm font-medium">
-        <span>Graph API 版本</span>
+        <span>{t('notifications.forms.graphVersion')}</span>
         <Input value={textField(fields, 'version')} onChange={(event) => update('version', event.target.value)} required pattern="v[0-9]+\.[0-9]+" placeholder="v25.0" />
       </label>
       <label className="block space-y-2 text-sm font-medium">
@@ -31,9 +33,9 @@ export const whatsAppChannelAdapter: NotificationChannelAdapter = {
         <SecretInput revealLabel="Phone Number ID" inputMode="numeric" value={textField(fields, 'phoneNumberId')} onChange={(event) => update('phoneNumberId', event.target.value)} required />
       </label>
       <label className="block space-y-2 text-sm font-medium">
-        <span>收件号码</span>
-        <SecretInput revealLabel="收件号码" inputMode="tel" value={textField(fields, 'recipient')} onChange={(event) => update('recipient', event.target.value)} required placeholder="国家码 + 手机号" />
+        <span>{t('notifications.forms.recipientNumber')}</span>
+        <SecretInput revealLabel={t('notifications.forms.recipientNumber')} inputMode="tel" value={textField(fields, 'recipient')} onChange={(event) => update('recipient', event.target.value)} required placeholder={t('notifications.forms.recipientPlaceholder')} />
       </label>
     </>
-  ),
+  },
 }
