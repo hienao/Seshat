@@ -1,9 +1,70 @@
 basePath: /
 definitions:
+  buildinfo.Info:
+    properties:
+      build_time:
+        type: string
+      channel:
+        type: string
+      commit:
+        type: string
+      version:
+        type: string
+    type: object
   handler.SetUserRoleRequest:
     properties:
       is_admin:
         type: boolean
+    type: object
+  releasenotes.Change:
+    properties:
+      id:
+        type: string
+      text:
+        $ref: '#/definitions/releasenotes.LocalizedText'
+      type:
+        type: string
+    type: object
+  releasenotes.LocalizedList:
+    properties:
+      en:
+        items:
+          type: string
+        type: array
+      zh-CN:
+        items:
+          type: string
+        type: array
+    type: object
+  releasenotes.LocalizedText:
+    properties:
+      en:
+        type: string
+      zh-CN:
+        type: string
+    type: object
+  releasenotes.Release:
+    properties:
+      changes:
+        items:
+          $ref: '#/definitions/releasenotes.Change'
+        type: array
+      channel:
+        type: string
+      image_tag:
+        type: string
+      published_at:
+        type: string
+      release_url:
+        type: string
+      schema_version:
+        type: integer
+      summary:
+        $ref: '#/definitions/releasenotes.LocalizedText'
+      upgrade_notes:
+        $ref: '#/definitions/releasenotes.LocalizedList'
+      version:
+        type: string
     type: object
   response.Response:
     properties:
@@ -150,6 +211,25 @@ definitions:
     - api_key
     - server_url
     type: object
+  service.UpdateStatusResponse:
+    properties:
+      checked_at:
+        type: string
+      current:
+        $ref: '#/definitions/buildinfo.Info'
+      image_tag:
+        type: string
+      latest_version:
+        type: string
+      releases:
+        items:
+          $ref: '#/definitions/releasenotes.Release'
+        type: array
+      supported:
+        type: boolean
+      update_available:
+        type: boolean
+    type: object
   service.UpdateSystemSettingsRequest:
     properties:
       allow_register:
@@ -219,6 +299,35 @@ info:
   title: Seshat API
   version: "1.0"
 paths:
+  /api/admin/updates:
+    get:
+      description: Beta 只检查 Beta，Release/Hotfix 只检查正式版本（需要管理员权限）
+      parameters:
+      - description: 忽略缓存并重新检查
+        in: query
+        name: refresh
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/service.UpdateStatusResponse'
+              type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/response.Response'
+      security:
+      - BearerAuth: []
+      summary: 检查更新
+      tags:
+      - 更新
   /api/admin/users:
     get:
       description: 获取所有用户列表（需要管理员权限）
@@ -647,6 +756,23 @@ paths:
       summary: 获取用户信息
       tags:
       - 用户
+  /api/version:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/buildinfo.Info'
+              type: object
+      summary: 获取当前版本
+      tags:
+      - 更新
   /api/webhooks/integrations/{id}/media-settings:
     get:
       parameters:

@@ -44,6 +44,11 @@ describe('notification channel adapter registry', () => {
     const apprise = notificationChannelAdapter('apprise').toPayload(common('apprise'), { baseUrl: 'https://apprise.example.com', configId: 'config-main', tag: 'all' })
     expect(apprise.config).toEqual({ base_url: 'https://apprise.example.com', tag: 'all', use_proxy: true })
     expect(apprise.credentials).toEqual({ config_id: 'config-main' })
+
+    const dingTalk = notificationChannelAdapter('dingtalk').toPayload(common('dingtalk'), { secret: 'SEC-test', token: 'ding-token', targets: '13800138000, 13900139000' })
+    expect(dingTalk.config).toEqual({ use_proxy: true })
+    expect(dingTalk.credentials).toEqual({ secret: 'SEC-test', token: 'ding-token', targets: '13800138000, 13900139000' })
+    expect(dingTalk.credentials).not.toHaveProperty('webhook_url')
   })
 
   it('hydrates only fields owned by the selected adapter', () => {
@@ -70,7 +75,8 @@ describe('notification channel adapter registry', () => {
     expect(notificationChannelAdapter('email').fieldsFromChannel(channel('email', {}, { username: 'mailer', password: 'mail-password' }))).toMatchObject({ username: 'mailer', password: 'mail-password' })
     expect(notificationChannelAdapter('serverchan').fieldsFromChannel(channel('serverchan', {}, { send_key: 'SCT-key' })).sendKey).toBe('SCT-key')
     expect(notificationChannelAdapter('bark').fieldsFromChannel(channel('bark', {}, { device_key: 'device-key' })).deviceKey).toBe('device-key')
-    expect(notificationChannelAdapter('dingtalk').fieldsFromChannel(channel('dingtalk', {}, { webhook_url: 'https://ding.example/hook', signing_secret: 'ding-secret' }))).toEqual({ webhookUrl: 'https://ding.example/hook', signingSecret: 'ding-secret' })
+    expect(notificationChannelAdapter('dingtalk').fieldsFromChannel(channel('dingtalk', {}, { secret: 'SEC-ding', token: 'ding-token', targets: '13800138000' }))).toEqual({ secret: 'SEC-ding', token: 'ding-token', targets: '13800138000' })
+    expect(notificationChannelAdapter('dingtalk').fieldsFromChannel(channel('dingtalk', {}, { webhook_url: 'https://oapi.dingtalk.com/robot/send?access_token=legacy-token', signing_secret: 'legacy-secret' }))).toEqual({ secret: 'legacy-secret', token: 'legacy-token', targets: '' })
     expect(notificationChannelAdapter('feishu').fieldsFromChannel(channel('feishu', {}, { webhook_url: 'https://feishu.example/hook', signing_secret: 'feishu-secret' }))).toEqual({ webhookUrl: 'https://feishu.example/hook', signingSecret: 'feishu-secret' })
     expect(notificationChannelAdapter('whatsapp').fieldsFromChannel(channel('whatsapp', {}, { access_token: 'wa-token', phone_number_id: '123', recipient: '86138' }))).toMatchObject({ token: 'wa-token', phoneNumberId: '123', recipient: '86138' })
     expect(notificationChannelAdapter('wxpusher').fieldsFromChannel(channel('wxpusher', {}, { app_token: 'wx-token' })).appToken).toBe('wx-token')
@@ -87,11 +93,27 @@ describe('notification channel adapter registry', () => {
     expect(adapter.fieldsFromChannel(channel('apprise', { base_url: 'https://apprise.example.com', tag: '' }, { config_id: 'config-main' })).tag).toBe('all')
   })
 
+  it('requires a DingTalk token and validates optional targets', () => {
+    const adapter = notificationChannelAdapter('dingtalk')
+    expect(adapter.validate?.({ secret: '', token: '', targets: '' })).toBe('钉钉 Token 不能为空')
+    expect(adapter.validate?.({ secret: '', token: 'token', targets: 'invalid' })).toContain('11 到 14 位手机号')
+    expect(adapter.validate?.({ secret: '', token: 'token', targets: '13800138000, +86 13900139000' })).toBe('')
+  })
+
   it('renders only the selected channel form', () => {
     const WebhookForm = notificationChannelAdapter('webhook').Form
     render(<WebhookForm fields={notificationChannelAdapter('webhook').defaultFields()} update={vi.fn()} />)
     expect(screen.getByText('目标 URL')).toBeInTheDocument()
     expect(screen.queryByText('Bark 服务地址')).not.toBeInTheDocument()
+  })
+
+  it('renders DingTalk token, secret, and targets fields', () => {
+    const DingTalkForm = notificationChannelAdapter('dingtalk').Form
+    render(<DingTalkForm fields={notificationChannelAdapter('dingtalk').defaultFields()} update={vi.fn()} />)
+    expect(screen.getByText('钉钉 Token')).toBeInTheDocument()
+    expect(screen.getByText('钉钉 Secret（可选）')).toBeInTheDocument()
+    expect(screen.getByText('Targets（可选）')).toBeInTheDocument()
+    expect(screen.queryByText('DingTalk机器人 Webhook URL')).not.toBeInTheDocument()
   })
 
   it('conceals hydrated channel credentials until the reveal button is clicked', () => {

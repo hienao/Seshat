@@ -8,6 +8,16 @@
 - 新增 App，或修改某个 App 的 Webhook 协议、消息类型、标准化字段、展示卡片、通知类型或接入说明：使用 `$seshat-app-integration`（`.agents/skills/seshat-app-integration/SKILL.md`）。
 - 新增或修改推送渠道、渠道配置、协议发送、响应判断、代理策略或渠道表单：使用 `$seshat-notification-channel`（`.agents/skills/seshat-notification-channel/SKILL.md`）。
 
+## UI Localization
+
+前端同时支持英文和中文。任何新增或修改的用户可见 UI 文本都必须适配两种语言，不得只完成其中一种语言后交付。
+
+- 页面标题、导航、按钮、表单标签与提示、占位符、校验和错误提示、Toast、确认弹窗、空状态、表格列名、筛选项、状态文案、接入说明、图片替代文本以及 `aria-label`、`title` 等无障碍文本，都必须通过统一 i18n 资源读取，禁止在组件或渠道 Adapter 中新增硬编码的单语言文本。
+- 每次新增或修改翻译 key，必须同步维护英文和中文资源；两套资源的 key、插值变量和复数语义必须保持一致。App 名称、协议缩写、用户输入和服务端原始内容等无需翻译的数据除外。
+- 英文是默认语言；未设置手动偏好时可根据浏览器语言自动切换中文。用户手动选择的语言必须持久化，且优先级高于浏览器自动判断。修改语言逻辑时不得破坏该优先级。
+- 日期、时间、数字等区域相关内容必须使用当前界面的 locale 格式化，不得固定为某一种语言或地区格式。
+- UI 文本改动必须补充或更新相关测试，并运行翻译资源完整性、语言偏好以及受影响页面或组件的测试，确保英文和中文下都不会显示缺失 key 或错误回退文本。
+
 ## Business Logging
 
 需要在管理后台“业务日志”页面查询的手动日志，统一使用 `backend/internal/logging` 提供的分级方法：
@@ -61,6 +71,8 @@ logging.Error("database", "保存消息失败", logging.Fields{"error": err})
 - Beta 和 Release 版本相互独立。一次发版只能修改对应版本文件，不得同时递增两个版本。
 - 版本文件只能包含一行语义化版本 `vX.Y.Z`，不得使用 SHA、日期、滚动标签或带渠道前缀的值。
 - 已发布的不可变镜像标签不得覆盖或复用；需要重新构建时必须升级对应版本号。
+- 每个版本必须新增对应渠道的结构化双语更新记录：Beta 使用 `release-notes/beta/vX.Y.Z.json`，Release/Hotfix 使用 `release-notes/release/vX.Y.Z.json`；英文和中文内容必须同时存在。
+- 更新提醒和累计更新内容必须严格按运行渠道筛选，Beta 不得读取 Release 更新，Release 不得读取 Beta 更新。
 - Beta 验证后通过 PR 将 `beta` 合回 `dev`。Release 验证后依次将 `main` 合回 `beta`、将最新 `beta` 合回 `dev`。
 - 不得删除 Docker Hub 版本存在性检查，也不得把鉴权失败、网络异常或限流当成镜像不存在。
 

@@ -1,8 +1,10 @@
 import { apiRequest } from './client'
-import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, ConnectionTestResult, CreatedIntegration, DisplayWebhookEvent, EventListResponse, EventNotificationStatus, Integration, IntegrationMediaSettings, IntegrationMediaSettingsInput, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TestHTTPProxyInput, TestTMDBConnectionInput, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
+import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, BuildInfo, ConnectionTestResult, CreatedIntegration, DisplayWebhookEvent, EventListResponse, EventNotificationStatus, Integration, IntegrationMediaSettings, IntegrationMediaSettingsInput, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TestHTTPProxyInput, TestTMDBConnectionInput, TokenResponse, UpdateStatus, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
 import { readAccessToken } from '@/lib/auth-token'
 
 export const api = {
+  version: () => apiRequest<BuildInfo>('/api/version', { auth: false }),
+  updates: (refresh = false) => apiRequest<UpdateStatus>(`/api/admin/updates${refresh ? '?refresh=true' : ''}`),
   login: (username: string, password: string) =>
     apiRequest<TokenResponse>('/api/auth/login', { method: 'POST', body: { username, password } }),
   setupAdmin: (username: string, password: string) =>

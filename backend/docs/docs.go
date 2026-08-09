@@ -15,6 +15,57 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/admin/updates": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Beta 只检查 Beta，Release/Hotfix 只检查正式版本（需要管理员权限）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "更新"
+                ],
+                "summary": "检查更新",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "忽略缓存并重新检查",
+                        "name": "refresh",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/service.UpdateStatusResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/users": {
             "get": {
                 "security": [
@@ -733,6 +784,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/version": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "更新"
+                ],
+                "summary": "获取当前版本",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/buildinfo.Info"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/api/webhooks/integrations/{id}/media-settings": {
             "get": {
                 "security": [
@@ -919,11 +1001,105 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "buildinfo.Info": {
+            "type": "object",
+            "properties": {
+                "build_time": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "commit": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "handler.SetUserRoleRequest": {
             "type": "object",
             "properties": {
                 "is_admin": {
                     "type": "boolean"
+                }
+            }
+        },
+        "releasenotes.Change": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "text": {
+                    "$ref": "#/definitions/releasenotes.LocalizedText"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "releasenotes.LocalizedList": {
+            "type": "object",
+            "properties": {
+                "en": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "zh-CN": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "releasenotes.LocalizedText": {
+            "type": "object",
+            "properties": {
+                "en": {
+                    "type": "string"
+                },
+                "zh-CN": {
+                    "type": "string"
+                }
+            }
+        },
+        "releasenotes.Release": {
+            "type": "object",
+            "properties": {
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/releasenotes.Change"
+                    }
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "image_tag": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "release_url": {
+                    "type": "string"
+                },
+                "schema_version": {
+                    "type": "integer"
+                },
+                "summary": {
+                    "$ref": "#/definitions/releasenotes.LocalizedText"
+                },
+                "upgrade_notes": {
+                    "$ref": "#/definitions/releasenotes.LocalizedList"
+                },
+                "version": {
+                    "type": "string"
                 }
             }
         },
@@ -1141,6 +1317,35 @@ const docTemplate = `{
                 },
                 "server_url": {
                     "type": "string"
+                }
+            }
+        },
+        "service.UpdateStatusResponse": {
+            "type": "object",
+            "properties": {
+                "checked_at": {
+                    "type": "string"
+                },
+                "current": {
+                    "$ref": "#/definitions/buildinfo.Info"
+                },
+                "image_tag": {
+                    "type": "string"
+                },
+                "latest_version": {
+                    "type": "string"
+                },
+                "releases": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/releasenotes.Release"
+                    }
+                },
+                "supported": {
+                    "type": "boolean"
+                },
+                "update_available": {
+                    "type": "boolean"
                 }
             }
         },

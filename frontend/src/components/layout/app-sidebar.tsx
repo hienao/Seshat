@@ -1,9 +1,10 @@
 import { Button } from '@appica/ui-react/button'
-import { Logout, X } from '@appica/icons-react'
+import { BrandGithub, Logout, X } from '@appica/icons-react'
 import { Link, NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/features/auth/use-auth'
 import { getNavigationSections, profileItem, type AppNavigationItem } from './app-navigation'
+import { AppVersionStatus } from '@/components/updates/app-version-status'
 
 const navigationClass = ({ isActive }: { isActive: boolean }) =>
   `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -40,11 +41,28 @@ export function AppSidebar({ className = '', mobile = false, onClose, onNavigate
       aria-modal={mobile || undefined}
       role={mobile ? 'dialog' : undefined}
     >
-      <div className="flex h-16 shrink-0 items-center justify-between px-4">
-        <Link to="/" className="group flex min-w-0 items-center gap-2.5" onClick={onNavigate}>
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-700 font-mono text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition-transform group-hover:-rotate-3">S</span>
-          <span className="truncate font-bold tracking-tight text-neutral-950 dark:text-white">Seshat</span>
-        </Link>
+      <div className="flex min-h-20 shrink-0 items-center justify-between px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Link to="/" className="group shrink-0" onClick={onNavigate} aria-label="Seshat">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-700 font-mono text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition-transform group-hover:-rotate-3">S</span>
+          </Link>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Link to="/" className="truncate font-bold tracking-tight text-neutral-950 dark:text-white" onClick={onNavigate}>Seshat</Link>
+              <a
+                href="https://github.com/hienao/Seshat"
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 rounded text-neutral-400 transition-colors hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 dark:hover:text-neutral-200"
+                aria-label={t('navigation.githubProject')}
+                title={t('navigation.githubProject')}
+              >
+                <BrandGithub size={15} />
+              </a>
+            </div>
+            <AppVersionStatus isAdmin={isAdmin} />
+          </div>
+        </div>
         {mobile && (
           <Button variant="ghost" size="icon-md" aria-label={t('navigation.close')} autoFocus onClick={onClose}>
             <X size={20} />

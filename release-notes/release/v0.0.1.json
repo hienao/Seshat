@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "channel": "release",
+  "version": "v0.0.1",
+  "summary": {
+    "en": "Initial release tracking baseline",
+    "zh-CN": "正式版更新记录基线"
+  },
+  "changes": [
+    {
+      "id": "release-baseline",
+      "type": "change",
+      "text": {
+        "en": "Established the baseline for independently tracked stable releases.",
+        "zh-CN": "建立独立追踪正式版本的更新记录基线。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [],
+    "zh-CN": []
+  }
+}

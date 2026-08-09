@@ -1,16 +1,65 @@
-import { RobotChannelForm } from '../shared/robot-form'
-import type { NotificationChannelAdapter } from '../types'
+import { Input } from '@appica/ui-react/input'
+import { useTranslation } from 'react-i18next'
+import { SecretInput } from '../secret-input'
+import type { ChannelFormProps, NotificationChannelAdapter } from '../types'
 import { channelPayload, credentialTextField, textField } from '../types'
+import { i18n } from '@/i18n'
 
 export const dingTalkChannelAdapter: NotificationChannelAdapter = {
   type: 'dingtalk',
   label: 'DingTalk',
-  defaultFields: () => ({ webhookUrl: '', signingSecret: '' }),
-  fieldsFromChannel: (channel) => ({ webhookUrl: credentialTextField(channel, 'webhook_url'), signingSecret: credentialTextField(channel, 'signing_secret') }),
+  defaultFields: () => ({ secret: '', token: '', targets: '' }),
+  fieldsFromChannel: (channel) => ({
+    secret: credentialTextField(channel, 'secret') || credentialTextField(channel, 'signing_secret'),
+    token: credentialTextField(channel, 'token') || legacyDingTalkToken(credentialTextField(channel, 'webhook_url')),
+    targets: credentialTextField(channel, 'targets'),
+  }),
   toPayload: (common, fields) => {
-    const webhookUrl = textField(fields, 'webhookUrl').trim()
-    const signingSecret = textField(fields, 'signingSecret').trim()
-    return channelPayload(common, {}, { webhook_url: webhookUrl, signing_secret: signingSecret })
+    const secret = textField(fields, 'secret').trim()
+    const token = textField(fields, 'token').trim()
+    const targets = textField(fields, 'targets').trim()
+    return channelPayload(common, {}, { secret, token, targets })
   },
-  Form: (props) => <RobotChannelForm providerName="DingTalk" {...props} />,
+  validate: (fields) => {
+    if (!textField(fields, 'token').trim()) return i18n.t('notifications.forms.dingTalkTokenRequired')
+    if (invalidDingTalkTarget(textField(fields, 'targets'))) return i18n.t('notifications.forms.dingTalkTargetsInvalid')
+    return ''
+  },
+  Form: DingTalkChannelForm,
+}
+
+function DingTalkChannelForm({ fields, update }: ChannelFormProps) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <label className="block space-y-2 text-sm font-medium">
+        <span>{t('notifications.forms.dingTalkToken')}</span>
+        <SecretInput revealLabel={t('notifications.forms.dingTalkToken')} value={textField(fields, 'token')} onChange={(event) => update('token', event.target.value)} required autoComplete="off" />
+      </label>
+      <label className="block space-y-2 text-sm font-medium">
+        <span>{t('notifications.forms.dingTalkSecret')}</span>
+        <SecretInput revealLabel={t('notifications.forms.dingTalkSecret')} value={textField(fields, 'secret')} onChange={(event) => update('secret', event.target.value)} autoComplete="new-password" />
+      </label>
+      <label className="block space-y-2 text-sm font-medium">
+        <span>{t('notifications.forms.dingTalkTargets')}</span>
+        <Input value={textField(fields, 'targets')} onChange={(event) => update('targets', event.target.value)} placeholder="13800138000, 13900139000" />
+        <span className="block text-xs font-normal text-neutral-500">{t('notifications.forms.dingTalkTargetsHelp')}</span>
+      </label>
+    </>
+  )
+}
+
+function legacyDingTalkToken(webhookURL: string) {
+  try {
+    return new URL(webhookURL).searchParams.get('access_token')?.trim() ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function invalidDingTalkTarget(value: string) {
+  return value.split(/[,;\r\n]+/).map((target) => target.trim()).filter(Boolean).some((part) => {
+    const target = part.replace(/\D/g, '')
+    return target.length < 11 || target.length > 14
+  })
 }

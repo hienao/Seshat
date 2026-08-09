@@ -8,12 +8,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"seshat/internal/model"
+	"seshat/internal/webhook"
 	"seshat/pkg/database"
 )
 
@@ -317,6 +320,99 @@ func TestEmbyWebhookPreservesSourceTypeAndUsesNormalizedDisplayType(t *testing.T
 	data := presentation["data"].(map[string]interface{})
 	if data["category"] != "media" || data["source_event_type"] != "library.new" {
 		t.Fatalf("unexpected normalized data: %+v", data)
+	}
+}
+
+func TestMediaDeletedSkipsMediaServerWhileMediaAddedStillFetches(t *testing.T) {
+	tests := []struct {
+		name         string
+		appCode      string
+		deletedBody  string
+		addedBody    string
+		expectedPath string
+	}{
+		{
+			name:         "Jellyfin",
+			appCode:      "jellyfin",
+			deletedBody:  `{"NotificationType":"ItemDeleted","ItemId":"item-1","Name":"Webhook deleted title","ItemType":"Movie"}`,
+			addedBody:    `{"NotificationType":"ItemAdded","ItemId":"item-1","Name":"Webhook added title","ItemType":"Movie"}`,
+			expectedPath: "/Items/item-1",
+		},
+		{
+			name:         "Emby",
+			appCode:      "emby",
+			deletedBody:  `{"Event":"library.deleted","Item":{"Id":"item-1","Name":"Webhook deleted title","Type":"Movie"}}`,
+			addedBody:    `{"Event":"library.new","Item":{"Id":"item-1","Name":"Webhook added title","Type":"Movie"}}`,
+			expectedPath: "/emby/Items/item-1",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setupWebhookTestDB(t)
+			if err := database.GetDB().AutoMigrate(&model.SystemSetting{}, &model.MediaMetadataCache{}); err != nil {
+				t.Fatal(err)
+			}
+
+			requests := 0
+			mediaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				requests++
+				if request.URL.Path != test.expectedPath {
+					t.Errorf("unexpected media server request: %s", request.URL.String())
+				}
+				if request.Header.Get("X-Emby-Token") != "media-api-key" {
+					t.Errorf("media API key header = %q", request.Header.Get("X-Emby-Token"))
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(`{"Id":"item-1","Name":"API title","Type":"Movie"}`))
+			}))
+			defer mediaServer.Close()
+
+			webhookService := NewWebhookService()
+			created, err := webhookService.CreateIntegration(7, &CreateIntegrationRequest{AppCode: test.appCode, Name: test.name})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := webhookService.UpdateIntegrationMediaSettings(7, created.ID, &UpdateIntegrationMediaSettingsRequest{ServerURL: mediaServer.URL, APIKey: "media-api-key"}); err != nil {
+				t.Fatal(err)
+			}
+			if adapter, ok := webhookService.mediaMetadata.adapters[test.appCode]; ok {
+				switch typed := adapter.(type) {
+				case *jellyfinMediaMetadataAdapter:
+					typed.client = mediaServer.Client()
+				case *embyMediaMetadataAdapter:
+					typed.client = mediaServer.Client()
+				}
+			}
+
+			headers := map[string]string{"X-Webhook-Secret": created.Secret}
+			if _, err := webhookService.Ingest(created.EndpointKey, headers, []byte(test.deletedBody), "application/json"); err != nil {
+				t.Fatal(err)
+			}
+			if requests != 0 {
+				t.Fatalf("deleted event made %d media server requests, want 0", requests)
+			}
+
+			var deleted model.WebhookEvent
+			if err := database.GetDB().Where("display_event_type = ?", "media_deleted").First(&deleted).Error; err != nil {
+				t.Fatal(err)
+			}
+			var deletedPresentation webhook.Presentation
+			if err := json.Unmarshal(deleted.Presentation, &deletedPresentation); err != nil {
+				t.Fatal(err)
+			}
+			deletedMedia := deletedPresentation.Data["media"].(map[string]interface{})
+			if deletedMedia["name"] != "Webhook deleted title" || deletedMedia["metadata_source"] != nil {
+				t.Fatalf("deleted media should keep only webhook data: %+v", deletedMedia)
+			}
+
+			if _, err := webhookService.Ingest(created.EndpointKey, headers, []byte(test.addedBody), "application/json"); err != nil {
+				t.Fatal(err)
+			}
+			if requests != 1 {
+				t.Fatalf("added event made %d media server requests, want 1", requests)
+			}
+		})
 	}
 }
 
