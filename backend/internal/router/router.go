@@ -123,6 +123,8 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 		{
 			adminSettings.GET("/system", settingHandler.GetSystemSettings)
 			adminSettings.PUT("/system", settingHandler.UpdateSystemSettings)
+			adminSettings.POST("/system/test-http-proxy", settingHandler.TestHTTPProxy)
+			adminSettings.POST("/system/test-tmdb", settingHandler.TestTMDBConnection)
 		}
 
 		// 管理员接口日志，不记录日志管理接口自身，清空操作写入审计表。

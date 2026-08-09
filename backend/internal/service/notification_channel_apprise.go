@@ -15,7 +15,14 @@ type appriseNotificationAdapter struct{}
 func (appriseNotificationAdapter) Type() string { return "apprise" }
 
 func (appriseNotificationAdapter) Sanitize(config, credentials map[string]interface{}) (map[string]interface{}, map[string]interface{}, error) {
-	return sanitizeNotificationChannelFields(config, credentials, []string{"base_url", "tag"}, []string{"config_id"})
+	cleanConfig, cleanCredentials, err := sanitizeNotificationChannelFields(config, credentials, []string{"base_url", "tag"}, []string{"config_id"})
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, exists := cleanConfig["tag"]; !exists {
+		cleanConfig["tag"] = "all"
+	}
+	return cleanConfig, cleanCredentials, nil
 }
 
 func (appriseNotificationAdapter) Validate(config, credentials map[string]interface{}) error {
@@ -25,6 +32,9 @@ func (appriseNotificationAdapter) Validate(config, credentials map[string]interf
 	configID, _ := credentials["config_id"].(string)
 	if !validAppriseConfigID(configID) {
 		return errors.New("Apprise Config ID 必须为 1 到 128 位字母、数字、下划线或连字符")
+	}
+	if !requiredNotificationString(config, "tag") {
+		return errors.New("Apprise Tag 不能为空，请使用 all 推送到全部服务")
 	}
 	return nil
 }
@@ -41,10 +51,12 @@ func (appriseNotificationAdapter) BuildRequest(channel *model.NotificationChanne
 		return nil, &deliveryError{message: "Apprise Config ID 未配置"}
 	}
 	endpoint := strings.TrimRight(baseURL, "/") + "/notify/" + url.PathEscape(configID)
-	payload := map[string]interface{}{"title": message.Title, "body": notificationBody(message), "type": appriseSeverity(message.Severity), "format": "text"}
-	if tag, _ := config["tag"].(string); strings.TrimSpace(tag) != "" {
-		payload["tag"] = tag
+	tag, _ := config["tag"].(string)
+	if tag = strings.TrimSpace(tag); tag == "" {
+		// 兼容升级前保存的空 Tag；all 是 Apprise 的保留值，表示全部服务。
+		tag = "all"
 	}
+	payload := map[string]interface{}{"title": message.Title, "body": notificationBody(message), "type": appriseSeverity(message.Severity), "format": "text", "tag": tag}
 	return jsonNotificationRequest(endpoint, payload, nil, true, false)
 }
 

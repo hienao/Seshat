@@ -37,6 +37,20 @@ export type UpdateSystemSettingsInput = Partial<Pick<SystemSettings, 'allow_regi
   public_base_url?: string
 }
 
+export interface TestTMDBConnectionInput {
+  tmdb_read_access_token: string
+  http_proxy_url?: string
+  use_proxy: boolean
+}
+
+export interface TestHTTPProxyInput {
+  http_proxy_url: string
+}
+
+export interface ConnectionTestResult {
+  message: string
+}
+
 export interface RegistrationStatus {
   allowed: boolean
 }
@@ -122,6 +136,9 @@ export interface WebhookEvent extends DisplayWebhookEvent {
 export interface EventListResponse {
   items: WebhookEvent[]
   total: number
+  limit: number
+  offset: number
+  has_more: boolean
 }
 
 export interface ApiRequestLog {
