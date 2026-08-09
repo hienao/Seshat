@@ -73,6 +73,7 @@ logging.Error("database", "保存消息失败", logging.Fields{"error": err})
 - 已发布的不可变镜像标签不得覆盖或复用；需要重新构建时必须升级对应版本号。
 - 每个版本必须新增对应渠道的结构化双语更新记录：Beta 使用 `release-notes/beta/vX.Y.Z.json`，Release/Hotfix 使用 `release-notes/release/vX.Y.Z.json`；英文和中文内容必须同时存在。
 - 更新提醒和累计更新内容必须严格按运行渠道筛选，Beta 不得读取 Release 更新，Release 不得读取 Beta 更新。
+- 启用 Cloudflare Pages 发布后，每次 Beta 或 Release 发版必须重建双语项目主页、更新历史，以及 `/updates/v1/beta.json`、`/updates/v1/release.json` 固定静态更新源；Pages 发布失败不得被误判为镜像不存在。
 - Beta 验证后通过 PR 将 `beta` 合回 `dev`。Release 验证后依次将 `main` 合回 `beta`、将最新 `beta` 合回 `dev`。
 - 不得删除 Docker Hub 版本存在性检查，也不得把鉴权失败、网络异常或限流当成镜像不存在。
 

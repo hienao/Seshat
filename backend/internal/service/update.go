@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -20,10 +21,11 @@ import (
 )
 
 const (
-	defaultGitHubReleasesURL = "https://api.github.com/repos/hienao/Seshat/releases?per_page=100"
-	updateFeedAssetName      = "update-feed.json"
+	defaultUpdateFeedBaseURL = "https://seshatapp.pages.dev/updates/v1"
+	updateFeedBaseURLEnv     = "SESHAT_UPDATE_FEED_BASE_URL"
 	maxUpdateResponseBytes   = 1 << 20
 	defaultUpdateCacheTTL    = 6 * time.Hour
+	githubReleasesBaseURL    = "https://github.com/hienao/Seshat/releases/tag/"
 )
 
 var (
@@ -41,21 +43,6 @@ type UpdateStatusResponse struct {
 	CheckedAt       time.Time              `json:"checked_at"`
 }
 
-type githubUpdateRelease struct {
-	TagName     string              `json:"tag_name"`
-	HTMLURL     string              `json:"html_url"`
-	Draft       bool                `json:"draft"`
-	Prerelease  bool                `json:"prerelease"`
-	PublishedAt string              `json:"published_at"`
-	Assets      []githubUpdateAsset `json:"assets"`
-}
-
-type githubUpdateAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-	Size               int64  `json:"size"`
-}
-
 type updateCache struct {
 	response  *UpdateStatusResponse
 	expiresAt time.Time
@@ -63,7 +50,7 @@ type updateCache struct {
 
 type UpdateService struct {
 	current      buildinfo.Info
-	releasesURL  string
+	feedBaseURL  string
 	httpClient   *http.Client
 	settings     *SettingService
 	cacheTTL     time.Duration
@@ -75,23 +62,23 @@ type UpdateService struct {
 }
 
 func NewUpdateService() *UpdateService {
-	return newUpdateService(buildinfo.Current(), defaultGitHubReleasesURL, &http.Client{Timeout: 5 * time.Second}, NewSettingService())
+	feedBaseURL := strings.TrimSpace(os.Getenv(updateFeedBaseURLEnv))
+	if feedBaseURL == "" {
+		feedBaseURL = defaultUpdateFeedBaseURL
+	}
+	return newUpdateService(buildinfo.Current(), feedBaseURL, &http.Client{Timeout: 5 * time.Second}, NewSettingService())
 }
 
-func newUpdateService(current buildinfo.Info, releasesURL string, client *http.Client, settings *SettingService) *UpdateService {
-	allowedHosts := map[string]bool{
-		"api.github.com":                       true,
-		"github.com":                           true,
-		"objects.githubusercontent.com":        true,
-		"release-assets.githubusercontent.com": true,
-	}
-	parsed, _ := url.Parse(releasesURL)
+func newUpdateService(current buildinfo.Info, feedBaseURL string, client *http.Client, settings *SettingService) *UpdateService {
+	feedBaseURL = strings.TrimRight(strings.TrimSpace(feedBaseURL), "/")
+	allowedHosts := map[string]bool{}
+	parsed, _ := url.Parse(feedBaseURL)
 	if parsed != nil && parsed.Hostname() != "" {
 		allowedHosts[strings.ToLower(parsed.Hostname())] = true
 	}
 	return &UpdateService{
 		current:      current,
-		releasesURL:  releasesURL,
+		feedBaseURL:  feedBaseURL,
 		httpClient:   client,
 		settings:     settings,
 		cacheTTL:     defaultUpdateCacheTTL,
@@ -113,46 +100,35 @@ func (s *UpdateService) Check(ctx context.Context, refresh bool) (*UpdateStatusR
 	if !semver.IsValid(current.Version) {
 		return nil, ErrInvalidUpdateFeed
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	now := s.now()
-	if !refresh {
-		s.mu.Lock()
-		if s.cache.response != nil && now.Before(s.cache.expiresAt) {
-			cached := cloneUpdateStatus(s.cache.response)
-			s.mu.Unlock()
-			return cached, nil
-		}
-		s.mu.Unlock()
+	if !refresh && s.cache.response != nil && now.Before(s.cache.expiresAt) {
+		return cloneUpdateStatus(s.cache.response), nil
 	}
 
-	releases, err := s.fetchGitHubReleases(ctx)
+	feed, err := s.fetchUpdateFeed(ctx, current.Channel)
 	if err != nil {
+		if s.cache.response != nil {
+			return cloneUpdateStatus(s.cache.response), nil
+		}
 		return nil, err
 	}
-	latest, latestVersion, err := latestChannelRelease(releases, current.Channel)
-	if err != nil {
-		return nil, err
-	}
-	feedAsset, ok := updateFeedAsset(latest.Assets)
-	if !ok || feedAsset.Size > maxUpdateResponseBytes {
-		return nil, ErrInvalidUpdateFeed
-	}
-	feed, err := s.fetchUpdateFeed(ctx, feedAsset.BrowserDownloadURL)
-	if err != nil {
-		return nil, err
-	}
-	if err := releasenotes.ValidateFeed(feed, current.Channel, latestVersion); err != nil {
+	if err := releasenotes.ValidateFeed(feed, current.Channel, feed.LatestVersion); err != nil {
+		if s.cache.response != nil {
+			return cloneUpdateStatus(s.cache.response), nil
+		}
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUpdateFeed, err)
 	}
 
-	metadata := releaseMetadataByVersion(releases, current.Channel)
+	latestVersion := feed.LatestVersion
 	updates := make([]releasenotes.Release, 0, len(feed.Releases))
 	for _, release := range feed.Releases {
 		if semver.Compare(release.Version, current.Version) <= 0 || semver.Compare(release.Version, latestVersion) > 0 {
 			continue
 		}
-		if remote, exists := metadata[release.Version]; exists {
-			release.PublishedAt = remote.PublishedAt
-			release.ReleaseURL = remote.HTMLURL
+		if strings.TrimSpace(release.ReleaseURL) == "" {
+			release.ReleaseURL = releaseURLForChannel(current.Channel, release.Version)
 		}
 		release.ImageTag = imageTagForChannel(current.Channel, release.Version)
 		updates = append(updates, release)
@@ -167,37 +143,13 @@ func (s *UpdateService) Check(ctx context.Context, refresh bool) (*UpdateStatusR
 		Releases:        updates,
 		CheckedAt:       now.UTC(),
 	}
-	s.mu.Lock()
 	s.cache = updateCache{response: cloneUpdateStatus(response), expiresAt: now.Add(s.cacheTTL)}
-	s.mu.Unlock()
 	return response, nil
 }
 
-func (s *UpdateService) fetchGitHubReleases(ctx context.Context) ([]githubUpdateRelease, error) {
-	all := make([]githubUpdateRelease, 0, 100)
-	for page := 1; page <= 10; page++ {
-		endpoint, err := url.Parse(s.releasesURL)
-		if err != nil {
-			return nil, ErrUpdateCheckUnavailable
-		}
-		query := endpoint.Query()
-		query.Set("per_page", "100")
-		query.Set("page", fmt.Sprintf("%d", page))
-		endpoint.RawQuery = query.Encode()
-		var releases []githubUpdateRelease
-		if err := s.getJSON(ctx, endpoint.String(), &releases); err != nil {
-			return nil, err
-		}
-		all = append(all, releases...)
-		if len(releases) < 100 {
-			return all, nil
-		}
-	}
-	return all, nil
-}
-
-func (s *UpdateService) fetchUpdateFeed(ctx context.Context, endpoint string) (releasenotes.Feed, error) {
+func (s *UpdateService) fetchUpdateFeed(ctx context.Context, channel string) (releasenotes.Feed, error) {
 	var feed releasenotes.Feed
+	endpoint := s.feedBaseURL + "/" + channel + ".json"
 	if err := s.getJSON(ctx, endpoint, &feed); err != nil {
 		return feed, err
 	}
@@ -212,7 +164,7 @@ func (s *UpdateService) getJSON(ctx context.Context, endpoint string, target int
 	if err != nil {
 		return ErrUpdateCheckUnavailable
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Seshat-Update-Checker")
 	client, err := s.updateHTTPClient()
 	if err != nil {
@@ -269,67 +221,16 @@ func (s *UpdateService) validUpdateURL(raw string) bool {
 	return parsed.Scheme == "https" || (s.allowHTTP && parsed.Scheme == "http")
 }
 
-func latestChannelRelease(releases []githubUpdateRelease, channel string) (githubUpdateRelease, string, error) {
-	var selected githubUpdateRelease
-	latestVersion := ""
-	for _, release := range releases {
-		version, ok := channelReleaseVersion(release, channel)
-		if !ok || (latestVersion != "" && semver.Compare(version, latestVersion) <= 0) {
-			continue
-		}
-		selected, latestVersion = release, version
-	}
-	if latestVersion == "" {
-		return selected, "", ErrUpdateCheckUnavailable
-	}
-	return selected, latestVersion, nil
-}
-
-func channelReleaseVersion(release githubUpdateRelease, channel string) (string, bool) {
-	if release.Draft {
-		return "", false
-	}
-	tag := strings.TrimSpace(release.TagName)
-	switch channel {
-	case "beta":
-		if !release.Prerelease || !strings.HasPrefix(tag, "beta-") {
-			return "", false
-		}
-		tag = strings.TrimPrefix(tag, "beta-")
-	case "release":
-		if release.Prerelease || strings.HasPrefix(tag, "beta-") {
-			return "", false
-		}
-	default:
-		return "", false
-	}
-	return tag, semver.IsValid(tag)
-}
-
-func updateFeedAsset(assets []githubUpdateAsset) (githubUpdateAsset, bool) {
-	for _, asset := range assets {
-		if asset.Name == updateFeedAssetName && asset.BrowserDownloadURL != "" && asset.Size > 0 {
-			return asset, true
-		}
-	}
-	return githubUpdateAsset{}, false
-}
-
-func releaseMetadataByVersion(releases []githubUpdateRelease, channel string) map[string]githubUpdateRelease {
-	result := make(map[string]githubUpdateRelease)
-	for _, release := range releases {
-		if version, ok := channelReleaseVersion(release, channel); ok {
-			result[version] = release
-		}
-	}
-	return result
-}
-
 func imageTagForChannel(channel, version string) string {
 	if channel == "beta" {
 		return "beta-" + version
 	}
 	return version
+}
+
+func releaseURLForChannel(channel, version string) string {
+	tag := imageTagForChannel(channel, version)
+	return githubReleasesBaseURL + url.PathEscape(tag)
 }
 
 func cloneUpdateStatus(value *UpdateStatusResponse) *UpdateStatusResponse {

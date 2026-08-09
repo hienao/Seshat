@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0d0c">
+  <meta name="description" content="{{meta.homeDescription}}" data-i18n-content="meta.homeDescription">
+  <title data-i18n="meta.homeTitle">{{meta.homeTitle}}</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="home">
+  <a class="skip-link" href="#main" data-i18n="accessibility.skip">{{accessibility.skip}}</a>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="{{accessibility.home}}" data-i18n-aria="accessibility.home">
+      <span class="brand-mark" aria-hidden="true">S</span>
+      <span>Seshat</span>
+    </a>
+    <nav class="nav-links" aria-label="{{accessibility.primaryNavigation}}" data-i18n-aria="accessibility.primaryNavigation">
+      <a href="#product" data-i18n="nav.product">{{nav.product}}</a>
+      <a href="/releases/" data-i18n="nav.releases">{{nav.releases}}</a>
+      <a href="https://github.com/hienao/Seshat" target="_blank" rel="noreferrer" data-i18n="nav.github">{{nav.github}}</a>
+    </nav>
+    <div class="language-switcher" role="group" aria-label="{{nav.language}}" data-i18n-aria="nav.language">
+      <button type="button" data-language="en" data-i18n="nav.english">{{nav.english}}</button>
+      <button type="button" data-language="zh-CN" data-i18n="nav.chinese">{{nav.chinese}}</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero section-shell">
+      <div class="hero-copy">
+        <p class="eyebrow" data-i18n="home.eyebrow">{{home.eyebrow}}</p>
+        <h1 data-i18n="home.headline">{{home.headline}}</h1>
+        <p class="hero-lead" data-i18n="home.lead">{{home.lead}}</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="https://github.com/hienao/Seshat" target="_blank" rel="noreferrer"><span data-i18n="home.githubCta">{{home.githubCta}}</span><span aria-hidden="true">↗</span></a>
+          <a class="button button-secondary" href="/releases/" data-i18n="home.releasesCta">{{home.releasesCta}}</a>
+        </div>
+      </div>
+      <div class="signal-stage" aria-label="{{accessibility.eventPreview}}" data-i18n-aria="accessibility.eventPreview">
+        <div class="signal-orbit signal-orbit-one"></div>
+        <div class="signal-orbit signal-orbit-two"></div>
+        <article class="event-card">
+          <div class="event-card-head">
+            <div class="event-app"><span class="app-dot">J</span><strong data-i18n="home.mockApp">{{home.mockApp}}</strong></div>
+            <span class="event-pill" data-i18n="home.mockEvent">{{home.mockEvent}}</span>
+          </div>
+          <div class="event-art" aria-hidden="true"><span>01</span><span>10</span></div>
+          <p class="event-kicker" data-i18n="home.signalLabel">{{home.signalLabel}}</p>
+          <h2 data-i18n="home.mockTitle">{{home.mockTitle}}</h2>
+          <p data-i18n="home.mockBody">{{home.mockBody}}</p>
+          <div class="event-progress"><span></span></div>
+          <footer><span class="pulse"></span><span data-i18n="home.mockRoute">{{home.mockRoute}}</span></footer>
+        </article>
+      </div>
+    </section>
+
+    <section class="principles" id="product">
+      <div class="section-shell">
+        <div class="section-heading">
+          <p class="eyebrow" data-i18n="home.principlesEyebrow">{{home.principlesEyebrow}}</p>
+          <h2 data-i18n="home.principlesTitle">{{home.principlesTitle}}</h2>
+          <p data-i18n="home.principlesLead">{{home.principlesLead}}</p>
+        </div>
+        <div class="feature-grid">
+          <article><span class="feature-index">01</span><h3 data-i18n="home.featureInboxTitle">{{home.featureInboxTitle}}</h3><p data-i18n="home.featureInboxBody">{{home.featureInboxBody}}</p></article>
+          <article><span class="feature-index">02</span><h3 data-i18n="home.featureAppsTitle">{{home.featureAppsTitle}}</h3><p data-i18n="home.featureAppsBody">{{home.featureAppsBody}}</p></article>
+          <article><span class="feature-index">03</span><h3 data-i18n="home.featureRoutingTitle">{{home.featureRoutingTitle}}</h3><p data-i18n="home.featureRoutingBody">{{home.featureRoutingBody}}</p></article>
+          <article><span class="feature-index">04</span><h3 data-i18n="home.featureDeliveryTitle">{{home.featureDeliveryTitle}}</h3><p data-i18n="home.featureDeliveryBody">{{home.featureDeliveryBody}}</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="ecosystem section-shell">
+      <div class="section-heading compact-heading">
+        <p class="eyebrow" data-i18n="home.ecosystemEyebrow">{{home.ecosystemEyebrow}}</p>
+        <h2 data-i18n="home.ecosystemTitle">{{home.ecosystemTitle}}</h2>
+      </div>
+      <div class="connection-board">
+        <div class="connection-group"><span data-i18n="home.appsLabel">{{home.appsLabel}}</span><div><b>Jellyfin</b><b>Emby</b><b>GitHub</b><b>Synology</b></div></div>
+        <div class="connection-core"><span class="brand-mark">S</span><strong>Seshat</strong></div>
+        <div class="connection-group align-end"><span data-i18n="home.channelsLabel">{{home.channelsLabel}}</span><div><b>DingTalk</b><b>Telegram</b><b>Apprise</b><b>Webhook</b><b>Email</b></div></div>
+      </div>
+    </section>
+
+    <section class="deploy-section">
+      <div class="section-shell deploy-grid">
+        <div class="section-heading">
+          <p class="eyebrow" data-i18n="home.deployEyebrow">{{home.deployEyebrow}}</p>
+          <h2 data-i18n="home.deployTitle">{{home.deployTitle}}</h2>
+          <p data-i18n="home.deployBody">{{home.deployBody}}</p>
+          <small data-i18n="home.copyHint">{{home.copyHint}}</small>
+        </div>
+        <pre class="code-panel"><code><span class="code-comment"># compose.yaml</span>
+services:
+  seshat:
+    image: hienao6/seshat:<span data-latest-tag>beta-v0.9.0</span>
+    ports: [<span class="code-string">"3112:3112"</span>]
+    volumes:
+      - ./data:/data
+      - ./cache:/cache</code></pre>
+      </div>
+    </section>
+
+    <section class="versions section-shell">
+      <div class="section-heading compact-heading">
+        <p class="eyebrow" data-i18n="home.versionEyebrow">{{home.versionEyebrow}}</p>
+        <h2 data-i18n="home.versionTitle">{{home.versionTitle}}</h2>
+      </div>
+      <div class="version-grid">
+        <a href="/releases/#beta" class="version-card"><span class="status-dot beta"></span><div><small data-i18n="home.latest">{{home.latest}}</small><h3 data-i18n="home.betaLabel">{{home.betaLabel}}</h3><p data-i18n="home.betaBody">{{home.betaBody}}</p></div><strong data-version="beta">—</strong></a>
+        <a href="/releases/#release" class="version-card"><span class="status-dot release"></span><div><small data-i18n="home.latest">{{home.latest}}</small><h3 data-i18n="home.releaseLabel">{{home.releaseLabel}}</h3><p data-i18n="home.releaseBody">{{home.releaseBody}}</p></div><strong data-version="release">—</strong></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer section-shell"><span class="brand">Seshat</span><p data-i18n="home.footer">{{home.footer}}</p><a href="https://github.com/hienao/Seshat">GitHub ↗</a></footer>
+  <script src="/assets/site.js" type="module"></script>
+</body>
+</html>
