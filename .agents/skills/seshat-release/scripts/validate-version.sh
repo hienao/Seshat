@@ -17,10 +17,12 @@ case "$release_kind" in
   beta)
     version_file="VERSION_BETA"
     tag_prefix="beta-"
+    notes_channel="beta"
     ;;
   release|hotfix)
     version_file="VERSION_RELEASE"
     tag_prefix=""
+    notes_channel="release"
     ;;
   *)
     usage
@@ -48,5 +50,7 @@ if [[ -n "$expected_version" && "$version" != "$expected_version" ]]; then
   echo "ERROR: $version_file is $version, expected $expected_version" >&2
   exit 1
 fi
+
+"$script_dir/validate-release-notes.sh" "$notes_channel" "$version"
 
 echo "OK: $release_kind uses $version_file=$version and image tag ${tag_prefix}${version}"

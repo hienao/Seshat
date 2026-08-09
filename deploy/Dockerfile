@@ -13,22 +13,24 @@ RUN npm run build
 # 阶段 2: 构建后端
 FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app/backend
-# 安装依赖
-RUN sed -i 's|https://dl-cdn.alpinelinux.org/alpine|https://mirrors.ustc.edu.cn/alpine|g' /etc/apk/repositories && \
-    apk update && \
-    apk add --no-cache git gcc musl-dev
+ARG APP_VERSION=dev
+ARG APP_CHANNEL=dev
+ARG APP_COMMIT=unknown
+ARG APP_BUILD_TIME=unknown
+# 使用 Alpine 基础镜像自带的官方软件源安装依赖。
+RUN apk add --no-cache git gcc musl-dev
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
-# 构建
-RUN CGO_ENABLED=1 GOOS=linux go build -o main .
+# 构建，并把唯一版本源解析出的信息写入后端二进制。
+RUN CGO_ENABLED=1 GOOS=linux go build -trimpath \
+    -ldflags "-s -w -X seshat/internal/buildinfo.Version=${APP_VERSION} -X seshat/internal/buildinfo.Channel=${APP_CHANNEL} -X seshat/internal/buildinfo.Commit=${APP_COMMIT} -X seshat/internal/buildinfo.BuildTime=${APP_BUILD_TIME}" \
+    -o main .
 
 # 阶段 3: 最终镜像
 FROM alpine:latest
 ENV TZ=UTC
-RUN sed -i 's|https://dl-cdn.alpinelinux.org/alpine|https://mirrors.ustc.edu.cn/alpine|g' /etc/apk/repositories && \
-    apk update && \
-    apk --no-cache add ca-certificates nginx tzdata
+RUN apk add --no-cache ca-certificates nginx tzdata
 
 WORKDIR /app
 

@@ -48,6 +48,7 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 	adminApplicationLogHandler := handler.NewAdminApplicationLogHandler(logManager)
 	webhookHandler := handler.NewWebhookHandler()
 	notificationHandler := handler.NewNotificationHandler()
+	updateHandler := handler.NewUpdateHandler()
 
 	// 初始化一次性引导管理员和系统设置
 	if err := authHandler.GetAuthService().InitBootstrapAdmin(); err != nil {
@@ -59,6 +60,7 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 	// API 路由组
 	api := r.Group("/api")
 	{
+		api.GET("/version", updateHandler.GetVersion)
 		// 推送消息中的公开详情链接，使用随机访问标识，不需要 JWT。
 		api.GET("/public/events/:token", webhookHandler.GetPublicEvent)
 		api.GET("/public/media-images/:token", webhookHandler.GetPublicMediaImage)
@@ -158,6 +160,7 @@ func SetupWithLogManager(cfg *config.Config, logManager *logging.Manager) *gin.E
 		{
 			admin.GET("/users", adminHandler.ListUsers)
 			admin.PUT("/users/:id/role", adminHandler.SetUserRole)
+			admin.GET("/updates", updateHandler.CheckUpdates)
 		}
 	}
 

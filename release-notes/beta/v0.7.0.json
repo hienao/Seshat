@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "channel": "beta",
+  "version": "v0.7.0",
+  "summary": {
+    "en": "Bilingual interface and presentation improvements",
+    "zh-CN": "双语界面与内容展示改进"
+  },
+  "changes": [
+    {
+      "id": "bilingual-interface",
+      "type": "feature",
+      "text": {
+        "en": "Added complete English and Chinese interface support with browser-language detection and a persistent manual preference.",
+        "zh-CN": "新增完整的中英文界面支持，包括浏览器语言识别和持久化的手动语言偏好。"
+      }
+    },
+    {
+      "id": "localized-feedback",
+      "type": "change",
+      "text": {
+        "en": "Localized navigation, forms, validation, feedback, logs, and media presentation.",
+        "zh-CN": "完成导航、表单、校验、反馈、日志和媒体展示的多语言适配。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [],
+    "zh-CN": []
+  }
+}

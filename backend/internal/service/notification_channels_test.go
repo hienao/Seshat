@@ -106,7 +106,7 @@ func TestAdditionalNotificationChannelsPersistAndReturnCredentials(t *testing.T)
 		{"email", map[string]interface{}{"smtp_host": "smtp.example.com", "smtp_port": 587, "encryption": "starttls", "from": "notice@example.com", "to": "one@example.com,two@example.com"}, map[string]interface{}{"username": "mailer", "password": "email-secret"}, "email-secret"},
 		{"serverchan", map[string]interface{}{}, map[string]interface{}{"send_key": "SCT-server-secret"}, "SCT-server-secret"},
 		{"bark", map[string]interface{}{"base_url": "https://api.day.app", "group": "Seshat"}, map[string]interface{}{"device_key": "bark-secret"}, "bark-secret"},
-		{"dingtalk", map[string]interface{}{}, map[string]interface{}{"webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=ding-secret", "signing_secret": "SEC-ding"}, "ding-secret"},
+		{"dingtalk", map[string]interface{}{}, map[string]interface{}{"secret": "SEC-ding", "token": "ding-secret", "targets": "13800138000"}, "ding-secret"},
 		{"feishu", map[string]interface{}{}, map[string]interface{}{"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/feishu-secret", "signing_secret": "SEC-feishu"}, "feishu-secret"},
 		{"whatsapp", map[string]interface{}{"api_version": "v25.0"}, map[string]interface{}{"access_token": "whatsapp-secret", "phone_number_id": "123456", "recipient": "8613800000000"}, "whatsapp-secret"},
 		{"wxpusher", map[string]interface{}{"uids": "UID_one", "topic_ids": "42"}, map[string]interface{}{"app_token": "AT-wxpusher-secret"}, "AT-wxpusher-secret"},
@@ -168,13 +168,25 @@ func TestBuildAdditionalNotificationRequests(t *testing.T) {
 		t.Fatalf("unexpected Bark request: %s %s", bark.endpoint, bark.body)
 	}
 
-	dingTalk, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "dingtalk", Config: []byte(`{}`), SecretConfig: []byte(`{"webhook_url":"https://oapi.dingtalk.com/robot/send?access_token=token","signing_secret":"SEC-test"}`)}, message)
+	dingTalk, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "dingtalk", Config: []byte(`{}`), SecretConfig: []byte(`{"secret":"SEC-test","token":"token","targets":"13800138000, 13900139000"}`)}, message)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dingTalkURL, _ := url.Parse(dingTalk.endpoint)
-	if dingTalkURL.Query().Get("timestamp") == "" || dingTalkURL.Query().Get("sign") == "" || !strings.Contains(string(dingTalk.body), `"msgtype":"markdown"`) {
+	var dingTalkPayload map[string]interface{}
+	_ = json.Unmarshal(dingTalk.body, &dingTalkPayload)
+	dingTalkAt, _ := dingTalkPayload["at"].(map[string]interface{})
+	dingTalkTargets, _ := dingTalkAt["atMobiles"].([]interface{})
+	if dingTalkURL.Scheme != "https" || dingTalkURL.Host != "oapi.dingtalk.com" || dingTalkURL.Path != "/robot/send" || dingTalkURL.Query().Get("access_token") != "token" || dingTalkURL.Query().Get("timestamp") == "" || dingTalkURL.Query().Get("sign") == "" || dingTalkPayload["msgtype"] != "markdown" || len(dingTalkTargets) != 2 {
 		t.Fatalf("unexpected DingTalk request: %s %s", dingTalk.endpoint, dingTalk.body)
+	}
+	legacyDingTalk, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "dingtalk", Config: []byte(`{}`), SecretConfig: []byte(`{"webhook_url":"https://oapi.dingtalk.com/robot/send?access_token=legacy-token","signing_secret":"legacy-secret"}`)}, message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyDingTalkURL, _ := url.Parse(legacyDingTalk.endpoint)
+	if legacyDingTalkURL.Query().Get("access_token") != "legacy-token" || legacyDingTalkURL.Query().Get("timestamp") == "" || legacyDingTalkURL.Query().Get("sign") == "" {
+		t.Fatalf("legacy DingTalk credentials were not migrated at send time: %s", legacyDingTalk.endpoint)
 	}
 
 	feishu, err := buildTestNotificationRequest(&model.NotificationChannel{Type: "feishu", Config: []byte(`{}`), SecretConfig: []byte(`{"webhook_url":"https://open.feishu.cn/open-apis/bot/v2/hook/token","signing_secret":"secret"}`)}, message)
@@ -249,6 +261,35 @@ func TestNotificationChannelRegistryKeepsAdaptersIndependent(t *testing.T) {
 	}
 }
 
+func TestDingTalkAdapterOwnsTokenSecretAndTargets(t *testing.T) {
+	adapter, ok := defaultNotificationChannelRegistry.Get("dingtalk")
+	if !ok {
+		t.Fatal("DingTalk adapter not registered")
+	}
+	config, credentials, err := adapter.Sanitize(
+		map[string]interface{}{},
+		map[string]interface{}{"secret": "SEC-test", "token": "token", "targets": "13800138000,13900139000"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config) != 0 || len(credentials) != 3 || credentials["secret"] != "SEC-test" || credentials["token"] != "token" || credentials["targets"] != "13800138000,13900139000" {
+		t.Fatalf("unexpected DingTalk sanitized configuration: config=%v credentials=%v", config, credentials)
+	}
+	if err := adapter.Validate(config, credentials); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := adapter.Sanitize(map[string]interface{}{}, map[string]interface{}{"webhook_url": dingTalkRobotEndpoint + "?access_token=token"}); err == nil {
+		t.Fatal("DingTalk adapter accepted the legacy webhook_url field for a new configuration")
+	}
+	if err := adapter.Validate(map[string]interface{}{}, map[string]interface{}{"token": "token", "targets": "invalid"}); err == nil {
+		t.Fatal("DingTalk adapter accepted an invalid target")
+	}
+	if err := adapter.Validate(map[string]interface{}{}, map[string]interface{}{"token": "", "targets": ""}); err == nil {
+		t.Fatal("DingTalk adapter accepted an empty token")
+	}
+}
+
 func TestEveryNotificationChannelAdapterOwnsItsConfiguration(t *testing.T) {
 	tests := []struct {
 		channelType string
@@ -261,7 +302,7 @@ func TestEveryNotificationChannelAdapterOwnsItsConfiguration(t *testing.T) {
 		{"email", map[string]interface{}{"smtp_host": "smtp.example.com", "smtp_port": 587, "from": "notice@example.com", "to": "user@example.com"}, map[string]interface{}{}},
 		{"serverchan", map[string]interface{}{}, map[string]interface{}{"send_key": "SCT123"}},
 		{"bark", map[string]interface{}{"base_url": "https://api.day.app"}, map[string]interface{}{"device_key": "device"}},
-		{"dingtalk", map[string]interface{}{}, map[string]interface{}{"webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=token"}},
+		{"dingtalk", map[string]interface{}{}, map[string]interface{}{"secret": "secret", "token": "token", "targets": "13800138000"}},
 		{"feishu", map[string]interface{}{}, map[string]interface{}{"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/token"}},
 		{"whatsapp", map[string]interface{}{"api_version": "v25.0"}, map[string]interface{}{"access_token": "token", "phone_number_id": "123", "recipient": "8613800000000"}},
 		{"wxpusher", map[string]interface{}{"uids": "UID_one"}, map[string]interface{}{"app_token": "AT_token"}},

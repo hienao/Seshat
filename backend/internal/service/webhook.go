@@ -289,8 +289,10 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 	}
 	presentation := provider.Normalize(displayType, request)
 	presentation.SchemaVersion = 1
-	if err := s.mediaMetadata.Enrich(&presentation, &integration); err != nil {
-		appLogging.Warn("webhook", "外部媒体信息补充失败", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "error": err})
+	if displayType != "media_deleted" {
+		if err := s.mediaMetadata.Enrich(&presentation, &integration); err != nil {
+			appLogging.Warn("webhook", "外部媒体信息补充失败", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "error": err})
+		}
 	}
 	presentationJSON, _ := json.Marshal(presentation)
 	title, summary, severity := presentation.Title, presentation.Summary, presentation.Severity
