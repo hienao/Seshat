@@ -71,8 +71,8 @@ export interface ServiceSystemSettingsResponse {
   http_proxy_configured?: boolean;
   http_proxy_url?: string;
   public_base_url?: string;
+  tmdb_api_key?: string;
   tmdb_configured?: boolean;
-  tmdb_read_access_token?: string;
   tmdb_use_proxy?: boolean;
 }
 
@@ -82,7 +82,7 @@ export interface ServiceTestHTTPProxyRequest {
 
 export interface ServiceTestTMDBConnectionRequest {
   http_proxy_url?: string;
-  tmdb_read_access_token: string;
+  tmdb_api_key: string;
   use_proxy?: boolean;
 }
 
@@ -95,10 +95,10 @@ export interface ServiceUpdateSystemSettingsRequest {
   allow_register?: boolean;
   api_log_retention_days?: number;
   clear_http_proxy?: boolean;
-  clear_tmdb_token?: boolean;
+  clear_tmdb_api_key?: boolean;
   http_proxy_url?: string;
   public_base_url?: string;
-  tmdb_read_access_token?: string;
+  tmdb_api_key?: string;
   tmdb_use_proxy?: boolean;
 }
 
@@ -650,7 +650,7 @@ export class Api<
       }),
 
     /**
-     * @description 使用当前输入的 Token 和代理配置请求 TMDB（需要管理员权限）
+     * @description 使用当前输入的 API 密钥和代理配置请求 TMDB（需要管理员权限）
      *
      * @tags 设置
      * @name SettingsSystemTestTmdbCreate

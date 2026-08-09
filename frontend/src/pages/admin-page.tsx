@@ -22,8 +22,8 @@ export function AdminPage() {
   const queryClient = useQueryClient()
   const [retentionDays, setRetentionDays] = useState('7')
   const [httpProxyURL, setHTTPProxyURL] = useState('')
-  const [tmdbToken, setTMDBToken] = useState('')
-  const [tmdbTokenVisible, setTMDBTokenVisible] = useState(false)
+  const [tmdbAPIKey, setTMDBAPIKey] = useState('')
+  const [tmdbAPIKeyVisible, setTMDBAPIKeyVisible] = useState(false)
   const [connectionTestMessage, setConnectionTestMessage] = useState('')
   const [publicBaseURL, setPublicBaseURL] = useState('')
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: api.users })
@@ -31,7 +31,7 @@ export function AdminPage() {
   const updateSettings = useMutation({
     mutationFn: api.updateSystemSettings,
     onSuccess: (_, variables) => {
-      if (variables.clear_tmdb_token) setTMDBTokenVisible(false)
+      if (variables.clear_tmdb_api_key) setTMDBAPIKeyVisible(false)
       void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] })
     },
   })
@@ -54,7 +54,7 @@ export function AdminPage() {
     if (settings.data) {
       setRetentionDays(String(settings.data.api_log_retention_days))
       setHTTPProxyURL(settings.data.http_proxy_url || '')
-      setTMDBToken(settings.data.tmdb_read_access_token || '')
+      setTMDBAPIKey(settings.data.tmdb_api_key || '')
       setPublicBaseURL(settings.data.public_base_url || window.location.origin)
     }
   }, [settings.data])
@@ -126,15 +126,15 @@ export function AdminPage() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div className="min-w-0 flex-1 space-y-4">
                 <label className="block space-y-2 text-sm font-medium">
-                  <span>TMDB API Read Access Token</span>
+                  <span>TMDB API 密钥</span>
                   <Input
-                    type={tmdbTokenVisible ? 'text' : 'password'}
+                    type={tmdbAPIKeyVisible ? 'text' : 'password'}
                     autoComplete="off"
-                    value={tmdbToken}
+                    value={tmdbAPIKey}
                     disabled={updateSettings.isPending || testTMDBConnection.isPending}
-                    onChange={(event) => setTMDBToken(event.target.value)}
+                    onChange={(event) => setTMDBAPIKey(event.target.value)}
                     placeholder="用于按 Provider ID 获取海报和补充简介"
-                    endSlot={tmdbToken && <button type="button" disabled={updateSettings.isPending} className="rounded p-1 text-neutral-500 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-white" aria-label={tmdbTokenVisible ? '隐藏 TMDB Token' : '显示 TMDB Token'} title={tmdbTokenVisible ? '隐藏 Token' : '显示 Token'} onClick={() => setTMDBTokenVisible((visible) => !visible)}>{tmdbTokenVisible ? <EyeOff size={17} /> : <Eye size={17} />}</button>}
+                    endSlot={tmdbAPIKey && <button type="button" disabled={updateSettings.isPending} className="rounded p-1 text-neutral-500 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-white" aria-label={tmdbAPIKeyVisible ? '隐藏 TMDB API 密钥' : '显示 TMDB API 密钥'} title={tmdbAPIKeyVisible ? '隐藏 API 密钥' : '显示 API 密钥'} onClick={() => setTMDBAPIKeyVisible((visible) => !visible)}>{tmdbAPIKeyVisible ? <EyeOff size={17} /> : <Eye size={17} />}</button>}
                   />
                   <span className="block text-xs text-neutral-500">可选。配置后会补充 Jellyfin/Emby 媒体海报与简介；默认隐藏，可点击输入框右侧图标查看。</span>
                 </label>
@@ -144,9 +144,9 @@ export function AdminPage() {
                 </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {settings.data?.tmdb_configured && <ConfirmDialog title="清空 TMDB Token？" description="清空后不再获取新的外部媒体资料，已缓存内容会保留至到期。" confirmLabel="清空 Token" destructive busy={updateSettings.isPending} onConfirm={() => updateSettings.mutate({ clear_tmdb_token: true })} trigger={<AppButton variant="outline" disabled={updateSettings.isPending}>清空 Token</AppButton>} />}
-                  <AppButton variant="outline" disabled={testTMDBConnection.isPending || !tmdbToken.trim() || Boolean(settings.data?.tmdb_use_proxy && !httpProxyURLValid)} onClick={() => testTMDBConnection.mutate({ tmdb_read_access_token: tmdbToken.trim(), http_proxy_url: httpProxyURL.trim(), use_proxy: settings.data?.tmdb_use_proxy ?? false })}>{testTMDBConnection.isPending ? '正在测试…' : '测试连接'}</AppButton>
-                  <AppButton disabled={updateSettings.isPending || !tmdbToken.trim()} onClick={() => updateSettings.mutate({ tmdb_read_access_token: tmdbToken.trim() })}>{updateSettings.isPending ? '正在保存…' : '保存 Token'}</AppButton>
+                  {settings.data?.tmdb_configured && <ConfirmDialog title="清空 TMDB API 密钥？" description="清空后不再获取新的外部媒体资料，已缓存内容会保留至到期。" confirmLabel="清空密钥" destructive busy={updateSettings.isPending} onConfirm={() => updateSettings.mutate({ clear_tmdb_api_key: true })} trigger={<AppButton variant="outline" disabled={updateSettings.isPending}>清空密钥</AppButton>} />}
+                  <AppButton variant="outline" disabled={testTMDBConnection.isPending || !tmdbAPIKey.trim() || Boolean(settings.data?.tmdb_use_proxy && !httpProxyURLValid)} onClick={() => testTMDBConnection.mutate({ tmdb_api_key: tmdbAPIKey.trim(), http_proxy_url: httpProxyURL.trim(), use_proxy: settings.data?.tmdb_use_proxy ?? false })}>{testTMDBConnection.isPending ? '正在测试…' : '测试连接'}</AppButton>
+                  <AppButton disabled={updateSettings.isPending || !tmdbAPIKey.trim()} onClick={() => updateSettings.mutate({ tmdb_api_key: tmdbAPIKey.trim() })}>{updateSettings.isPending ? '正在保存…' : '保存密钥'}</AppButton>
                 </div>
               </div>
               <p className="mt-3 border-t border-neutral-200 pt-3 text-xs text-neutral-400 dark:border-neutral-800">TMDB API 使用声明：This product uses the TMDB API but is not endorsed or certified by TMDB.</p>

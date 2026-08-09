@@ -23,9 +23,9 @@ func NewSettingHandler(retentionUpdaters ...service.APILogRetentionUpdater) *Set
 	}
 }
 
-// TestTMDBConnection 测试当前输入的 TMDB Token 和可选 HTTP 代理，不保存配置。
+// TestTMDBConnection 测试当前输入的 TMDB API 密钥和可选 HTTP 代理，不保存配置。
 // @Summary 测试 TMDB 连接
-// @Description 使用当前输入的 Token 和代理配置请求 TMDB（需要管理员权限）
+// @Description 使用当前输入的 API 密钥和代理配置请求 TMDB（需要管理员权限）
 // @Tags 设置
 // @Security BearerAuth
 // @Accept json
@@ -38,16 +38,16 @@ func NewSettingHandler(retentionUpdaters ...service.APILogRetentionUpdater) *Set
 func (h *SettingHandler) TestTMDBConnection(c *gin.Context) {
 	var req service.TestTMDBConnectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "请填写 TMDB Token")
+		response.BadRequest(c, "请填写 TMDB API 密钥")
 		return
 	}
 	if err := h.mediaMetadataService.TestConnection(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	message := "TMDB Token 连接测试成功"
+	message := "TMDB API 密钥连接测试成功"
 	if req.UseProxy {
-		message = "HTTP 代理与 TMDB Token 连接测试成功"
+		message = "HTTP 代理与 TMDB API 密钥连接测试成功"
 	}
 	response.Success(c, gin.H{"message": message})
 }
@@ -127,7 +127,7 @@ func (h *SettingHandler) UpdateSystemSettings(c *gin.Context) {
 	}
 
 	if err := h.settingService.UpdateSystemSettings(&req); err != nil {
-		if errors.Is(err, service.ErrInvalidAPILogRetentionDays) || errors.Is(err, service.ErrInvalidHTTPProxyURL) || errors.Is(err, service.ErrConflictingHTTPProxyUpdate) || errors.Is(err, service.ErrConflictingTMDBTokenUpdate) || errors.Is(err, service.ErrInvalidTMDBToken) || errors.Is(err, service.ErrInvalidPublicBaseURL) {
+		if errors.Is(err, service.ErrInvalidAPILogRetentionDays) || errors.Is(err, service.ErrInvalidHTTPProxyURL) || errors.Is(err, service.ErrConflictingHTTPProxyUpdate) || errors.Is(err, service.ErrConflictingTMDBAPIKeyUpdate) || errors.Is(err, service.ErrInvalidTMDBAPIKey) || errors.Is(err, service.ErrInvalidPublicBaseURL) {
 			response.BadRequest(c, err.Error())
 			return
 		}

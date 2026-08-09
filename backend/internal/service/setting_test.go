@@ -162,29 +162,51 @@ func TestSettingServiceStoresPublicBaseURL(t *testing.T) {
 	}
 }
 
-func TestSettingServiceStoresAndReturnsTMDBToken(t *testing.T) {
+func TestSettingServiceStoresAndReturnsTMDBAPIKey(t *testing.T) {
 	setupSettingTestDB(t)
 	settingService := NewSettingService()
 	if err := settingService.InitDefaultSettings(); err != nil {
 		t.Fatal(err)
 	}
-	token := "tmdb-read-access-token"
+	apiKey := "tmdb-api-key"
 	useProxy := true
-	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBReadAccessToken: &token, TMDBUseProxy: &useProxy}); err != nil {
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBAPIKey: &apiKey, TMDBUseProxy: &useProxy}); err != nil {
 		t.Fatal(err)
 	}
 	settings, err := settingService.GetSystemSettings()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !settings.TMDBConfigured || settings.TMDBReadAccessToken != token || !settings.TMDBUseProxy || !settingService.TMDBUsesHTTPProxy() || settingService.TMDBReadAccessToken() != token {
+	if !settings.TMDBConfigured || settings.TMDBAPIKey != apiKey || !settings.TMDBUseProxy || !settingService.TMDBUsesHTTPProxy() || settingService.TMDBAPIKey() != apiKey {
 		t.Fatalf("unexpected TMDB settings: %+v", settings)
 	}
 	clear := true
-	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{ClearTMDBToken: &clear}); err != nil {
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{ClearTMDBAPIKey: &clear}); err != nil {
 		t.Fatal(err)
 	}
-	if settingService.TMDBReadAccessToken() != "" {
-		t.Fatal("TMDB token was not cleared")
+	if settingService.TMDBAPIKey() != "" {
+		t.Fatal("TMDB API key was not cleared")
+	}
+}
+
+func TestSettingServiceMigratesLegacyTMDBCredentialToAPIKey(t *testing.T) {
+	setupSettingTestDB(t)
+	settingService := NewSettingService()
+	legacyValue := "legacy-saved-api-key"
+	if err := settingService.settingRepo.SetSystemSetting("tmdb_read_access_token", legacyValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := settingService.InitDefaultSettings(); err != nil {
+		t.Fatal(err)
+	}
+	if settingService.TMDBAPIKey() != legacyValue {
+		t.Fatalf("migrated TMDB API key = %q", settingService.TMDBAPIKey())
+	}
+	legacy, err := settingService.settingRepo.GetSystemSetting("tmdb_read_access_token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Value != "" {
+		t.Fatal("legacy TMDB credential was not cleared after migration")
 	}
 }

@@ -16,16 +16,19 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestTMDBConnectionUsesCurrentTokenAndProxyWithoutSaving(t *testing.T) {
-	token := "current-test-token"
+func TestTMDBConnectionUsesCurrentAPIKeyAndProxyWithoutSaving(t *testing.T) {
+	apiKey := "current-test-api-key"
 	proxyRequests := 0
 	proxy := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		proxyRequests++
 		if request.URL.Host != "tmdb.example" || request.URL.Path != "/3/configuration" {
 			t.Errorf("unexpected TMDB test request: %s", request.URL.String())
 		}
-		if request.Header.Get("Authorization") != "Bearer "+token {
-			t.Errorf("authorization header = %q", request.Header.Get("Authorization"))
+		if request.URL.Query().Get("api_key") != apiKey {
+			t.Errorf("api_key query = %q", request.URL.Query().Get("api_key"))
+		}
+		if request.Header.Get("Authorization") != "" {
+			t.Errorf("authorization header must be empty, got %q", request.Header.Get("Authorization"))
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"images":{}}`))
@@ -33,18 +36,18 @@ func TestTMDBConnectionUsesCurrentTokenAndProxyWithoutSaving(t *testing.T) {
 	defer proxy.Close()
 
 	metadataService := &MediaMetadataService{apiBaseURL: "http://tmdb.example/3", httpClient: &http.Client{Timeout: time.Second}, settings: NewSettingService()}
-	if err := metadataService.TestConnection(&TestTMDBConnectionRequest{TMDBReadAccessToken: token, HTTPProxyURL: proxy.URL, UseProxy: true}); err != nil {
+	if err := metadataService.TestConnection(&TestTMDBConnectionRequest{TMDBAPIKey: apiKey, HTTPProxyURL: proxy.URL, UseProxy: true}); err != nil {
 		t.Fatal(err)
 	}
 	if proxyRequests != 1 {
 		t.Fatalf("proxy requests = %d, want 1", proxyRequests)
 	}
-	if err := metadataService.TestConnection(&TestTMDBConnectionRequest{TMDBReadAccessToken: token, HTTPProxyURL: "socks5://127.0.0.1:1080", UseProxy: true}); !errors.Is(err, ErrInvalidHTTPProxyURL) {
+	if err := metadataService.TestConnection(&TestTMDBConnectionRequest{TMDBAPIKey: apiKey, HTTPProxyURL: "socks5://127.0.0.1:1080", UseProxy: true}); !errors.Is(err, ErrInvalidHTTPProxyURL) {
 		t.Fatalf("invalid proxy error = %v", err)
 	}
 }
 
-func TestHTTPProxyConnectionDoesNotRequireTMDBToken(t *testing.T) {
+func TestHTTPProxyConnectionDoesNotRequireTMDBAPIKey(t *testing.T) {
 	proxyRequests := 0
 	proxy := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		proxyRequests++
@@ -67,14 +70,14 @@ func TestHTTPProxyConnectionDoesNotRequireTMDBToken(t *testing.T) {
 	}
 }
 
-func TestTMDBConnectionRejectsInvalidToken(t *testing.T) {
+func TestTMDBConnectionRejectsInvalidAPIKey(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()
 	metadataService := &MediaMetadataService{apiBaseURL: server.URL, httpClient: server.Client(), settings: NewSettingService()}
-	if err := metadataService.TestConnection(&TestTMDBConnectionRequest{TMDBReadAccessToken: "invalid"}); !errors.Is(err, ErrInvalidTMDBToken) {
-		t.Fatalf("invalid token error = %v", err)
+	if err := metadataService.TestConnection(&TestTMDBConnectionRequest{TMDBAPIKey: "invalid"}); !errors.Is(err, ErrInvalidTMDBAPIKey) {
+		t.Fatalf("invalid API key error = %v", err)
 	}
 }
 
@@ -97,16 +100,19 @@ func TestMediaMetadataEnrichmentUsesTMDBAndPersistentCache(t *testing.T) {
 	if err := settings.InitDefaultSettings(); err != nil {
 		t.Fatal(err)
 	}
-	token := "test-read-access-token"
-	if err := settings.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBReadAccessToken: &token}); err != nil {
+	apiKey := "test-api-key"
+	if err := settings.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBAPIKey: &apiKey}); err != nil {
 		t.Fatal(err)
 	}
 
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requests++
-		if request.Header.Get("Authorization") != "Bearer "+token {
-			t.Errorf("authorization header = %q", request.Header.Get("Authorization"))
+		if request.URL.Query().Get("api_key") != apiKey {
+			t.Errorf("api_key query = %q", request.URL.Query().Get("api_key"))
+		}
+		if request.Header.Get("Authorization") != "" {
+			t.Errorf("authorization header must be empty, got %q", request.Header.Get("Authorization"))
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
@@ -163,8 +169,8 @@ func TestEpisodeMetadataUsesOnlyTMDBProviderID(t *testing.T) {
 	if err := settings.InitDefaultSettings(); err != nil {
 		t.Fatal(err)
 	}
-	token := "test-read-access-token"
-	if err := settings.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBReadAccessToken: &token}); err != nil {
+	apiKey := "test-api-key"
+	if err := settings.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBAPIKey: &apiKey}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -219,7 +225,7 @@ func TestMediaMetadataCanUseTheSystemHTTPProxy(t *testing.T) {
 	if err := settings.InitDefaultSettings(); err != nil {
 		t.Fatal(err)
 	}
-	token := "test-read-access-token"
+	apiKey := "test-api-key"
 	useProxy := true
 	proxyRequests := 0
 	proxy := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -227,15 +233,18 @@ func TestMediaMetadataCanUseTheSystemHTTPProxy(t *testing.T) {
 		if request.URL.Host != "tmdb.example" || request.URL.Path != "/3/movie/42" {
 			t.Errorf("unexpected proxied TMDB request: %s", request.URL.String())
 		}
-		if request.Header.Get("Authorization") != "Bearer "+token {
-			t.Errorf("authorization header = %q", request.Header.Get("Authorization"))
+		if request.URL.Query().Get("api_key") != apiKey {
+			t.Errorf("api_key query = %q", request.URL.Query().Get("api_key"))
+		}
+		if request.Header.Get("Authorization") != "" {
+			t.Errorf("authorization header must be empty, got %q", request.Header.Get("Authorization"))
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"id":42,"title":"Arrival","overview":"TMDB 电影简介","poster_path":"/arrival.jpg","media_type":"movie"}`))
 	}))
 	defer proxy.Close()
 	proxyURL := proxy.URL
-	if err := settings.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBReadAccessToken: &token, HTTPProxyURL: &proxyURL, TMDBUseProxy: &useProxy}); err != nil {
+	if err := settings.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBAPIKey: &apiKey, HTTPProxyURL: &proxyURL, TMDBUseProxy: &useProxy}); err != nil {
 		t.Fatal(err)
 	}
 	metadataService := &MediaMetadataService{apiBaseURL: "http://tmdb.example/3", httpClient: &http.Client{Timeout: time.Second}, settings: settings}

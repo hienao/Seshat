@@ -97,10 +97,10 @@ definitions:
         type: string
       public_base_url:
         type: string
+      tmdb_api_key:
+        type: string
       tmdb_configured:
         type: boolean
-      tmdb_read_access_token:
-        type: string
       tmdb_use_proxy:
         type: boolean
     type: object
@@ -115,12 +115,12 @@ definitions:
     properties:
       http_proxy_url:
         type: string
-      tmdb_read_access_token:
+      tmdb_api_key:
         type: string
       use_proxy:
         type: boolean
     required:
-    - tmdb_read_access_token
+    - tmdb_api_key
     type: object
   service.TokenResponse:
     properties:
@@ -137,13 +137,13 @@ definitions:
         type: integer
       clear_http_proxy:
         type: boolean
-      clear_tmdb_token:
+      clear_tmdb_api_key:
         type: boolean
       http_proxy_url:
         type: string
       public_base_url:
         type: string
-      tmdb_read_access_token:
+      tmdb_api_key:
         type: string
       tmdb_use_proxy:
         type: boolean
@@ -517,7 +517,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 使用当前输入的 Token 和代理配置请求 TMDB（需要管理员权限）
+      description: 使用当前输入的 API 密钥和代理配置请求 TMDB（需要管理员权限）
       parameters:
       - description: TMDB 测试配置
         in: body
