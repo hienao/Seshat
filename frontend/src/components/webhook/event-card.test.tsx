@@ -53,6 +53,29 @@ describe('EventCard', () => {
     expect(screen.getByText('媒体资料由 TMDB 提供')).toBeInTheDocument()
   })
 
+  it('does not repeat a legacy media type in the summary and tags', () => {
+    render(<EventCard event={event({
+      source_event_type: 'ItemAdded',
+      display_event_type: 'media_added',
+      summary: 'Episode',
+      presentation: {
+        schema_version: 1,
+        title: 'Jellyfin · 新增媒体 · 我的团长我的团 · S01E04',
+        summary: 'Episode',
+        severity: 'success',
+        facts: [{ label: '类型', value: 'Episode' }],
+        tags: ['Episode'],
+        data: {
+          category: 'media',
+          event_label: '新增媒体',
+          media: { display_name: '我的团长我的团 · S01E04', type: 'Episode' },
+        },
+      },
+    })} />)
+    expect(screen.getByText('新增媒体事件')).toBeInTheDocument()
+    expect(screen.getAllByText('Episode')).toHaveLength(1)
+  })
+
   it('renders unknown events as raw cards', () => {
     render(<EventCard event={event({
       source_event_type: 'PluginCustomEvent',

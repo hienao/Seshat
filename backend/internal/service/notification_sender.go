@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,18 +22,21 @@ import (
 )
 
 const (
-	maxNotificationAttempts   = 5
+	maxNotificationRetries    = 6
+	notificationRetryInterval = 10 * time.Second
 	notificationResponseLimit = 32 << 10
 	staleDeliveryThreshold    = time.Minute
 )
 
-var errDeliveryAlreadyClaimed = errors.New("推送任务已被其他 Worker 领取")
+var (
+	errDeliveryAlreadyClaimed = errors.New("推送任务已被其他 Worker 领取")
+	errNoDeliveryAvailable    = errors.New("暂无待发送的推送任务")
+)
 
 type deliveryError struct {
 	message    string
 	statusCode int
 	retryable  bool
-	retryAfter time.Duration
 }
 
 func (e *deliveryError) Error() string { return e.message }
@@ -138,10 +140,14 @@ func (w *NotificationWorker) processOne() bool {
 	var delivery model.NotificationDelivery
 	err := db.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
-		if err := tx.Where("status IN ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)", []string{"pending", "retrying"}, now).Order("id ASC").First(&delivery).Error; err != nil {
-			return err
+		result := tx.Where("status IN ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)", []string{"pending", "retrying"}, now).Order("id ASC").Limit(1).Find(&delivery)
+		if result.Error != nil {
+			return result.Error
 		}
-		result := tx.Model(&model.NotificationDelivery{}).Where("id = ? AND status IN ?", delivery.ID, []string{"pending", "retrying"}).Updates(map[string]interface{}{"status": "sending", "attempt_count": gorm.Expr("attempt_count + 1")})
+		if result.RowsAffected == 0 {
+			return errNoDeliveryAvailable
+		}
+		result = tx.Model(&model.NotificationDelivery{}).Where("id = ? AND status IN ?", delivery.ID, []string{"pending", "retrying"}).Updates(map[string]interface{}{"status": "sending", "attempt_count": gorm.Expr("attempt_count + 1")})
 		if result.Error == nil && result.RowsAffected == 0 {
 			return errDeliveryAlreadyClaimed
 		}
@@ -150,7 +156,7 @@ func (w *NotificationWorker) processOne() bool {
 	if errors.Is(err, errDeliveryAlreadyClaimed) {
 		return true
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errors.Is(err, errNoDeliveryAvailable) {
 		return false
 	}
 	if err != nil {
@@ -168,19 +174,19 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 	var integration model.AppIntegration
 	var channel model.NotificationChannel
 	if err := db.First(&event, delivery.EventID).Error; err != nil {
-		w.fail(delivery, 0, errors.New("消息不存在"), false, 0)
+		w.fail(delivery, 0, errors.New("消息不存在"), false)
 		return
 	}
 	if err := db.First(&integration, delivery.IntegrationID).Error; err != nil {
-		w.fail(delivery, 0, errors.New("接入实例不存在"), false, 0)
+		w.fail(delivery, 0, errors.New("接入实例不存在"), false)
 		return
 	}
 	if err := db.First(&channel, delivery.ChannelID).Error; err != nil {
-		w.fail(delivery, 0, errors.New("推送渠道不存在"), false, 0)
+		w.fail(delivery, 0, errors.New("推送渠道不存在"), false)
 		return
 	}
 	if !channel.Enabled {
-		w.fail(delivery, 0, errors.New("推送渠道已停用"), false, 0)
+		w.fail(delivery, 0, errors.New("推送渠道已停用"), false)
 		return
 	}
 	message := outboundMessage{Title: event.Title, Body: event.Summary, Severity: event.Severity, AppCode: event.AppCode, IntegrationID: integration.ID, IntegrationName: integration.Name, EventID: event.ID, EventType: event.DisplayEventType, ReceivedAt: event.ReceivedAt}
@@ -191,12 +197,12 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 		message.Body = "收到一条新的 Webhook 消息"
 	}
 	if err := ensurePublicEventToken(&event); err != nil {
-		w.fail(delivery, 0, errors.New("生成消息详情链接失败"), true, 0)
+		w.fail(delivery, 0, errors.New("生成消息详情链接失败"), true)
 		return
 	}
 	publicBaseURL := NewSettingService().PublicBaseURL()
 	if publicBaseURL == "" {
-		w.fail(delivery, 0, errors.New("系统尚未配置对外访问地址"), false, 0)
+		w.fail(delivery, 0, errors.New("系统尚未配置对外访问地址"), false)
 		return
 	}
 	message.DetailURL = publicBaseURL + "/public/events/" + url.PathEscape(event.PublicToken)
@@ -216,22 +222,19 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 	}
 	var sendErr *deliveryError
 	if errors.As(err, &sendErr) {
-		w.fail(delivery, sendErr.statusCode, err, sendErr.retryable, sendErr.retryAfter)
+		w.fail(delivery, sendErr.statusCode, err, sendErr.retryable)
 	} else {
-		w.fail(delivery, 0, err, true, 0)
+		w.fail(delivery, 0, err, true)
 	}
 }
 
-func (w *NotificationWorker) fail(delivery *model.NotificationDelivery, statusCode int, err error, retryable bool, retryAfter time.Duration) {
+func (w *NotificationWorker) fail(delivery *model.NotificationDelivery, statusCode int, err error, retryable bool) {
 	fields := deliveryFields(delivery)
 	fields["error"] = err
 	fields["attempt"] = delivery.AttemptCount
 	updates := map[string]interface{}{"last_error": truncateNotificationError(err.Error()), "last_status_code": statusCode}
-	if retryable && delivery.AttemptCount < maxNotificationAttempts {
-		if retryAfter <= 0 {
-			retryAfter = retryDelay(delivery.AttemptCount)
-		}
-		next := time.Now().Add(retryAfter)
+	if retryable && delivery.AttemptCount <= maxNotificationRetries {
+		next := time.Now().Add(notificationRetryInterval)
 		updates["status"] = "retrying"
 		updates["next_attempt_at"] = next
 		logging.Warn("notification", "推送发送失败，等待重试", fields)
@@ -249,17 +252,6 @@ func deliveryFields(delivery *model.NotificationDelivery) logging.Fields {
 	return logging.Fields{"delivery_id": delivery.ID, "event_id": delivery.EventID, "integration_id": delivery.IntegrationID, "channel_id": delivery.ChannelID, "channel_type": delivery.ChannelType}
 }
 
-func retryDelay(attempt int) time.Duration {
-	delays := []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour, 6 * time.Hour}
-	if attempt <= 0 {
-		return delays[0]
-	}
-	if attempt > len(delays) {
-		return delays[len(delays)-1]
-	}
-	return delays[attempt-1]
-}
-
 func sendChannel(ctx context.Context, channel *model.NotificationChannel, message outboundMessage, allowPrivate bool, proxyURL string) error {
 	adapter, ok := defaultNotificationChannelRegistry.Get(channel.Type)
 	if !ok {
@@ -268,7 +260,7 @@ func sendChannel(ctx context.Context, channel *model.NotificationChannel, messag
 	return adapter.Send(ctx, channel, message, notificationSendOptions{allowPrivate: allowPrivate, proxyURL: proxyURL})
 }
 
-func sendNotificationHTTPRequest(ctx context.Context, spec *notificationRequestSpec, options notificationSendOptions, validateResponse func([]byte) error) error {
+func sendNotificationHTTPRequest(ctx context.Context, spec *notificationRequestSpec, options notificationSendOptions, validateResponse func(int, []byte) error) error {
 	endpointAllowsPrivate := options.allowPrivate && !spec.requirePublicHost
 	if err := validateOutboundURL(spec.endpoint, endpointAllowsPrivate); err != nil {
 		return &deliveryError{message: err.Error()}
@@ -302,19 +294,11 @@ func sendNotificationHTTPRequest(ctx context.Context, spec *notificationRequestS
 	defer response.Body.Close()
 	responseBody, _ := io.ReadAll(io.LimitReader(response.Body, notificationResponseLimit))
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return validateResponse(responseBody)
+		return validateResponse(response.StatusCode, responseBody)
 	}
 	retryable := response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500
-	retryAfter := time.Duration(0)
-	if headerValue := strings.TrimSpace(response.Header.Get("Retry-After")); headerValue != "" {
-		if value, parseErr := strconv.Atoi(headerValue); parseErr == nil && value > 0 {
-			retryAfter = time.Duration(value) * time.Second
-		} else if retryAt, parseErr := http.ParseTime(headerValue); parseErr == nil && retryAt.After(time.Now()) {
-			retryAfter = time.Until(retryAt)
-		}
-	}
 	messageText := fmt.Sprintf("推送渠道返回 HTTP %d", response.StatusCode)
-	return &deliveryError{message: messageText, statusCode: response.StatusCode, retryable: retryable, retryAfter: retryAfter}
+	return &deliveryError{message: messageText, statusCode: response.StatusCode, retryable: retryable}
 }
 
 func notificationHTTPClient(requirePublicHost bool, allowPrivate bool, proxyURL string) (*http.Client, error) {

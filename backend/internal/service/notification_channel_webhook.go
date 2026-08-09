@@ -65,7 +65,7 @@ func (webhookNotificationAdapter) BuildRequest(channel *model.NotificationChanne
 	return jsonNotificationRequest(endpoint, payload, headers, false, false)
 }
 
-func (webhookNotificationAdapter) ValidateResponse(_ []byte) error { return nil }
+func (webhookNotificationAdapter) ValidateResponse(_ int, _ []byte) error { return nil }
 
 func isUnsafeNotificationHeader(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {

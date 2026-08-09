@@ -13,7 +13,6 @@ export interface ChannelCommonValues {
 
 export interface ChannelFormProps {
   fields: ChannelFields
-  keepsExistingCredential: boolean
   update: (key: string, value: ChannelFieldValue) => void
 }
 
@@ -38,8 +37,14 @@ export function booleanField(fields: ChannelFields, key: string): boolean {
   return fields[key] === true
 }
 
-export function secretLabel(label: string, keepsExistingCredential: boolean): string {
-  return `${label}${keepsExistingCredential ? '（留空保持原值）' : ''}`
+export function credentialTextField(channel: NotificationChannel, key: string): string {
+  const value = channel.credentials[key]
+  return typeof value === 'string' ? value : ''
+}
+
+export function notificationChannelBindingName(channelId: number | undefined, channels: NotificationChannel[], loading: boolean) {
+  if (!channelId) return '未绑定渠道'
+  return channels.find((channel) => channel.id === channelId)?.name ?? (loading ? '正在加载渠道…' : '绑定渠道不可用')
 }
 
 export function channelPayload(common: ChannelCommonValues, config: Record<string, unknown>, credentials?: Record<string, unknown>): NotificationChannelInput {

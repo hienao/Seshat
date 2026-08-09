@@ -17,6 +17,9 @@ func TestEmbyProviderMapsAliasesAndNestedItem(t *testing.T) {
 	if media["id"] != "item-1" || media["display_name"] != "Dune（2021）" {
 		t.Fatalf("unexpected media presentation: %+v", media)
 	}
+	if presentation.Summary != "2:35:00" || len(presentation.Tags) != 0 {
+		t.Fatalf("media presentation repeats its type: summary=%q tags=%+v", presentation.Summary, presentation.Tags)
+	}
 }
 
 func TestEmbyUsesTheRandomEndpointAsItsCredential(t *testing.T) {

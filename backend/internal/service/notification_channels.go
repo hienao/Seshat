@@ -35,7 +35,7 @@ type notificationChannelAdapter interface {
 type notificationHTTPChannelAdapter interface {
 	notificationChannelAdapter
 	BuildRequest(*model.NotificationChannel, outboundMessage) (*notificationRequestSpec, error)
-	ValidateResponse([]byte) error
+	ValidateResponse(int, []byte) error
 }
 
 type notificationChannelRegistry struct {

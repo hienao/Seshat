@@ -101,7 +101,7 @@ func TestSettingServiceRejectsRetentionAboveThirtyDays(t *testing.T) {
 	}
 }
 
-func TestSettingServiceStoresAndRedactsHTTPProxy(t *testing.T) {
+func TestSettingServiceStoresAndReturnsHTTPProxy(t *testing.T) {
 	setupSettingTestDB(t)
 	settingService := NewSettingService()
 	if err := settingService.InitDefaultSettings(); err != nil {
@@ -115,7 +115,7 @@ func TestSettingServiceStoresAndRedactsHTTPProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !settings.HTTPProxyConfigured || settings.HTTPProxyDisplay != "http://127.0.0.1:7890" {
+	if !settings.HTTPProxyConfigured || settings.HTTPProxyURL != proxyURL {
 		t.Fatalf("unexpected proxy settings: %+v", settings)
 	}
 	if settingService.HTTPProxyURL() != proxyURL {
@@ -162,21 +162,22 @@ func TestSettingServiceStoresPublicBaseURL(t *testing.T) {
 	}
 }
 
-func TestSettingServiceStoresAndRedactsTMDBToken(t *testing.T) {
+func TestSettingServiceStoresAndReturnsTMDBToken(t *testing.T) {
 	setupSettingTestDB(t)
 	settingService := NewSettingService()
 	if err := settingService.InitDefaultSettings(); err != nil {
 		t.Fatal(err)
 	}
 	token := "tmdb-read-access-token"
-	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBReadAccessToken: &token}); err != nil {
+	useProxy := true
+	if err := settingService.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBReadAccessToken: &token, TMDBUseProxy: &useProxy}); err != nil {
 		t.Fatal(err)
 	}
 	settings, err := settingService.GetSystemSettings()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !settings.TMDBConfigured || settingService.TMDBReadAccessToken() != token {
+	if !settings.TMDBConfigured || settings.TMDBReadAccessToken != token || !settings.TMDBUseProxy || !settingService.TMDBUsesHTTPProxy() || settingService.TMDBReadAccessToken() != token {
 		t.Fatalf("unexpected TMDB settings: %+v", settings)
 	}
 	clear := true
