@@ -115,6 +115,11 @@ type NotificationDelivery struct {
 	NextAttemptAt  *time.Time `gorm:"index:idx_delivery_status_next" json:"next_attempt_at,omitempty"`
 	LastStatusCode int        `json:"last_status_code,omitempty"`
 	LastError      string     `gorm:"size:1000" json:"last_error,omitempty"`
+	ContentFormat  string     `gorm:"size:30" json:"content_format,omitempty"`
+	ContentProfile string     `gorm:"size:50" json:"content_profile,omitempty"`
+	ContentVersion int        `gorm:"not null;default:0" json:"content_version,omitempty"`
+	ContentTitle   string     `gorm:"size:500" json:"-"`
+	ContentBody    string     `gorm:"type:text" json:"-"`
 	SentAt         *time.Time `json:"sent_at,omitempty"`
 	CreatedAt      time.Time  `gorm:"index:idx_delivery_integration_created;index:idx_delivery_channel_created" json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`

@@ -16,6 +16,7 @@ import (
 
 	"seshat/internal/logging"
 	"seshat/internal/model"
+	"seshat/internal/webhook"
 	"seshat/pkg/database"
 
 	"gorm.io/gorm"
@@ -52,6 +53,9 @@ type outboundMessage struct {
 	EventType       string
 	ReceivedAt      time.Time
 	DetailURL       string
+	PublicBaseURL   string
+	Presentation    *webhook.Presentation
+	Rendered        *renderedNotification
 }
 
 func (s *NotificationService) TestChannel(ownerID, id uint) (*NotificationChannelResponse, error) {
@@ -206,10 +210,25 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 		return
 	}
 	message.DetailURL = publicBaseURL + "/public/events/" + url.PathEscape(event.PublicToken)
+	message.PublicBaseURL = publicBaseURL
+	if len(event.Presentation) > 0 {
+		var presentation webhook.Presentation
+		if json.Unmarshal(event.Presentation, &presentation) == nil {
+			message.Presentation = &presentation
+		}
+	}
 	allowPrivate, proxyURL, policyErr := notificationNetworkPolicyForChannel(&channel)
 	err := policyErr
 	if err == nil {
-		err = sendChannel(context.Background(), &channel, message, allowPrivate, proxyURL)
+		adapter, ok := defaultNotificationChannelRegistry.Get(channel.Type)
+		if !ok {
+			err = &deliveryError{message: "不支持的推送渠道类型"}
+		} else {
+			message, err = messageForDelivery(adapter, &channel, delivery, message)
+			if err == nil {
+				err = adapter.Send(context.Background(), &channel, message, notificationSendOptions{allowPrivate: allowPrivate, proxyURL: proxyURL})
+			}
+		}
 	}
 	if err == nil {
 		now := time.Now()
@@ -257,7 +276,49 @@ func sendChannel(ctx context.Context, channel *model.NotificationChannel, messag
 	if !ok {
 		return &deliveryError{message: "不支持的推送渠道类型"}
 	}
+	var err error
+	message, err = prepareNotificationMessage(adapter, channel, message)
+	if err != nil {
+		return err
+	}
 	return adapter.Send(ctx, channel, message, notificationSendOptions{allowPrivate: allowPrivate, proxyURL: proxyURL})
+}
+
+func messageForDelivery(adapter notificationChannelAdapter, channel *model.NotificationChannel, delivery *model.NotificationDelivery, message outboundMessage) (outboundMessage, error) {
+	if delivery.ContentVersion > 0 && delivery.ContentFormat != "" {
+		message.Rendered = &renderedNotification{
+			Format:  notificationFormat(delivery.ContentFormat),
+			Profile: delivery.ContentProfile,
+			Version: delivery.ContentVersion,
+			Title:   delivery.ContentTitle,
+			Body:    delivery.ContentBody,
+		}
+		return prepareNotificationMessage(adapter, channel, message)
+	}
+	prepared, err := prepareNotificationMessage(adapter, channel, message)
+	if err != nil || prepared.Rendered == nil {
+		if err != nil {
+			return message, err
+		}
+		return message, errNotificationSnapshotUnavailable
+	}
+	rendered := prepared.Rendered
+	updates := map[string]interface{}{
+		"content_format":  string(rendered.Format),
+		"content_profile": rendered.Profile,
+		"content_version": rendered.Version,
+		"content_title":   rendered.Title,
+		"content_body":    rendered.Body,
+	}
+	if err := database.GetDB().Model(delivery).Updates(updates).Error; err != nil {
+		return message, &deliveryError{message: "保存推送内容快照失败", retryable: true}
+	}
+	delivery.ContentFormat = string(rendered.Format)
+	delivery.ContentProfile = rendered.Profile
+	delivery.ContentVersion = rendered.Version
+	delivery.ContentTitle = rendered.Title
+	delivery.ContentBody = rendered.Body
+	return prepared, nil
 }
 
 func sendNotificationHTTPRequest(ctx context.Context, spec *notificationRequestSpec, options notificationSendOptions, validateResponse func(int, []byte) error) error {
