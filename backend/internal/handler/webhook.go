@@ -82,7 +82,16 @@ func (h *WebhookHandler) GetIntegrationSecret(c *gin.Context) {
 func (h *WebhookHandler) ListEvents(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	items, err := h.service.ListEvents(c.GetUint("user_id"), c.Query("app_code"), c.Query("event_type"), limit, offset)
+	var integrationID uint64
+	var err error
+	if value := c.Query("integration_id"); value != "" {
+		integrationID, err = strconv.ParseUint(value, 10, 64)
+		if err != nil || integrationID == 0 {
+			response.BadRequest(c, "App 接入 ID 无效")
+			return
+		}
+	}
+	items, err := h.service.ListEvents(c.GetUint("user_id"), service.EventListFilter{AppCode: c.Query("app_code"), IntegrationID: uint(integrationID), EventType: c.Query("event_type"), Limit: limit, Offset: offset})
 	if err != nil {
 		response.InternalError(c, err.Error())
 		return

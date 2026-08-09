@@ -41,8 +41,8 @@ describe('notification channel adapter registry', () => {
     expect(bark.credentials).toEqual({ device_key: 'device' })
     expect(bark.credentials).not.toHaveProperty('bot_token')
 
-    const apprise = notificationChannelAdapter('apprise').toPayload(common('apprise'), { baseUrl: 'https://apprise.example.com', configId: 'config-main', tag: '' })
-    expect(apprise.config).toEqual({ base_url: 'https://apprise.example.com', tag: '', use_proxy: true })
+    const apprise = notificationChannelAdapter('apprise').toPayload(common('apprise'), { baseUrl: 'https://apprise.example.com', configId: 'config-main', tag: 'all' })
+    expect(apprise.config).toEqual({ base_url: 'https://apprise.example.com', tag: 'all', use_proxy: true })
     expect(apprise.credentials).toEqual({ config_id: 'config-main' })
   })
 
@@ -81,7 +81,10 @@ describe('notification channel adapter registry', () => {
     const fields = { baseUrl: 'https://apprise.example.com', configId: '', tag: '' }
     expect(adapter.validate?.(fields)).toBe('Apprise Config ID 不能为空')
     expect(adapter.validate?.({ ...fields, configId: 'invalid id' })).toContain('字母、数字')
-    expect(adapter.validate?.({ ...fields, configId: 'config-main' })).toBe('')
+    expect(adapter.validate?.({ ...fields, configId: 'config-main' })).toContain('Tag 不能为空')
+    expect(adapter.validate?.({ ...fields, configId: 'config-main', tag: 'all' })).toBe('')
+    expect(adapter.defaultFields().tag).toBe('all')
+    expect(adapter.fieldsFromChannel(channel('apprise', { base_url: 'https://apprise.example.com', tag: '' }, { config_id: 'config-main' })).tag).toBe('all')
   })
 
   it('renders only the selected channel form', () => {
@@ -93,9 +96,10 @@ describe('notification channel adapter registry', () => {
 
   it('conceals hydrated channel credentials until the reveal button is clicked', () => {
     const AppriseForm = notificationChannelAdapter('apprise').Form
-    render(<AppriseForm fields={{ baseUrl: 'https://apprise.example.com', configId: 'config-main', tag: '' }} update={vi.fn()} />)
+    render(<AppriseForm fields={{ baseUrl: 'https://apprise.example.com', configId: 'config-main', tag: 'all' }} update={vi.fn()} />)
     const input = screen.getByPlaceholderText('apprise')
     expect(input).toHaveAttribute('type', 'password')
+    expect(screen.getByDisplayValue('all')).toBeRequired()
     fireEvent.click(screen.getByRole('button', { name: '显示 Config ID' }))
     expect(input).toHaveAttribute('type', 'text')
   })

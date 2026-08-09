@@ -40,7 +40,7 @@ func TestJellyfinProviderDetectsMapsAndNormalizesEvents(t *testing.T) {
 
 func TestJellyfinPlaybackPresentation(t *testing.T) {
 	provider := NewJellyfinProvider()
-	request := IncomingRequest{Body: []byte(`{"NotificationType":"PlaybackProgress","Name":"Pilot","SeriesName":"Severance","SeasonNumber00":"01","EpisodeNumber00":"01","ItemType":"Episode","Overview":"团队发现了新的线索。","RunTimeTicks":36000000000,"PlaybackPositionTicks":9000000000,"NotificationUsername":"mark","ClientName":"Jellyfin Web","DeviceName":"Living Room","PlayMethod":"Transcode","IsPaused":true,"Video_0_Title":"1080p H264 SDR","Provider_tmdb":"95396","Provider_tvdb":"7889611","Provider_imdb":"tt11280740"}`)}
+	request := IncomingRequest{Body: []byte(`{"NotificationType":"PlaybackProgress","Name":"Pilot","SeriesName":"Severance","SeriesPremiereDate":"2022-02-18","SeasonNumber00":"01","EpisodeNumber00":"01","ItemType":"Episode","Overview":"团队发现了新的线索。","RunTimeTicks":36000000000,"PlaybackPositionTicks":9000000000,"NotificationUsername":"mark","ClientName":"Jellyfin Web","DeviceName":"Living Room","PlayMethod":"Transcode","IsPaused":true,"Video_0_Title":"1080p H264 SDR","Provider_tmdb":"95396","Provider_tvdb":"7889611","Provider_imdb":"tt11280740"}`)}
 	presentation := provider.Normalize("playback_progress", request)
 	playback := presentation.Data["playback"].(map[string]interface{})
 	if playback["percent"] != float64(25) || playback["paused"] != true {
@@ -53,7 +53,7 @@ func TestJellyfinPlaybackPresentation(t *testing.T) {
 	actor := presentation.Data["actor"].(map[string]interface{})
 	video := media["video"].(map[string]interface{})
 	providers := media["provider_ids"].(map[string]interface{})
-	if media["display_name"] != "Severance · S01E01 · Pilot" || media["overview"] != "团队发现了新的线索。" {
+	if media["display_name"] != "Severance · S01E01 · Pilot" || media["overview"] != "团队发现了新的线索。" || media["series_year"] != "2022" {
 		t.Fatalf("unexpected media: %+v", media)
 	}
 	if actor["client"] != "Jellyfin Web" || actor["device"] != "Living Room" || video["display_label"] != "1080p H264 SDR" {

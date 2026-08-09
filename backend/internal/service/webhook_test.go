@@ -154,6 +154,49 @@ func TestIntegrationSecretCanOnlyBeReadByOwner(t *testing.T) {
 	}
 }
 
+func TestListEventsFiltersByIntegrationAndPaginates(t *testing.T) {
+	setupWebhookTestDB(t)
+	webhookService := NewWebhookService()
+	first, err := webhookService.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "jellyfin", Name: "客厅影院"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := webhookService.CreateIntegration(7, &CreateIntegrationRequest{AppCode: "jellyfin", Name: "卧室影院"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherOwner, err := webhookService.CreateIntegration(8, &CreateIntegrationRequest{AppCode: "jellyfin", Name: "其他用户"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseTime := time.Date(2026, 8, 9, 10, 0, 0, 0, time.UTC)
+	events := []model.WebhookEvent{
+		{IntegrationID: first.ID, AppCode: "jellyfin", DisplayEventType: "playback_progress", DedupeKey: "first-progress-new", Status: "processed", PresentationVersion: 1, Presentation: []byte(`{}`), ReceivedAt: baseTime.Add(2 * time.Minute)},
+		{IntegrationID: first.ID, AppCode: "jellyfin", DisplayEventType: "playback_started", DedupeKey: "first-started", Status: "processed", PresentationVersion: 1, Presentation: []byte(`{}`), ReceivedAt: baseTime.Add(time.Minute)},
+		{IntegrationID: first.ID, AppCode: "jellyfin", DisplayEventType: "playback_progress", DedupeKey: "first-progress-old", Status: "processed", PresentationVersion: 1, Presentation: []byte(`{}`), ReceivedAt: baseTime},
+		{IntegrationID: second.ID, AppCode: "jellyfin", DisplayEventType: "playback_progress", DedupeKey: "second-progress", Status: "processed", PresentationVersion: 1, Presentation: []byte(`{}`), ReceivedAt: baseTime.Add(3 * time.Minute)},
+		{IntegrationID: otherOwner.ID, AppCode: "jellyfin", DisplayEventType: "playback_progress", DedupeKey: "other-owner", Status: "processed", PresentationVersion: 1, Presentation: []byte(`{}`), ReceivedAt: baseTime.Add(4 * time.Minute)},
+	}
+	if err := database.GetDB().Create(&events).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := webhookService.ListEvents(7, EventListFilter{IntegrationID: first.ID, EventType: "playback_progress", Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 2 || len(page.Items) != 1 || page.Items[0].DedupeKey != "first-progress-old" || page.Limit != 1 || page.Offset != 1 || page.HasMore {
+		t.Fatalf("unexpected filtered event page: %+v", page)
+	}
+	foreign, err := webhookService.ListEvents(7, EventListFilter{IntegrationID: otherOwner.ID, Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if foreign.Total != 0 || len(foreign.Items) != 0 {
+		t.Fatalf("another owner's App events were exposed: %+v", foreign)
+	}
+}
+
 func TestEmbyCredentialRotationChangesTheEndpoint(t *testing.T) {
 	setupWebhookTestDB(t)
 	service := NewWebhookService()

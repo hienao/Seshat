@@ -11,14 +11,70 @@ import (
 
 // SettingHandler 设置处理器
 type SettingHandler struct {
-	settingService *service.SettingService
+	settingService       *service.SettingService
+	mediaMetadataService *service.MediaMetadataService
 }
 
 // NewSettingHandler 创建设置处理器
 func NewSettingHandler(retentionUpdaters ...service.APILogRetentionUpdater) *SettingHandler {
 	return &SettingHandler{
-		settingService: service.NewSettingService(retentionUpdaters...),
+		settingService:       service.NewSettingService(retentionUpdaters...),
+		mediaMetadataService: service.NewMediaMetadataService(),
 	}
+}
+
+// TestTMDBConnection 测试当前输入的 TMDB Token 和可选 HTTP 代理，不保存配置。
+// @Summary 测试 TMDB 连接
+// @Description 使用当前输入的 Token 和代理配置请求 TMDB（需要管理员权限）
+// @Tags 设置
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body service.TestTMDBConnectionRequest true "TMDB 测试配置"
+// @Success 200 {object} response.Response{data=map[string]string}
+// @Failure 400 {object} response.Response
+// @Failure 403 {object} response.Response
+// @Router /api/settings/system/test-tmdb [post]
+func (h *SettingHandler) TestTMDBConnection(c *gin.Context) {
+	var req service.TestTMDBConnectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请填写 TMDB Token")
+		return
+	}
+	if err := h.mediaMetadataService.TestConnection(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	message := "TMDB Token 连接测试成功"
+	if req.UseProxy {
+		message = "HTTP 代理与 TMDB Token 连接测试成功"
+	}
+	response.Success(c, gin.H{"message": message})
+}
+
+// TestHTTPProxy 测试当前输入的 HTTP 代理，不保存配置。
+// @Summary 测试 HTTP 代理
+// @Description 使用当前输入的代理地址访问固定 HTTPS 探测地址（需要管理员权限）
+// @Tags 设置
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body service.TestHTTPProxyRequest true "HTTP 代理测试配置"
+// @Success 200 {object} response.Response{data=map[string]string}
+// @Failure 400 {object} response.Response
+// @Failure 403 {object} response.Response
+// @Router /api/settings/system/test-http-proxy [post]
+func (h *SettingHandler) TestHTTPProxy(c *gin.Context) {
+	var req service.TestHTTPProxyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请填写 HTTP 代理地址")
+		return
+	}
+	if err := h.mediaMetadataService.TestHTTPProxy(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"message": "HTTP 代理连接测试成功"})
 }
 
 // GetRegistrationStatus 获取注册状态

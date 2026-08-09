@@ -206,7 +206,7 @@ func TestAppriseConfigIDValidation(t *testing.T) {
 	}
 }
 
-func TestAppriseEditReturnsConfigIDAndBlankTagTargetsAllServices(t *testing.T) {
+func TestAppriseEditReturnsConfigIDAndAllTagTargetsAllServices(t *testing.T) {
 	setupNotificationTestDB(t)
 	service := NewNotificationService()
 	created, err := service.CreateChannel(7, &NotificationChannelRequest{
@@ -223,13 +223,13 @@ func TestAppriseEditReturnsConfigIDAndBlankTagTargetsAllServices(t *testing.T) {
 		Name:        "Apprise",
 		Type:        "apprise",
 		Enabled:     true,
-		Config:      map[string]interface{}{"base_url": "http://apprise.internal:8000", "tag": ""},
+		Config:      map[string]interface{}{"base_url": "http://apprise.internal:8000", "tag": "all"},
 		Credentials: map[string]interface{}{"config_id": "seshat-main"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !updated.HasCredentials || updated.Config["tag"] != "" || updated.Credentials["config_id"] != "seshat-main" {
+	if !updated.HasCredentials || updated.Config["tag"] != "all" || updated.Credentials["config_id"] != "seshat-main" {
 		t.Fatalf("unexpected updated channel: %+v", updated)
 	}
 	var channel model.NotificationChannel
@@ -247,8 +247,49 @@ func TestAppriseEditReturnsConfigIDAndBlankTagTargetsAllServices(t *testing.T) {
 	if err := json.Unmarshal(spec.body, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if _, exists := payload["tag"]; exists {
-		t.Fatalf("blank tag must be omitted: %+v", payload)
+	if payload["tag"] != "all" {
+		t.Fatalf("all tag must target every configured service: %+v", payload)
+	}
+}
+
+func TestAppriseTagDefaultsToAllAndRejectsExplicitBlankValue(t *testing.T) {
+	setupNotificationTestDB(t)
+	service := NewNotificationService()
+	created, err := service.CreateChannel(7, &NotificationChannelRequest{
+		Name:        "Apprise",
+		Type:        "apprise",
+		Config:      map[string]interface{}{"base_url": "http://apprise.internal:8000"},
+		Credentials: map[string]interface{}{"config_id": "seshat-main"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Config["tag"] != "all" {
+		t.Fatalf("missing Apprise tag should default to all: %+v", created.Config)
+	}
+	_, err = service.UpdateChannel(7, created.ID, &NotificationChannelRequest{
+		Name:        "Apprise",
+		Type:        "apprise",
+		Config:      map[string]interface{}{"base_url": "http://apprise.internal:8000", "tag": ""},
+		Credentials: map[string]interface{}{"config_id": "seshat-main"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Tag 不能为空") {
+		t.Fatalf("blank Apprise tag should be rejected: %v", err)
+	}
+}
+
+func TestAppriseLegacyBlankTagIsSentAsAll(t *testing.T) {
+	channel := model.NotificationChannel{Type: "apprise", Config: []byte(`{"base_url":"http://apprise.internal:8000","tag":""}`), SecretConfig: []byte(`{"config_id":"seshat-main"}`)}
+	spec, err := buildTestNotificationRequest(&channel, outboundMessage{Title: "测试", Body: "通知"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(spec.body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["tag"] != "all" {
+		t.Fatalf("legacy blank tag should be normalized while sending: %+v", payload)
 	}
 }
 

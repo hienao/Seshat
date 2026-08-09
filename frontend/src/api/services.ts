@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, CreatedIntegration, DisplayWebhookEvent, EventListResponse, EventNotificationStatus, Integration, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
+import type { ApiLogListResponse, ApiLogSummary, ApiRequestLog, AppDefinition, ApplicationLog, ApplicationLogListResponse, ApplicationLogSummary, ConnectionTestResult, CreatedIntegration, DisplayWebhookEvent, EventListResponse, EventNotificationStatus, Integration, IntegrationNotificationSettings, IntegrationSecret, NotificationChannel, NotificationChannelInput, NotificationDelivery, RegistrationStatus, SystemSettings, TestHTTPProxyInput, TestTMDBConnectionInput, TokenResponse, UpdateSystemSettingsInput, User, WebhookEvent } from './types'
 import { readAccessToken } from '@/lib/auth-token'
 
 export const api = {
@@ -20,6 +20,10 @@ export const api = {
   systemSettings: () => apiRequest<SystemSettings>('/api/settings/system'),
   updateSystemSettings: (settings: UpdateSystemSettingsInput) =>
     apiRequest<void>('/api/settings/system', { method: 'PUT', body: settings }),
+  testTMDBConnection: (settings: TestTMDBConnectionInput) =>
+    apiRequest<ConnectionTestResult>('/api/settings/system/test-tmdb', { method: 'POST', body: settings }),
+  testHTTPProxy: (settings: TestHTTPProxyInput) =>
+    apiRequest<ConnectionTestResult>('/api/settings/system/test-http-proxy', { method: 'POST', body: settings }),
   users: () => apiRequest<User[]>('/api/admin/users'),
   setUserRole: (userId: number, isAdmin: boolean) =>
     apiRequest<void>(`/api/admin/users/${userId}/role`, {
@@ -42,10 +46,12 @@ export const api = {
   testNotificationChannel: (id: number) => apiRequest<NotificationChannel>(`/api/notification-channels/${id}/test`, { method: 'POST' }),
   notificationDeliveries: (status = '') => apiRequest<NotificationDelivery[]>(`/api/notifications/deliveries${status ? `?status=${encodeURIComponent(status)}` : ''}`),
   retryNotificationDelivery: (id: number) => apiRequest<void>(`/api/notifications/deliveries/${id}/retry`, { method: 'POST' }),
-  events: (params: { appCode?: string; eventType?: string; offset?: number } = {}) => {
+  events: (params: { appCode?: string; integrationId?: number; eventType?: string; limit?: number; offset?: number } = {}) => {
     const query = new URLSearchParams()
     if (params.appCode) query.set('app_code', params.appCode)
+    if (params.integrationId) query.set('integration_id', String(params.integrationId))
     if (params.eventType) query.set('event_type', params.eventType)
+    if (params.limit) query.set('limit', String(params.limit))
     if (params.offset) query.set('offset', String(params.offset))
     return apiRequest<EventListResponse>(`/api/webhooks/events${query.size ? `?${query.toString()}` : ''}`)
   },
