@@ -21,10 +21,21 @@ const dingTalkRobotEndpoint = "https://oapi.dingtalk.com/robot/send"
 func (dingTalkNotificationAdapter) Type() string { return "dingtalk" }
 
 func (dingTalkNotificationAdapter) Sanitize(config, credentials map[string]interface{}) (map[string]interface{}, map[string]interface{}, error) {
-	return sanitizeNotificationChannelFields(config, credentials, nil, []string{"secret", "token", "targets"})
+	return sanitizeNotificationChannelFields(config, credentials, []string{"message_format", "include_image"}, []string{"secret", "token", "targets"})
 }
 
-func (dingTalkNotificationAdapter) Validate(_ map[string]interface{}, credentials map[string]interface{}) error {
+func (dingTalkNotificationAdapter) Validate(config map[string]interface{}, credentials map[string]interface{}) error {
+	if configured, ok := config["message_format"]; ok {
+		format, valid := configured.(string)
+		if !valid || (format != "" && format != "auto" && format != string(notificationFormatMarkdown) && format != string(notificationFormatPlainText)) {
+			return errors.New("钉钉消息格式无效")
+		}
+	}
+	if includeImage, ok := config["include_image"]; ok {
+		if _, valid := includeImage.(bool); !valid {
+			return errors.New("钉钉图片开关必须是布尔值")
+		}
+	}
 	if !requiredNotificationString(credentials, "token") {
 		return errors.New("钉钉机器人 Token 不能为空")
 	}
@@ -39,6 +50,24 @@ func (dingTalkNotificationAdapter) Validate(_ map[string]interface{}, credential
 		return err
 	}
 	return nil
+}
+
+func (dingTalkNotificationAdapter) ContentPolicy(config map[string]interface{}) notificationContentPolicy {
+	preferred, _ := config["message_format"].(string)
+	if preferred == "auto" {
+		preferred = ""
+	}
+	includeImage := true
+	if configured, ok := config["include_image"].(bool); ok {
+		includeImage = configured
+	}
+	return notificationContentPolicy{
+		Formats:         []notificationFormat{notificationFormatMarkdown, notificationFormatPlainText},
+		DefaultFormat:   notificationFormatMarkdown,
+		PreferredFormat: notificationFormat(preferred),
+		Profile:         "dingtalk_robot",
+		IncludeImage:    includeImage,
+	}
 }
 
 func (a dingTalkNotificationAdapter) Send(ctx context.Context, channel *model.NotificationChannel, message outboundMessage, options notificationSendOptions) error {
@@ -67,10 +96,19 @@ func (dingTalkNotificationAdapter) BuildRequest(channel *model.NotificationChann
 	if secret = strings.TrimSpace(secret); secret != "" {
 		endpoint = signDingTalkURL(endpoint, secret)
 	}
-	payload := map[string]interface{}{
-		"msgtype":  "markdown",
-		"markdown": map[string]interface{}{"title": singleLineTitle(message.Title), "text": notificationDingTalkMarkdown(message)},
-		"at":       map[string]interface{}{"atMobiles": targets, "isAtAll": false},
+	if message.Rendered == nil {
+		return nil, &deliveryError{message: "钉钉推送内容尚未渲染"}
+	}
+	payload := map[string]interface{}{"at": map[string]interface{}{"atMobiles": targets, "isAtAll": false}}
+	switch message.Rendered.Format {
+	case notificationFormatMarkdown:
+		payload["msgtype"] = "markdown"
+		payload["markdown"] = map[string]interface{}{"title": singleLineTitle(message.Title), "text": message.Body}
+	case notificationFormatPlainText:
+		payload["msgtype"] = "text"
+		payload["text"] = map[string]interface{}{"content": notificationPlainText(message)}
+	default:
+		return nil, &deliveryError{message: "钉钉不支持当前消息格式"}
 	}
 	return jsonNotificationRequest(endpoint, payload, nil, true, true)
 }
@@ -133,26 +171,6 @@ func parseDingTalkTargets(value string) ([]string, error) {
 	return targets, nil
 }
 
-func notificationDingTalkMarkdown(message outboundMessage) string {
-	content := "### " + escapeDingTalkMarkdown(message.Title)
-	if body := strings.TrimSpace(message.Body); body != "" {
-		content += "\n\n" + escapeDingTalkMarkdown(body)
-	}
-	if message.DetailURL != "" {
-		content += "\n\n[查看消息详情](" + message.DetailURL + ")"
-	}
-	return content
-}
-
 func singleLineTitle(value string) string {
 	return strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(value, "\r", " "), "\n", " "))
-}
-
-func escapeDingTalkMarkdown(value string) string {
-	replacer := strings.NewReplacer(
-		"\\", "\\\\", "`", "\\`", "*", "\\*", "_", "\\_", "{", "\\{", "}", "\\}",
-		"[", "\\[", "]", "\\]", "(", "\\(", ")", "\\)", "#", "\\#", "+", "\\+",
-		"-", "\\-", ".", "\\.", "!", "\\!", "|", "\\|", ">", "\\>",
-	)
-	return replacer.Replace(value)
 }

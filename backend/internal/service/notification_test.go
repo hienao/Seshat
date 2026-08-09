@@ -423,9 +423,9 @@ func TestNotificationTextEndsWithPublicDetailURL(t *testing.T) {
 	if actual := notificationPlainText(message); actual != expected {
 		t.Fatalf("notification text = %q, want %q", actual, expected)
 	}
-	markdown := notificationDingTalkMarkdown(message)
-	if !strings.HasSuffix(markdown, "[查看消息详情](https://seshat.example.com/public/events/token)") {
-		t.Fatalf("DingTalk markdown missing detail link: %q", markdown)
+	rendered := markdownNotificationRenderer{}.Render(buildNotificationDocument(message, true), notificationContentPolicy{})
+	if !strings.HasSuffix(rendered.Body, "[消息详情](https://seshat.example.com/public/events/token)") {
+		t.Fatalf("Markdown rendering missing detail link: %q", rendered.Body)
 	}
 }
 
