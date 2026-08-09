@@ -22,6 +22,8 @@ services:
       API_LOG_QUEUE_SIZE: ${API_LOG_QUEUE_SIZE:-5000}
       API_LOG_BATCH_SIZE: ${API_LOG_BATCH_SIZE:-100}
       API_LOG_EXPORT_LIMIT: ${API_LOG_EXPORT_LIMIT:-100000}
+      # 固定静态更新源；自定义 Cloudflare Pages 域名时可覆盖
+      SESHAT_UPDATE_FEED_BASE_URL: ${SESHAT_UPDATE_FEED_BASE_URL:-https://seshatapp.pages.dev/updates/v1}
     volumes:
       - ${HOST_DATA_DIR:-./runtime/data}:/data
       - ${HOST_CACHE_DIR:-./runtime/cache}:/cache

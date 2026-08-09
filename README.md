@@ -52,6 +52,7 @@ npm run dev
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
 | `TZ` | ❌ | 容器日志和应用本地时间，默认 `UTC` | `UTC` |
+| `SESHAT_UPDATE_FEED_BASE_URL` | ❌ | Beta/Release 固定静态更新源，可替换为 Pages 自定义域名 | `https://seshatapp.pages.dev/updates/v1` |
 
 #### 挂载目录
 
@@ -204,9 +205,9 @@ Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版
 | `beta` | `VERSION_BETA` | `beta-v0.0.1` | `beta` |
 | `main` | `VERSION_RELEASE` | `v0.0.1` | `release`、`latest` |
 
-工作流在构建前校验目标版本的双语更新记录，并使用 Docker Hub 查询不可变版本标签；如果该标签已存在，则跳过构建和推送，避免重复发布同一合并提交。新镜像构建并通过多架构验证后，工作流会创建同名 GitHub Release，并附带供应用更新提醒读取的累计 `update-feed.json`。Beta 与 Release 的更新目录和检查结果完全隔离。
+工作流在构建前校验目标版本的双语更新记录，并使用 Docker Hub 查询不可变版本标签；如果该标签已存在，则跳过构建和推送，避免重复发布同一合并提交。新镜像构建并通过多架构验证后，工作流会创建同名 GitHub Release；启用 Cloudflare Pages 发布后，还会重建双语项目主页、更新记录页，以及 `/updates/v1/beta.json` 和 `/updates/v1/release.json` 两个固定静态更新源。Beta 与 Release 的更新目录和检查结果完全隔离。
 
-运行镜像会把版本、渠道、提交和构建时间写入后端二进制。管理员登录后可以在左侧 Seshat 名称下查看当前版本及更新状态；更新检查由后端访问 GitHub，配置系统 HTTP 代理后会自动通过该代理请求。
+运行镜像会把版本、渠道、提交和构建时间写入后端二进制。管理员登录后可以在左侧 Seshat 名称下查看当前版本及更新状态；更新检查只请求当前渠道对应的 Pages 静态 JSON，不再调用 GitHub Releases API。配置系统 HTTP 代理后，更新请求仍会自动通过该代理发送。需要使用自定义 Pages 域名时，可通过 `SESHAT_UPDATE_FEED_BASE_URL` 覆盖默认地址。
 
 需要在 GitHub 仓库中配置：
 
@@ -215,6 +216,10 @@ Beta 与 Release 使用相互独立的版本文件，格式都必须为 `v主版
 | Secret | `DOCKERHUB_USERNAME` | Docker Hub 用户名，本仓库应配置为 `hienao6` |
 | Secret | `DOCKERHUB_TOKEN` | 具有目标仓库读写权限的 Access Token |
 | Variable（可选） | `DOCKERHUB_REPOSITORY` | Docker Hub 仓库名，默认 `seshat` |
+| Secret | `CLOUDFLARE_API_TOKEN` | 具有 Cloudflare Pages Edit 权限的 API Token |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID |
+| Variable | `CLOUDFLARE_PAGES_ENABLED` | 设置为 `true` 后启用 Pages 发布；未设置时跳过且不影响镜像发版 |
+| Variable（可选） | `CLOUDFLARE_PAGES_PROJECT` | Pages 项目名，默认 `seshatapp`；项目需预先创建 |
 
 当前发布地址为 `hienao6/seshat`（由 `DOCKERHUB_USERNAME/seshat` 组合生成）。工作流使用原生 AMD64 与 ARM64 GitHub 托管 Runner 并行构建 `linux/amd64` 和 `linux/arm64` 镜像，各平台按 digest 推送后再统一生成多架构标签；两个平台分别通过 GitHub Actions Cache 复用对应分支的构建缓存。
 

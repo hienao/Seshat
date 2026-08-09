@@ -8,7 +8,7 @@
 4. 执行发版前检查。
 5. 提交信息使用 `chore(release): prepare beta-vX.Y.Z`。
 6. 推送发布分支并创建目标为 `beta` 的 PR。
-7. PR 合并后，工作流发布不可变标签 `beta-vX.Y.Z`，更新滚动标签 `beta`，并在镜像验证成功后发布同名 GitHub Prerelease 和累计更新 Feed。
+7. PR 合并后，工作流发布不可变标签 `beta-vX.Y.Z`，更新滚动标签 `beta`，并在镜像验证成功后发布同名 GitHub Prerelease；启用 Cloudflare Pages 时同步发布双语主页、更新历史和两个渠道的固定累计更新 Feed。
 8. 验证镜像后创建 `beta -> dev` PR；同步时不修改版本文件。
 
 不要通过 `dev -> main` 直接发布正式版。正式版必须基于已经验证的 `beta`。
@@ -21,7 +21,7 @@
 4. 执行发版前检查。
 5. 提交信息使用 `chore(release): prepare vX.Y.Z`。
 6. 推送发布分支并创建目标为 `main` 的 PR。
-7. PR 合并后，工作流发布不可变标签 `vX.Y.Z`，更新 `release` 和 `latest`，并在镜像验证成功后发布同名 GitHub Release 和累计更新 Feed。
+7. PR 合并后，工作流发布不可变标签 `vX.Y.Z`，更新 `release` 和 `latest`，并在镜像验证成功后发布同名 GitHub Release；启用 Cloudflare Pages 时同步发布双语主页、更新历史和两个渠道的固定累计更新 Feed。
 8. 验证镜像后依次创建 `main -> beta`、`beta -> dev` PR；同步时不修改版本文件。
 
 ## Hotfix
@@ -38,3 +38,5 @@
 - Secret `DOCKERHUB_USERNAME` 必须存在。
 - Secret `DOCKERHUB_TOKEN` 必须具有目标仓库读写权限。
 - Variable `DOCKERHUB_REPOSITORY` 可选，默认值为 `seshat`。
+- Secret `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID` 用于 Pages Direct Upload。
+- Variable `CLOUDFLARE_PAGES_ENABLED=true` 时启用 Pages 发布；`CLOUDFLARE_PAGES_PROJECT` 可覆盖默认项目名 `seshatapp`。

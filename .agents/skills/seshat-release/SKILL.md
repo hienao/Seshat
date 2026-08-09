@@ -31,6 +31,6 @@ description: 执行 Seshat 的 Beta、Release 和生产 Hotfix 发版，包含�
 
 - 发版前检查全部通过，并记录实际命令结果。
 - PR 的源分支、目标分支、版本文件、目标版本和镜像标签互相一致。
-- 目标版本的双语更新记录通过校验，并在镜像发布成功后生成对应 GitHub Release 和 `update-feed.json`。
+- 目标版本的双语更新记录通过校验，并在镜像发布成功后生成对应 GitHub Release；启用 Cloudflare Pages 时同步重建双语主页、更新历史和 Beta/Release 固定静态更新源。
 - 发布后验证不可变标签包含 `linux/amd64` 和 `linux/arm64`。
 - 完成对应的回合并 PR，且回合并时不额外修改版本文件。
