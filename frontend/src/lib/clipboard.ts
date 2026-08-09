@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n'
+
 export async function copyTextToClipboard(value: string) {
   if (navigator.clipboard?.writeText) {
     try {
@@ -25,5 +27,5 @@ export async function copyTextToClipboard(value: string) {
   } finally {
     textarea.remove()
   }
-  if (!copied) throw new Error('复制失败')
+  if (!copied) throw new Error(i18n.t('common.feedback.copyFailed'))
 }

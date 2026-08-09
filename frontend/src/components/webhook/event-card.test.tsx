@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { WebhookEvent } from '@/api/types'
 import { EventCard } from './event-card'
+import { i18n } from '@/i18n'
 
 afterEach(cleanup)
 
@@ -76,18 +77,35 @@ describe('EventCard', () => {
     expect(screen.getAllByText('Episode')).toHaveLength(1)
   })
 
-  it('uses a larger landscape image and shows complete external IDs in detail mode', () => {
+  it('preserves the source image ratio within the larger detail bounds and shows complete external IDs', () => {
     const externalIDs = 'TMDB: 1452857 · TVDB: 6493171 · IMDb: tt8150114'
     const item = event()
     item.presentation.facts = [...(item.presentation.facts ?? []), { label: '外部 ID', value: externalIDs }]
     const { container } = render(<EventCard event={item} detail />)
 
     const image = container.querySelector('img')
-    expect(image?.parentElement).toHaveClass('aspect-video', 'w-40', 'sm:w-64')
+    expect(image).toHaveClass('h-auto', 'w-auto', 'object-contain', 'max-h-44', 'max-w-40', 'sm:max-h-56', 'sm:max-w-64')
+    expect(image).not.toHaveClass('object-cover', 'aspect-video')
+    expect(image?.parentElement).not.toHaveClass('aspect-video', 'h-44', 'w-28')
     const externalIDValue = screen.getByText(externalIDs)
     expect(externalIDValue).toHaveClass('whitespace-normal', 'break-words')
     expect(externalIDValue).not.toHaveClass('truncate')
     expect(externalIDValue.parentElement).toHaveClass('sm:col-span-2', 'xl:col-span-3')
+  })
+
+  it.each([
+    ['Episode', 'https://example.test/landscape.jpg'],
+    ['Movie', 'https://example.test/portrait.jpg'],
+  ])('does not force a media-type ratio for %s artwork', (type, imageUrl) => {
+    const item = event()
+    const data = item.presentation.data as Record<string, unknown>
+    data.media = { display_name: `${type} item`, type, image_url: imageUrl }
+    const { container } = render(<EventCard event={item} />)
+
+    const image = container.querySelector('img')
+    expect(image).toHaveClass('h-auto', 'w-auto', 'object-contain', 'max-h-24', 'max-w-28', 'sm:max-h-28', 'sm:max-w-44')
+    expect(image).not.toHaveClass('object-cover', 'aspect-video')
+    expect(image?.parentElement).not.toHaveClass('aspect-video', 'h-24', 'w-16')
   })
 
   it('accepts cached media image paths and attributes Jellyfin metadata', () => {
@@ -126,5 +144,13 @@ describe('EventCard', () => {
   it('uses the default renderer for apps without a dedicated renderer', () => {
     render(<EventCard event={event({ app_code: 'github', display_event_type: 'push', source_event_type: 'push' })} />)
     expect(screen.getByTestId('event-card')).toHaveAttribute('data-renderer', 'default:github')
+  })
+
+  it('renders protocol labels and metadata attribution in English', async () => {
+    await i18n.changeLanguage('en')
+    render(<EventCard event={event()} />)
+    expect(screen.getByText('Playback progress')).toBeInTheDocument()
+    expect(screen.getByText('Media metadata provided by TMDB')).toBeInTheDocument()
+    expect(screen.getByText('User')).toBeInTheDocument()
   })
 })

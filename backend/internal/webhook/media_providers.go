@@ -312,32 +312,32 @@ func presentationSummary(app, label, category string, media, actor, playback, sy
 
 func presentationFacts(category string, media, actor, playback, system map[string]interface{}) []map[string]string {
 	facts := []map[string]string{}
-	addFact := func(label, value string) {
+	addFact := func(key, label, value string) {
 		if value != "" && len(facts) < 8 {
-			facts = append(facts, map[string]string{"label": label, "value": value})
+			facts = append(facts, map[string]string{"label_key": "events.facts." + key, "label": label, "value": value})
 		}
 	}
 	if category == "media" || category == "playback" {
-		addFact("类型", stringValue(media, "type"))
-		addFact("用户", stringValue(actor, "username"))
-		addFact("客户端", stringValue(actor, "client"))
-		addFact("设备", stringValue(actor, "device"))
-		addFact("播放方式", stringValue(playback, "method"))
-		addFact("媒体信息", nestedStringValue(media, "video", "display_label"))
-		addFact("进度", playbackProgressLabel(playback, media))
-		addFact("外部 ID", providerIDsLabel(media))
+		addFact("media_type", "类型", stringValue(media, "type"))
+		addFact("user", "用户", stringValue(actor, "username"))
+		addFact("client", "客户端", stringValue(actor, "client"))
+		addFact("device", "设备", stringValue(actor, "device"))
+		addFact("play_method", "播放方式", stringValue(playback, "method"))
+		addFact("media_info", "媒体信息", nestedStringValue(media, "video", "display_label"))
+		addFact("progress", "进度", playbackProgressLabel(playback, media))
+		addFact("external_ids", "外部 ID", providerIDsLabel(media))
 	} else if category == "security" || category == "user" {
-		addFact("用户", stringValue(actor, "username"))
-		addFact("客户端", stringValue(actor, "client"))
-		addFact("设备", stringValue(actor, "device"))
-		addFact("来源", stringValue(actor, "remote_ip"))
+		addFact("user", "用户", stringValue(actor, "username"))
+		addFact("client", "客户端", stringValue(actor, "client"))
+		addFact("device", "设备", stringValue(actor, "device"))
+		addFact("source", "来源", stringValue(actor, "remote_ip"))
 	} else {
-		addFact("名称", stringValue(system, "name"))
-		addFact("版本", stringValue(system, "version"))
-		addFact("状态", stringValue(system, "status"))
-		addFact("服务端", stringValue(system, "server_name"))
-		addFact("服务版本", stringValue(system, "server_version"))
-		addFact("错误", stringValue(system, "error"))
+		addFact("name", "名称", stringValue(system, "name"))
+		addFact("version", "版本", stringValue(system, "version"))
+		addFact("status", "状态", stringValue(system, "status"))
+		addFact("server", "服务端", stringValue(system, "server_name"))
+		addFact("server_version", "服务版本", stringValue(system, "server_version"))
+		addFact("error", "错误", stringValue(system, "error"))
 	}
 	return facts
 }
@@ -345,10 +345,10 @@ func presentationFacts(category string, media, actor, playback, system map[strin
 func presentationLinks(payload, media map[string]interface{}) []map[string]string {
 	links := []map[string]string{}
 	if itemURL := safeURL(firstString(payload, "ItemUrl", "item_url")); itemURL != "" {
-		links = append(links, map[string]string{"label": "打开媒体", "url": itemURL})
+		links = append(links, map[string]string{"label_key": "events.links.open_media", "label": "打开媒体", "url": itemURL})
 	}
 	if serverURL := safeURL(firstString(payload, "ServerUrl", "server_url")); serverURL != "" {
-		links = append(links, map[string]string{"label": "打开服务", "url": serverURL})
+		links = append(links, map[string]string{"label_key": "events.links.open_service", "label": "打开服务", "url": serverURL})
 	}
 	providers, _ := media["provider_ids"].(map[string]interface{})
 	if imdb := stringValue(providers, "imdb"); validIMDbID(imdb) {

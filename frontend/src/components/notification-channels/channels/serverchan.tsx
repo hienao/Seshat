@@ -14,7 +14,7 @@ export const serverChanChannelAdapter: NotificationChannelAdapter = {
   Form: ({ fields, update }) => (
     <label className="block space-y-2 text-sm font-medium">
       <span>SendKey</span>
-      <SecretInput revealLabel="SendKey" value={textField(fields, 'sendKey')} onChange={(event) => update('sendKey', event.target.value)} required placeholder="SCT... 或 sctp..." />
+      <SecretInput revealLabel="SendKey" value={textField(fields, 'sendKey')} onChange={(event) => update('sendKey', event.target.value)} required placeholder="SCT... / sctp..." />
     </label>
   ),
 }

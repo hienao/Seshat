@@ -12,5 +12,5 @@ export const dingTalkChannelAdapter: NotificationChannelAdapter = {
     const signingSecret = textField(fields, 'signingSecret').trim()
     return channelPayload(common, {}, { webhook_url: webhookUrl, signing_secret: signingSecret })
   },
-  Form: (props) => <RobotChannelForm providerName="钉钉" {...props} />,
+  Form: (props) => <RobotChannelForm providerName="DingTalk" {...props} />,
 }
