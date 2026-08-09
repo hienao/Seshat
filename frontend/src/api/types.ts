@@ -23,7 +23,7 @@ export interface SystemSettings {
   http_proxy_configured: boolean
   http_proxy_url: string
   tmdb_configured: boolean
-  tmdb_read_access_token: string
+  tmdb_api_key: string
   tmdb_use_proxy: boolean
   public_base_url: string
 }
@@ -31,14 +31,14 @@ export interface SystemSettings {
 export type UpdateSystemSettingsInput = Partial<Pick<SystemSettings, 'allow_register' | 'api_log_retention_days'>> & {
   http_proxy_url?: string
   clear_http_proxy?: boolean
-  tmdb_read_access_token?: string
-  clear_tmdb_token?: boolean
+  tmdb_api_key?: string
+  clear_tmdb_api_key?: boolean
   tmdb_use_proxy?: boolean
   public_base_url?: string
 }
 
 export interface TestTMDBConnectionInput {
-  tmdb_read_access_token: string
+  tmdb_api_key: string
   http_proxy_url?: string
   use_proxy: boolean
 }

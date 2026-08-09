@@ -552,7 +552,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "使用当前输入的 Token 和代理配置请求 TMDB（需要管理员权限）",
+                "description": "使用当前输入的 API 密钥和代理配置请求 TMDB（需要管理员权限）",
                 "consumes": [
                     "application/json"
                 ],
@@ -844,11 +844,11 @@ const docTemplate = `{
                 "public_base_url": {
                     "type": "string"
                 },
+                "tmdb_api_key": {
+                    "type": "string"
+                },
                 "tmdb_configured": {
                     "type": "boolean"
-                },
-                "tmdb_read_access_token": {
-                    "type": "string"
                 },
                 "tmdb_use_proxy": {
                     "type": "boolean"
@@ -869,13 +869,13 @@ const docTemplate = `{
         "service.TestTMDBConnectionRequest": {
             "type": "object",
             "required": [
-                "tmdb_read_access_token"
+                "tmdb_api_key"
             ],
             "properties": {
                 "http_proxy_url": {
                     "type": "string"
                 },
-                "tmdb_read_access_token": {
+                "tmdb_api_key": {
                     "type": "string"
                 },
                 "use_proxy": {
@@ -906,7 +906,7 @@ const docTemplate = `{
                 "clear_http_proxy": {
                     "type": "boolean"
                 },
-                "clear_tmdb_token": {
+                "clear_tmdb_api_key": {
                     "type": "boolean"
                 },
                 "http_proxy_url": {
@@ -915,7 +915,7 @@ const docTemplate = `{
                 "public_base_url": {
                     "type": "string"
                 },
-                "tmdb_read_access_token": {
+                "tmdb_api_key": {
                     "type": "string"
                 },
                 "tmdb_use_proxy": {

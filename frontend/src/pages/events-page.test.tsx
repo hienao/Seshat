@@ -55,6 +55,23 @@ describe('EventsPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '下一页' }))
     await waitFor(() => expect(events).toHaveBeenCalledWith(expect.objectContaining({ integrationId: 11, eventType: 'playback_progress', limit: 20, offset: 20 })))
-    expect(await screen.findByText('第 2 / 2 页')).toBeInTheDocument()
+    expect(await screen.findByText('第 2 / 2 页 · 显示第 21–21 条')).toBeInTheDocument()
+  })
+
+  it('shows explicit pagination controls and loads a selected page by offset', async () => {
+    vi.spyOn(api, 'webhookApps').mockResolvedValue([])
+    vi.spyOn(api, 'integrations').mockResolvedValue([])
+    const events = vi.spyOn(api, 'events').mockImplementation(async (params = {}) => ({
+      items: [{ ...event, id: (params.offset ?? 0) + 1 }], total: 45, limit: 20, offset: params.offset ?? 0, has_more: (params.offset ?? 0) < 40,
+    }))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><EventsPage /></MemoryRouter></QueryClientProvider>)
+
+    expect(await screen.findByRole('navigation', { name: '消息分页' })).toBeInTheDocument()
+    expect(screen.getByText('第 1 / 3 页 · 显示第 1–20 条')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '第 3 页' }))
+
+    await waitFor(() => expect(events).toHaveBeenCalledWith(expect.objectContaining({ limit: 20, offset: 40 })))
+    expect(await screen.findByText('第 3 / 3 页 · 显示第 41–45 条')).toBeInTheDocument()
   })
 })

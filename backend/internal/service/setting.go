@@ -16,12 +16,12 @@ const (
 )
 
 var (
-	ErrInvalidAPILogRetentionDays = errors.New("日志与媒体缓存保留天数必须在 1 到 30 天之间")
-	ErrInvalidHTTPProxyURL        = errors.New("HTTP 代理地址必须是有效的 http:// 或 https:// URL")
-	ErrConflictingHTTPProxyUpdate = errors.New("不能同时设置和清空 HTTP 代理")
-	ErrConflictingTMDBTokenUpdate = errors.New("不能同时设置和清空 TMDB Read Access Token")
-	ErrInvalidTMDBToken           = errors.New("TMDB Read Access Token 无效")
-	ErrInvalidPublicBaseURL       = errors.New("对外访问地址必须是有效的 http:// 或 https:// URL")
+	ErrInvalidAPILogRetentionDays  = errors.New("日志与媒体缓存保留天数必须在 1 到 30 天之间")
+	ErrInvalidHTTPProxyURL         = errors.New("HTTP 代理地址必须是有效的 http:// 或 https:// URL")
+	ErrConflictingHTTPProxyUpdate  = errors.New("不能同时设置和清空 HTTP 代理")
+	ErrConflictingTMDBAPIKeyUpdate = errors.New("不能同时设置和清空 TMDB API 密钥")
+	ErrInvalidTMDBAPIKey           = errors.New("TMDB API 密钥无效")
+	ErrInvalidPublicBaseURL        = errors.New("对外访问地址必须是有效的 http:// 或 https:// URL")
 )
 
 // APILogRetentionUpdater 由接口日志管理器实现，用于让设置立即生效。
@@ -53,7 +53,7 @@ type SystemSettingsResponse struct {
 	HTTPProxyConfigured bool   `json:"http_proxy_configured"`
 	HTTPProxyURL        string `json:"http_proxy_url"`
 	TMDBConfigured      bool   `json:"tmdb_configured"`
-	TMDBReadAccessToken string `json:"tmdb_read_access_token"`
+	TMDBAPIKey          string `json:"tmdb_api_key"`
 	TMDBUseProxy        bool   `json:"tmdb_use_proxy"`
 	PublicBaseURL       string `json:"public_base_url"`
 }
@@ -79,9 +79,9 @@ func (s *SettingService) GetSystemSettings() (*SystemSettingsResponse, error) {
 				response.HTTPProxyConfigured = true
 				response.HTTPProxyURL = setting.Value
 			}
-		case "tmdb_read_access_token":
-			response.TMDBReadAccessToken = strings.TrimSpace(setting.Value)
-			response.TMDBConfigured = response.TMDBReadAccessToken != ""
+		case "tmdb_api_key":
+			response.TMDBAPIKey = strings.TrimSpace(setting.Value)
+			response.TMDBConfigured = response.TMDBAPIKey != ""
 		case "tmdb_use_proxy":
 			response.TMDBUseProxy = setting.Value == "true"
 		case "public_base_url":
@@ -99,8 +99,8 @@ type UpdateSystemSettingsRequest struct {
 	APILogRetentionDays *int    `json:"api_log_retention_days"`
 	HTTPProxyURL        *string `json:"http_proxy_url"`
 	ClearHTTPProxy      *bool   `json:"clear_http_proxy"`
-	TMDBReadAccessToken *string `json:"tmdb_read_access_token"`
-	ClearTMDBToken      *bool   `json:"clear_tmdb_token"`
+	TMDBAPIKey          *string `json:"tmdb_api_key"`
+	ClearTMDBAPIKey     *bool   `json:"clear_tmdb_api_key"`
 	TMDBUseProxy        *bool   `json:"tmdb_use_proxy"`
 	PublicBaseURL       *string `json:"public_base_url"`
 }
@@ -113,8 +113,8 @@ func (s *SettingService) UpdateSystemSettings(req *UpdateSystemSettingsRequest) 
 	if req.HTTPProxyURL != nil && req.ClearHTTPProxy != nil && *req.ClearHTTPProxy {
 		return ErrConflictingHTTPProxyUpdate
 	}
-	if req.TMDBReadAccessToken != nil && req.ClearTMDBToken != nil && *req.ClearTMDBToken {
-		return ErrConflictingTMDBTokenUpdate
+	if req.TMDBAPIKey != nil && req.ClearTMDBAPIKey != nil && *req.ClearTMDBAPIKey {
+		return ErrConflictingTMDBAPIKeyUpdate
 	}
 	if req.HTTPProxyURL != nil {
 		proxyURL := strings.TrimSpace(*req.HTTPProxyURL)
@@ -122,10 +122,10 @@ func (s *SettingService) UpdateSystemSettings(req *UpdateSystemSettingsRequest) 
 			return ErrInvalidHTTPProxyURL
 		}
 	}
-	if req.TMDBReadAccessToken != nil {
-		token := strings.TrimSpace(*req.TMDBReadAccessToken)
-		if token == "" || len(token) > 2000 {
-			return ErrInvalidTMDBToken
+	if req.TMDBAPIKey != nil {
+		apiKey := strings.TrimSpace(*req.TMDBAPIKey)
+		if apiKey == "" || len(apiKey) > 2000 {
+			return ErrInvalidTMDBAPIKey
 		}
 	}
 	if req.PublicBaseURL != nil && !validPublicBaseURL(*req.PublicBaseURL) {
@@ -158,13 +158,13 @@ func (s *SettingService) UpdateSystemSettings(req *UpdateSystemSettingsRequest) 
 			return err
 		}
 	}
-	if req.TMDBReadAccessToken != nil {
-		token := strings.TrimSpace(*req.TMDBReadAccessToken)
-		if err := s.settingRepo.SetSystemSetting("tmdb_read_access_token", token); err != nil {
+	if req.TMDBAPIKey != nil {
+		apiKey := strings.TrimSpace(*req.TMDBAPIKey)
+		if err := s.settingRepo.SetSystemSetting("tmdb_api_key", apiKey); err != nil {
 			return err
 		}
-	} else if req.ClearTMDBToken != nil && *req.ClearTMDBToken {
-		if err := s.settingRepo.SetSystemSetting("tmdb_read_access_token", ""); err != nil {
+	} else if req.ClearTMDBAPIKey != nil && *req.ClearTMDBAPIKey {
+		if err := s.settingRepo.SetSystemSetting("tmdb_api_key", ""); err != nil {
 			return err
 		}
 	}
@@ -193,8 +193,8 @@ func (s *SettingService) HTTPProxyURL() string {
 	return setting.Value
 }
 
-func (s *SettingService) TMDBReadAccessToken() string {
-	setting, err := s.settingRepo.GetSystemSetting("tmdb_read_access_token")
+func (s *SettingService) TMDBAPIKey() string {
+	setting, err := s.settingRepo.GetSystemSetting("tmdb_api_key")
 	if err != nil {
 		return ""
 	}

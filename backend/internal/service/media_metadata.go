@@ -68,9 +68,9 @@ func (e *tmdbAPIError) Error() string {
 }
 
 type TestTMDBConnectionRequest struct {
-	TMDBReadAccessToken string `json:"tmdb_read_access_token" binding:"required"`
-	HTTPProxyURL        string `json:"http_proxy_url"`
-	UseProxy            bool   `json:"use_proxy"`
+	TMDBAPIKey   string `json:"tmdb_api_key" binding:"required"`
+	HTTPProxyURL string `json:"http_proxy_url"`
+	UseProxy     bool   `json:"use_proxy"`
 }
 
 type TestHTTPProxyRequest struct {
@@ -120,9 +120,9 @@ func (s *MediaMetadataService) TestHTTPProxy(request *TestHTTPProxyRequest) erro
 }
 
 func (s *MediaMetadataService) TestConnection(request *TestTMDBConnectionRequest) error {
-	token := strings.TrimSpace(request.TMDBReadAccessToken)
-	if token == "" || len(token) > 2000 {
-		return ErrInvalidTMDBToken
+	apiKey := strings.TrimSpace(request.TMDBAPIKey)
+	if apiKey == "" || len(apiKey) > 2000 {
+		return ErrInvalidTMDBAPIKey
 	}
 	client := s.httpClient
 	if request.UseProxy {
@@ -136,11 +136,17 @@ func (s *MediaMetadataService) TestConnection(request *TestTMDBConnectionRequest
 		}
 		client = configured
 	}
-	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(s.apiBaseURL, "/")+"/configuration", nil)
+	requestURL, err := url.Parse(strings.TrimRight(s.apiBaseURL, "/") + "/configuration")
 	if err != nil {
 		return errors.New("无法创建 TMDB 测试请求")
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	query := requestURL.Query()
+	query.Set("api_key", apiKey)
+	requestURL.RawQuery = query.Encode()
+	req, err := http.NewRequest(http.MethodGet, requestURL.String(), nil)
+	if err != nil {
+		return errors.New("无法创建 TMDB 测试请求")
+	}
 	req.Header.Set("Accept", "application/json")
 	response, err := client.Do(req)
 	if err != nil {
@@ -151,7 +157,7 @@ func (s *MediaMetadataService) TestConnection(request *TestTMDBConnectionRequest
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
-		return ErrInvalidTMDBToken
+		return ErrInvalidTMDBAPIKey
 	}
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("TMDB 返回状态码 %d", response.StatusCode)
@@ -188,11 +194,11 @@ func (s *MediaMetadataService) Enrich(presentation *webhook.Presentation) error 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	token := s.settings.TMDBReadAccessToken()
-	if token == "" {
+	apiKey := s.settings.TMDBAPIKey()
+	if apiKey == "" {
 		return nil
 	}
-	fetched, err := s.fetchTMDB(lookup, token)
+	fetched, err := s.fetchTMDB(lookup, apiKey)
 	if err != nil {
 		return err
 	}
@@ -245,12 +251,12 @@ func metadataLookupForMedia(media map[string]interface{}) *mediaMetadataLookup {
 	return lookup
 }
 
-func (s *MediaMetadataService) fetchTMDB(lookup *mediaMetadataLookup, token string) (*model.MediaMetadataCache, error) {
+func (s *MediaMetadataService) fetchTMDB(lookup *mediaMetadataLookup, apiKey string) (*model.MediaMetadataCache, error) {
 	if lookup.path == "" {
-		return s.fetchTMDBTVPart(lookup, token)
+		return s.fetchTMDBTVPart(lookup, apiKey)
 	}
 	var selected tmdbMedia
-	if err := s.getTMDBJSON(lookup.path, nil, token, &selected); err != nil {
+	if err := s.getTMDBJSON(lookup.path, nil, apiKey, &selected); err != nil {
 		return nil, err
 	}
 	if selected.ID == 0 {
@@ -259,13 +265,13 @@ func (s *MediaMetadataService) fetchTMDB(lookup *mediaMetadataLookup, token stri
 	return tmdbMetadataItem(selected, tmdbSourceURL(selected)), nil
 }
 
-func (s *MediaMetadataService) fetchTMDBTVPart(lookup *mediaMetadataLookup, token string) (*model.MediaMetadataCache, error) {
+func (s *MediaMetadataService) fetchTMDBTVPart(lookup *mediaMetadataLookup, apiKey string) (*model.MediaMetadataCache, error) {
 	query := url.Values{"query": []string{lookup.seriesName}, "include_adult": []string{"false"}}
 	if len(lookup.seriesYear) == 4 && digits(lookup.seriesYear) {
 		query.Set("first_air_date_year", lookup.seriesYear)
 	}
 	var search tmdbTVSearchResponse
-	if err := s.getTMDBJSON("/search/tv", query, token, &search); err != nil {
+	if err := s.getTMDBJSON("/search/tv", query, apiKey, &search); err != nil {
 		return nil, err
 	}
 	expectedID, _ := strconv.ParseInt(lookup.externalID, 10, 64)
@@ -278,7 +284,7 @@ func (s *MediaMetadataService) fetchTMDBTVPart(lookup *mediaMetadataLookup, toke
 			path += fmt.Sprintf("/episode/%d", lookup.episodeNumber)
 		}
 		var selected tmdbMedia
-		err := s.getTMDBJSON(path, nil, token, &selected)
+		err := s.getTMDBJSON(path, nil, apiKey, &selected)
 		var apiErr *tmdbAPIError
 		if errors.As(err, &apiErr) && apiErr.statusCode == http.StatusNotFound {
 			continue
@@ -300,7 +306,7 @@ func (s *MediaMetadataService) fetchTMDBTVPart(lookup *mediaMetadataLookup, toke
 	return nil, errors.New("TMDB 未找到与 Provider_tmdb 匹配的剧集信息")
 }
 
-func (s *MediaMetadataService) getTMDBJSON(path string, query url.Values, token string, target interface{}) error {
+func (s *MediaMetadataService) getTMDBJSON(path string, query url.Values, apiKey string, target interface{}) error {
 	requestURL, err := url.Parse(strings.TrimRight(s.apiBaseURL, "/") + path)
 	if err != nil {
 		return err
@@ -312,12 +318,12 @@ func (s *MediaMetadataService) getTMDBJSON(path string, query url.Values, token 
 		}
 	}
 	values.Set("language", "zh-CN")
+	values.Set("api_key", apiKey)
 	requestURL.RawQuery = values.Encode()
 	req, err := http.NewRequest(http.MethodGet, requestURL.String(), nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 	httpClient, err := s.tmdbHTTPClient()
 	if err != nil {
