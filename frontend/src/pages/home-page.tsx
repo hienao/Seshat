@@ -2,6 +2,7 @@ import { Badge } from '@appica/ui-react/badge'
 import { Activity, ArrowRight, Bell, FileText, Plug, ShieldCheck, Webhook } from '@appica/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/api/services'
 import { AppButton } from '@/components/common/app-button'
 import { EmptyState, ErrorState } from '@/components/common/feedback'
@@ -11,31 +12,31 @@ import { EventCard } from '@/components/webhook/event-card'
 import { errorMessage } from '@/lib/error-message'
 import { useAuthStore } from '@/stores/auth'
 
-const productFeatures = [
-  { icon: Plug, title: '多 App 独立接入', description: '为不同 App 和环境创建独立 Webhook 地址，接入关系清晰可控。' },
-  { icon: Bell, title: '按消息类型展示', description: '针对已知事件提供结构化展示，未知类型自动回退到原始消息内容。' },
-  { icon: Activity, title: '完整排障链路', description: '从消息详情到接口与业务日志，快速定位签名、请求和服务端处理问题。' },
-]
-
 function PublicHome() {
+  const { t } = useTranslation()
+  const productFeatures = [
+    { icon: Plug, title: t('home.public.independentTitle'), description: t('home.public.independentDescription') },
+    { icon: Bell, title: t('home.public.typedTitle'), description: t('home.public.typedDescription') },
+    { icon: Activity, title: t('home.public.diagnosticsTitle'), description: t('home.public.diagnosticsDescription') },
+  ]
   return (
     <div className="overflow-hidden px-4 pb-20 pt-14 sm:px-6 sm:pt-20">
       <div className="app-grid pointer-events-none absolute inset-x-0 top-0 -z-10 h-[680px]" />
       <section className="rise-in mx-auto max-w-6xl text-center">
-        <Badge variant="soft" size="md"><Webhook size={15} />Webhook 消息管理</Badge>
+        <Badge variant="soft" size="md"><Webhook size={15} />{t('home.public.badge')}</Badge>
         <h1 className="mx-auto mt-7 max-w-4xl text-5xl font-black tracking-[-0.055em] text-neutral-950 dark:text-white sm:text-7xl">
-          接住每一条 Webhook，<span className="text-emerald-700 dark:text-emerald-400">看清每一次事件</span>
+          {t('home.public.headline')} <span className="text-emerald-700 dark:text-emerald-400">{t('home.public.headlineAccent')}</span>
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-neutral-600 dark:text-neutral-400">
-          Seshat 统一接收不同 App 的 Webhook，根据消息类型呈现关键信息，并保留原始内容与接口日志，方便追踪和排查。
+          {t('home.public.description')}
         </p>
         <div className="mt-9 flex flex-wrap justify-center gap-3">
-          <AppButton render={<Link to="/login" />} size="lg">登录控制台<ArrowRight size={18} /></AppButton>
-          <AppButton render={<a href="/swagger/index.html" target="_blank" rel="noreferrer" />} variant="outline" size="lg"><FileText size={18} />API 文档</AppButton>
+          <AppButton render={<Link to="/login" />} size="lg">{t('home.public.console')}<ArrowRight size={18} /></AppButton>
+          <AppButton render={<a href="/swagger/index.html" target="_blank" rel="noreferrer" />} variant="outline" size="lg"><FileText size={18} />{t('home.public.apiDocs')}</AppButton>
         </div>
       </section>
 
-      <section className="mx-auto mt-20 grid max-w-6xl gap-5 md:grid-cols-3" aria-label="产品能力">
+      <section className="mx-auto mt-20 grid max-w-6xl gap-5 md:grid-cols-3" aria-label={t('home.public.capabilities')}>
         {productFeatures.map(({ icon: Icon, title, description }, index) => (
           <article key={title} className="app-panel rise-in p-6" style={{ animationDelay: `${120 + index * 90}ms` }}>
             <span className="grid size-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"><Icon size={24} /></span>
@@ -69,6 +70,7 @@ function MetricCard({ label, value, description, icon: Icon }: {
 }
 
 function DashboardHome({ isAdmin }: { isAdmin: boolean }) {
+  const { t } = useTranslation()
   const integrations = useQuery({ queryKey: ['webhooks', 'integrations'], queryFn: api.integrations })
   const events = useQuery({ queryKey: ['webhooks', 'events', 'overview'], queryFn: () => api.events() })
   const apps = useQuery({ queryKey: ['webhooks', 'apps'], queryFn: api.webhookApps })
@@ -77,19 +79,19 @@ function DashboardHome({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-7 px-4 py-10 sm:px-6">
-      <PageHeader eyebrow="Webhook Operations" title="概览" description="查看当前接入规模、消息动态和常用操作。" action={<AppButton render={<Link to="/integrations" />} size="sm"><Plug size={16} />创建接入</AppButton>} />
+      <PageHeader eyebrow={t('home.eyebrow')} title={t('home.title')} description={t('home.description')} action={<AppButton render={<Link to="/integrations" />} size="sm"><Plug size={16} />{t('home.createIntegration')}</AppButton>} />
 
-      {failedQuery && <ErrorState message={errorMessage(failedQuery, '概览数据加载失败')} onRetry={() => { void integrations.refetch(); void events.refetch(); void apps.refetch() }} />}
+      {failedQuery && <ErrorState message={errorMessage(failedQuery, t('home.loadFailed'))} onRetry={() => { void integrations.refetch(); void events.refetch(); void apps.refetch() }} />}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="运行概况">
-        <MetricCard label="接入实例" value={integrations.isPending ? '—' : integrations.data?.length ?? 0} description={`${activeIntegrations} 个正在接收消息`} icon={Plug} />
-        <MetricCard label="Webhook 消息" value={events.isPending ? '—' : events.data?.total ?? 0} description="当前账户累计收到的消息" icon={Bell} />
-        <MetricCard label="支持的 App" value={apps.isPending ? '—' : apps.data?.length ?? 0} description="可创建独立接入的 App 类型" icon={Webhook} />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label={t('home.metricsAria')}>
+        <MetricCard label={t('home.integrations')} value={integrations.isPending ? '—' : integrations.data?.length ?? 0} description={t('home.activeIntegrations', { count: activeIntegrations })} icon={Plug} />
+        <MetricCard label={t('home.totalMessages')} value={events.isPending ? '—' : events.data?.total ?? 0} description={t('home.totalMessagesDescription')} icon={Bell} />
+        <MetricCard label={t('home.supportedApps')} value={apps.isPending ? '—' : apps.data?.length ?? 0} description={t('home.supportedAppsDescription')} icon={Webhook} />
       </section>
 
       <div className="grid gap-7 lg:grid-cols-[minmax(0,1.45fr)_minmax(260px,.55fr)]">
-        <Panel title="最近消息" description={events.data?.total ? `共 ${events.data.total} 条消息` : '等待新的 Webhook 消息'} action={<AppButton render={<Link to="/events" />} size="sm" variant="outline">查看全部<ArrowRight size={15} /></AppButton>}>
-          {events.isPending ? <div className="py-10 text-center text-sm text-neutral-500">正在加载消息…</div> : !events.data?.items.length ? <EmptyState title="还没有 Webhook 消息" description="创建接入实例并向对应地址发送消息后，最近消息会显示在这里。" /> : (
+        <Panel title={t('home.recentMessages')} description={events.data?.total ? t('home.recentDescription', { count: events.data.total }) : t('home.waitingMessages')} action={<AppButton render={<Link to="/events" />} size="sm" variant="outline">{t('home.viewAll')}<ArrowRight size={15} /></AppButton>}>
+          {events.isPending ? <div className="py-10 text-center text-sm text-neutral-500">{t('home.loadingMessages')}</div> : !events.data?.items.length ? <EmptyState title={t('home.noMessages')} description={t('home.noMessagesDescription')} /> : (
             <div className="space-y-3">
               {events.data.items.slice(0, 5).map((event) => (
                 <Link key={event.id} to={`/events/${event.id}`} className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><EventCard event={event} compact /></Link>
@@ -98,12 +100,12 @@ function DashboardHome({ isAdmin }: { isAdmin: boolean }) {
           )}
         </Panel>
 
-        <Panel title="快捷入口" description="继续管理和排查 Webhook">
+        <Panel title={t('home.quickActions')} description={t('home.quickDescription')}>
           <div className="space-y-2">
-            <Link to="/integrations" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Plug size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">管理接入实例</span><ArrowRight size={16} className="text-neutral-400" /></Link>
-            <Link to="/events" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Bell size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">查看消息流</span><ArrowRight size={16} className="text-neutral-400" /></Link>
-            {isAdmin && <Link to="/admin/logs" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><ShieldCheck size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">排查接口日志</span><ArrowRight size={16} className="text-neutral-400" /></Link>}
-            {isAdmin && <Link to="/admin/application-logs" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Activity size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">查看业务日志</span><ArrowRight size={16} className="text-neutral-400" /></Link>}
+            <Link to="/integrations" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Plug size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">{t('home.manageIntegrations')}</span><ArrowRight size={16} className="text-neutral-400" /></Link>
+            <Link to="/events" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Bell size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">{t('home.manageChannels')}</span><ArrowRight size={16} className="text-neutral-400" /></Link>
+            {isAdmin && <Link to="/admin/logs" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><ShieldCheck size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">{t('home.viewLogs')}</span><ArrowRight size={16} className="text-neutral-400" /></Link>}
+            {isAdmin && <Link to="/admin/application-logs" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Activity size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">{t('home.viewApplicationLogs')}</span><ArrowRight size={16} className="text-neutral-400" /></Link>}
           </div>
         </Panel>
       </div>

@@ -101,7 +101,7 @@ export const api = {
       credentials: 'omit',
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     })
-    if (!response.ok) throw new Error(`导出失败 (${response.status})`)
+    if (!response.ok) throw new Error(`Export failed (${response.status})`)
     return { blob: await response.blob(), filename: response.headers.get('Content-Disposition')?.match(/filename=([^;]+)/)?.[1] ?? `seshat-api-logs.${params.format}` }
   },
   applicationLogs: (params: { startAt?: string; endAt?: string; level?: string; source?: string; requestId?: string; keyword?: string; cursor?: number } = {}) => {
@@ -141,7 +141,7 @@ export const api = {
       credentials: 'omit',
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
     })
-    if (!response.ok) throw new Error(`导出失败 (${response.status})`)
+    if (!response.ok) throw new Error(`Export failed (${response.status})`)
     return { blob: await response.blob(), filename: response.headers.get('Content-Disposition')?.match(/filename=([^;]+)/)?.[1] ?? `seshat-application-logs.${params.format}` }
   },
 }

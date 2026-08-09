@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import type { NotificationChannel, NotificationChannelInput, NotificationChannelType } from '@/api/types'
+import { i18n } from '@/i18n'
 
 export type ChannelFieldValue = string | boolean
 export type ChannelFields = Record<string, ChannelFieldValue>
@@ -43,8 +44,8 @@ export function credentialTextField(channel: NotificationChannel, key: string): 
 }
 
 export function notificationChannelBindingName(channelId: number | undefined, channels: NotificationChannel[], loading: boolean) {
-  if (!channelId) return '未绑定渠道'
-  return channels.find((channel) => channel.id === channelId)?.name ?? (loading ? '正在加载渠道…' : '绑定渠道不可用')
+  if (!channelId) return i18n.t('notifications.unbound')
+  return channels.find((channel) => channel.id === channelId)?.name ?? i18n.t(loading ? 'notifications.loadingChannel' : 'notifications.unavailableChannel')
 }
 
 export function channelPayload(common: ChannelCommonValues, config: Record<string, unknown>, credentials?: Record<string, unknown>): NotificationChannelInput {

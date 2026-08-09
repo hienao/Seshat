@@ -5,6 +5,7 @@ import { AlertCircle, Bell, Check, Plus, Refresh, Settings, Trash } from '@appic
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/api/services'
 import type { Integration, NotificationChannel, NotificationChannelInput, NotificationChannelType, NotificationEventTypeSetting } from '@/api/types'
 import { AppButton } from '@/components/common/app-button'
@@ -14,6 +15,7 @@ import { channelInputClass, notificationChannelBindingName, type ChannelCommonVa
 import { PageHeader } from '@/components/common/page-header'
 import { Panel } from '@/components/common/panel'
 import { errorMessage } from '@/lib/error-message'
+import { formatDateTime } from '@/i18n/format'
 
 type ChannelFormState = ChannelCommonValues & { fields: ChannelFields }
 
@@ -42,6 +44,7 @@ function channelPayload(form: ChannelFormState): NotificationChannelInput {
 }
 
 export function NotificationChannelsPage() {
+  const { t } = useTranslation()
   const client = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const channels = useQuery({
@@ -128,32 +131,32 @@ export function NotificationChannelsPage() {
     try {
       save.mutate(channelPayload(form))
     } catch {
-      setFormError('渠道配置格式不正确，请检查后重试')
+      setFormError(t('notifications.validationFailed'))
     }
   }
 
   return (
     <div className="mx-auto max-w-7xl space-y-7 px-4 py-10 sm:px-6">
       <PageHeader
-        eyebrow="Notification Routing"
-        title="推送渠道"
-        description="配置外部通知目标，并为每个接入实例选择需要推送的消息类型。"
+        eyebrow={t('notifications.eyebrow')}
+        title={t('notifications.title')}
+        description={t('notifications.description')}
         action={
           <AppButton size="sm" onClick={openCreate}>
             <Plus size={16} />
-            新增渠道
+            {t('notifications.create')}
           </AppButton>
         }
       />
-      {(save.error || test.error || remove.error || retry.error) && <Message variant="error" title={errorMessage(save.error || test.error || remove.error || retry.error, '推送操作失败')} />}
+      {(save.error || test.error || remove.error || retry.error) && <Message variant="error" title={errorMessage(save.error || test.error || remove.error || retry.error, t('notifications.operationFailed'))} />}
 
-      <Panel title="渠道管理" description={`共 ${channels.data?.length ?? 0} 个渠道`} icon={<Bell size={20} />}>
+      <Panel title={t('notifications.channels')} description={t('notifications.channelsCount', { count: channels.data?.length ?? 0 })} icon={<Bell size={20} />}>
         {channels.isPending ? (
-          <p className="py-10 text-center text-sm text-neutral-500">正在加载渠道…</p>
+          <p className="py-10 text-center text-sm text-neutral-500">{t('notifications.loadingChannels')}</p>
         ) : channels.error ? (
           <ErrorState message={errorMessage(channels.error)} onRetry={() => void channels.refetch()} />
         ) : !channels.data?.length ? (
-          <EmptyState title="还没有推送渠道" description="支持 Webhook、聊天机器人、邮件和移动推送等渠道，新增后即可绑定到接入实例。" />
+          <EmptyState title={t('notifications.noChannels')} description={t('notifications.noChannelsDescription')} />
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {channels.data.map((channel) => (
@@ -162,45 +165,45 @@ export function NotificationChannelsPage() {
                   <div>
                     <h3 className="font-semibold">{channel.name}</h3>
                     <p className="mt-1 text-xs text-neutral-500">
-                      {notificationChannelLabel(channel.type)} · {channel.binding_count} 个实例{channel.config.use_proxy ? ' · 使用系统代理' : ''}
+                      {notificationChannelLabel(channel.type)} · {t('notifications.bindingsCount', { count: channel.binding_count })}{channel.config.use_proxy ? ` · ${t('notifications.usesProxy')}` : ''}
                     </p>
                   </div>
-                  <Badge variant={channel.enabled ? 'success' : 'outline'}>{channel.enabled ? '已启用' : '已停用'}</Badge>
+                  <Badge variant={channel.enabled ? 'success' : 'outline'}>{t(channel.enabled ? 'common.states.enabled' : 'common.states.disabled')}</Badge>
                 </div>
                 <div className="mt-4 flex items-center gap-2 text-xs text-neutral-500">
                   {channel.last_test_status === 'succeeded' ? (
                     <>
                       <Check size={15} className="text-emerald-600" />
-                      最近测试成功
+                      {t('notifications.testSucceeded')}
                     </>
                   ) : channel.last_test_status === 'failed' ? (
                     <>
                       <AlertCircle size={15} className="text-red-500" />
-                      最近测试失败
+                      {t('notifications.testFailedStatus')}
                     </>
                   ) : (
-                    '尚未测试'
+                    t('notifications.neverTested')
                   )}
                 </div>
                 <div className="mt-5 flex flex-wrap gap-2">
                   <AppButton size="sm" variant="outline" disabled={test.isPending} onClick={() => test.mutate(channel.id)}>
                     <Refresh size={14} />
-                    测试
+                    {t('common.actions.test')}
                   </AppButton>
                   <AppButton size="sm" variant="outline" onClick={() => openEdit(channel)}>
                     <Settings size={14} />
-                    编辑
+                    {t('common.actions.edit')}
                   </AppButton>
                   <AppButton
                     size="sm"
                     variant="ghost"
                     disabled={remove.isPending || channel.binding_count > 0}
                     onClick={() => {
-                      if (window.confirm(`删除渠道“${channel.name}”？`)) remove.mutate(channel.id)
+                      if (window.confirm(t('notifications.deletePrompt', { name: channel.name }))) remove.mutate(channel.id)
                     }}
                   >
                     <Trash size={14} />
-                    删除
+                    {t('common.actions.delete')}
                   </AppButton>
                 </div>
                 {channel.last_test_error && <p className="mt-3 break-words text-xs text-red-600">{channel.last_test_error}</p>}
@@ -210,13 +213,13 @@ export function NotificationChannelsPage() {
         )}
       </Panel>
 
-      <Panel title="实例通知设置" description="每个实例最多绑定一个渠道；所有消息类型默认不推送。" icon={<Settings size={20} />}>
+      <Panel title={t('notifications.appBindings')} description={t('notifications.appBindingsDescription')} icon={<Settings size={20} />}>
         {integrations.isPending ? (
-          <p className="py-10 text-center text-sm text-neutral-500">正在加载接入实例…</p>
+          <p className="py-10 text-center text-sm text-neutral-500">{t('integrations.loading')}</p>
         ) : integrations.error ? (
           <ErrorState message={errorMessage(integrations.error)} onRetry={() => void integrations.refetch()} />
         ) : !integrations.data?.length ? (
-          <EmptyState title="还没有接入实例" />
+          <EmptyState title={t('integrations.empty')} />
         ) : (
           <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
             {integrations.data.map((integration) => {
@@ -228,7 +231,7 @@ export function NotificationChannelsPage() {
                   </p>
                 </div>
                 <AppButton size="sm" variant="outline" onClick={() => setSelectedIntegration(integration)}>
-                  配置通知
+                  {t('notifications.configure')}
                 </AppButton>
               </div>
             })}
@@ -236,31 +239,31 @@ export function NotificationChannelsPage() {
         )}
       </Panel>
 
-      <Panel title="最近推送记录" description="显示最近 50 条发送任务">
+      <Panel title={t('notifications.deliveryRecords')} description={t('notifications.deliveryDescription')}>
         {deliveries.isPending ? (
-          <p className="py-8 text-center text-sm text-neutral-500">正在加载记录…</p>
+          <p className="py-8 text-center text-sm text-neutral-500">{t('notifications.loadingDeliveries')}</p>
         ) : deliveries.error ? (
           <ErrorState message={errorMessage(deliveries.error)} onRetry={() => void deliveries.refetch()} />
         ) : !deliveries.data?.length ? (
-          <EmptyState title="还没有推送记录" />
+          <EmptyState title={t('notifications.noDeliveries')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800">
-                  <th className="px-2 py-3">时间</th>
-                  <th className="px-2 py-3">状态</th>
-                  <th className="px-2 py-3">实例</th>
-                  <th className="px-2 py-3">渠道</th>
-                  <th className="px-2 py-3">消息类型</th>
-                  <th className="px-2 py-3">尝试</th>
-                  <th className="px-2 py-3">操作</th>
+                  <th className="px-2 py-3">{t('notifications.time')}</th>
+                  <th className="px-2 py-3">{t('common.fields.status')}</th>
+                  <th className="px-2 py-3">{t('notifications.instance')}</th>
+                  <th className="px-2 py-3">{t('notifications.channel')}</th>
+                  <th className="px-2 py-3">{t('events.messageType')}</th>
+                  <th className="px-2 py-3">{t('notifications.attempts')}</th>
+                  <th className="px-2 py-3">{t('notifications.actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {deliveries.data.map((item) => (
                   <tr key={item.id} className="border-b border-neutral-100 dark:border-neutral-900">
-                    <td className="whitespace-nowrap px-2 py-3 text-xs text-neutral-500">{new Date(item.created_at).toLocaleString()}</td>
+                    <td className="whitespace-nowrap px-2 py-3 text-xs text-neutral-500">{formatDateTime(item.created_at)}</td>
                     <td className="px-2 py-3">
                       <Badge variant={item.status === 'succeeded' ? 'success' : item.status === 'failed' ? 'error' : 'outline'} size="sm">
                         {item.status}
@@ -273,7 +276,7 @@ export function NotificationChannelsPage() {
                     <td className="px-2 py-3">
                       {item.status === 'failed' && (
                         <AppButton size="sm" variant="outline" disabled={retry.isPending} onClick={() => retry.mutate(item.id)}>
-                          重试
+                          {t('common.actions.retry')}
                         </AppButton>
                       )}
                     </td>
@@ -325,6 +328,7 @@ function ChannelFormDrawer({
   onClose: () => void
   onSubmit: (event: FormEvent) => void
 }) {
+  const { t } = useTranslation()
   function update<K extends keyof ChannelCommonValues>(key: K, value: ChannelCommonValues[K]) {
     setForm((previous) => ({ ...previous, [key]: value }))
   }
@@ -343,20 +347,20 @@ function ChannelFormDrawer({
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-emerald-700">Notification Channel</p>
-            <h2 className="mt-1 text-xl font-bold">{editing ? '编辑推送渠道' : '新增推送渠道'}</h2>
+            <h2 className="mt-1 text-xl font-bold">{t(editing ? 'notifications.edit' : 'notifications.createTitle')}</h2>
           </div>
           <AppButton size="sm" variant="outline" onClick={onClose}>
-            关闭
+            {t('common.actions.close')}
           </AppButton>
         </div>
 
         <form className="mt-6 space-y-5" onSubmit={onSubmit}>
           <label className="block space-y-2 text-sm font-medium">
-            <span>渠道名称</span>
+            <span>{t('notifications.channelName')}</span>
             <Input value={form.name} onChange={(event) => update('name', event.target.value)} required maxLength={100} />
           </label>
           <label className="block space-y-2 text-sm font-medium">
-            <span>渠道类型</span>
+            <span>{t('notifications.channelType')}</span>
             <select
               className={channelInputClass}
               value={form.type}
@@ -368,7 +372,7 @@ function ChannelFormDrawer({
             >
               {notificationChannelAdapters().map((item) => (
                 <option key={item.type} value={item.type}>
-                  {item.label}
+                  {notificationChannelLabel(item.type)}
                 </option>
               ))}
             </select>
@@ -376,13 +380,13 @@ function ChannelFormDrawer({
 
           <AdapterForm fields={form.fields} update={updateField} />
 
-          <SwitchRow title="使用系统 HTTP 代理" description="仅此渠道的测试和消息推送经过系统设置中的代理。" checked={form.useProxy} onChange={(checked) => update('useProxy', checked)} />
-          <SwitchRow title="启用渠道" description="建议先保存并测试成功后再启用。" checked={form.enabled} onChange={(checked) => update('enabled', checked)} />
+          <SwitchRow title={t('notifications.proxy')} description={t('notifications.proxyDescription')} checked={form.useProxy} onChange={(checked) => update('useProxy', checked)} />
+          <SwitchRow title={t('notifications.enabled')} description={t('notifications.enabledDescription')} checked={form.enabled} onChange={(checked) => update('enabled', checked)} />
 
           {validationError && <Message variant="error" title={validationError} />}
           {formError && <Message variant="error" title={formError} />}
           <AppButton type="submit" disabled={saving || !form.name.trim() || Boolean(validationError)}>
-            {saving ? '正在保存…' : '保存渠道'}
+            {t(saving ? 'common.states.saving' : 'common.actions.save')}
           </AppButton>
         </form>
       </aside>
@@ -403,6 +407,7 @@ function SwitchRow({ title, description, checked, onChange }: { title: string; d
 }
 
 function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved }: { integration: Integration; channels: NotificationChannel[]; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation()
   const settings = useQuery({
     queryKey: ['notifications', 'integration', integration.id],
     queryFn: () => api.integrationNotificationSettings(integration.id),
@@ -429,14 +434,14 @@ function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-emerald-700">{integration.app_code}</p>
-            <h2 className="mt-1 text-xl font-bold">{integration.name} · 通知设置</h2>
+            <h2 className="mt-1 text-xl font-bold">{integration.name} · {t('integrations.notificationSettings')}</h2>
           </div>
           <AppButton size="sm" variant="outline" onClick={onClose}>
-            关闭
+            {t('common.actions.close')}
           </AppButton>
         </div>
         {settings.isPending ? (
-          <p className="mt-8 text-sm text-neutral-500">正在加载设置…</p>
+          <p className="mt-8 text-sm text-neutral-500">{t('notifications.loadingSettings')}</p>
         ) : settings.error ? (
           <div className="mt-8">
             <ErrorState message={errorMessage(settings.error)} onRetry={() => void settings.refetch()} />
@@ -444,38 +449,38 @@ function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved
         ) : (
           <div className="mt-7 space-y-6">
             <label className="block space-y-2 text-sm font-medium">
-              <span>推送渠道</span>
+              <span>{t('notifications.boundChannel')}</span>
               <select className={channelInputClass} value={channelId} onChange={(event) => setChannelId(event.target.value)}>
-                <option value="">不绑定渠道</option>
+                <option value="">{t('notifications.noBinding')}</option>
                 {channels.map((channel) => (
                   <option key={channel.id} value={channel.id}>
                     {channel.name} · {notificationChannelLabel(channel.type)}
-                    {channel.enabled ? '' : '（已停用）'}
+                    {channel.enabled ? '' : ` (${t('common.states.disabled')})`}
                   </option>
                 ))}
               </select>
             </label>
             {channelId && !channels.find((item) => item.id === Number(channelId))?.enabled && (
-              <Message variant="warning" title="所选渠道当前已停用" description="消息类型设置会保留，但在渠道启用前不会发送。" />
+              <Message variant="warning" title={t('notifications.selectedDisabled')} description={t('notifications.selectedDisabledDescription')} />
             )}
             <section>
-              <h3 className="font-semibold">推送消息类型</h3>
-              <p className="mt-1 text-sm text-neutral-500">未开启的类型只保存在消息流中，不发送外部通知。</p>
+              <h3 className="font-semibold">{t('notifications.enabledTypes')}</h3>
+              <p className="mt-1 text-sm text-neutral-500">{t('notifications.enabledTypesDescription')}</p>
               <div className="mt-4 space-y-5">
                 {eventTypeGroups.map((group) => (
                   <div key={group.name}>
-                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">{group.name}</h4>
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">{t(group.name)}</h4>
                     <div className="space-y-2">
                       {group.items.map((eventType) => (
                         <div key={eventType.code} className="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
                           <div>
                             <p className="font-medium">
-                              {eventType.name}
-                              {eventType.is_default && <Badge className="ml-2" variant="outline" size="sm">默认类型</Badge>}
+                              {t(`events.types.${eventType.code}`, { defaultValue: eventType.name })}
+                              {eventType.is_default && <Badge className="ml-2" variant="outline" size="sm">{t('notifications.defaultType')}</Badge>}
                             </p>
                             <p className="mt-1 font-mono text-xs text-neutral-500">
                               {eventType.code}
-                              {eventType.is_default ? ' · 未知消息类型将匹配此规则' : ''}
+                              {eventType.is_default ? ` · ${t('notifications.defaultTypeDescription')}` : ''}
                             </p>
                           </div>
                           <Switch checked={enabledTypes.includes(eventType.code)} onCheckedChange={(checked) => toggle(eventType.code, checked)} />
@@ -486,9 +491,9 @@ function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved
                 ))}
               </div>
             </section>
-            {save.error && <Message variant="error" title={errorMessage(save.error, '保存通知设置失败')} />}
+            {save.error && <Message variant="error" title={errorMessage(save.error, t('notifications.saveFailed'))} />}
             <AppButton disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? '正在保存…' : '保存通知设置'}
+              {t(save.isPending ? 'common.states.saving' : 'notifications.saveBinding')}
             </AppButton>
           </div>
         )}
@@ -499,11 +504,11 @@ function IntegrationNotificationDrawer({ integration, channels, onClose, onSaved
 
 function groupNotificationEventTypes(items: NotificationEventTypeSetting[]) {
   const groups = [
-    { name: '媒体库', matches: (code: string) => code.startsWith('media_'), items: [] as NotificationEventTypeSetting[] },
-    { name: '播放', matches: (code: string) => code.startsWith('playback_'), items: [] as NotificationEventTypeSetting[] },
-    { name: '认证与用户', matches: (code: string) => code.startsWith('authentication_') || code.startsWith('user_') || code === 'session_started', items: [] as NotificationEventTypeSetting[] },
-    { name: '系统与插件', matches: (code: string) => code.startsWith('plugin_') || ['server_restart_required', 'task_completed', 'subtitle_download_failed'].includes(code), items: [] as NotificationEventTypeSetting[] },
-    { name: '其他', matches: () => true, items: [] as NotificationEventTypeSetting[] },
+    { name: 'notifications.groups.media', matches: (code: string) => code.startsWith('media_'), items: [] as NotificationEventTypeSetting[] },
+    { name: 'notifications.groups.playback', matches: (code: string) => code.startsWith('playback_'), items: [] as NotificationEventTypeSetting[] },
+    { name: 'notifications.groups.auth', matches: (code: string) => code.startsWith('authentication_') || code.startsWith('user_') || code === 'session_started', items: [] as NotificationEventTypeSetting[] },
+    { name: 'notifications.groups.system', matches: (code: string) => code.startsWith('plugin_') || ['server_restart_required', 'task_completed', 'subtitle_download_failed'].includes(code), items: [] as NotificationEventTypeSetting[] },
+    { name: 'notifications.groups.other', matches: () => true, items: [] as NotificationEventTypeSetting[] },
   ]
   for (const item of items) (groups.find((group) => group.matches(item.code)) ?? groups.at(-1))?.items.push(item)
   return groups.filter((group) => group.items.length > 0)
