@@ -41,7 +41,7 @@ func (serverChanNotificationAdapter) BuildRequest(channel *model.NotificationCha
 	return notificationRequest(endpoint, []byte(form.Encode()), headers, true, true), nil
 }
 
-func (serverChanNotificationAdapter) ValidateResponse(body []byte) error {
+func (serverChanNotificationAdapter) ValidateResponse(_ int, body []byte) error {
 	response, err := parseNotificationResponse(body)
 	if err != nil {
 		return err

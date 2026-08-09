@@ -25,9 +25,10 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o main .
 
 # 阶段 3: 最终镜像
 FROM alpine:latest
+ENV TZ=UTC
 RUN sed -i 's|https://dl-cdn.alpinelinux.org/alpine|https://mirrors.ustc.edu.cn/alpine|g' /etc/apk/repositories && \
     apk update && \
-    apk --no-cache add ca-certificates nginx
+    apk --no-cache add ca-certificates nginx tzdata
 
 WORKDIR /app
 

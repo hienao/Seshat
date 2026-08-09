@@ -35,6 +35,7 @@ type NotificationChannelResponse struct {
 	Type           string                 `json:"type"`
 	Enabled        bool                   `json:"enabled"`
 	Config         map[string]interface{} `json:"config"`
+	Credentials    map[string]interface{} `json:"credentials"`
 	HasCredentials bool                   `json:"has_credentials"`
 	BindingCount   int64                  `json:"binding_count"`
 	LastTestStatus string                 `json:"last_test_status,omitempty"`
@@ -340,18 +341,7 @@ func channelFromRequest(ownerID uint, existing *model.NotificationChannel, reque
 	if err != nil {
 		return nil, ErrInvalidNotificationChannel
 	}
-	secretValues := map[string]interface{}{}
-	if existing != nil && len(existing.SecretConfig) > 0 {
-		_ = json.Unmarshal(existing.SecretConfig, &secretValues)
-	}
-	if len(credentials) > 0 {
-		for key, value := range credentials {
-			if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
-				continue
-			}
-			secretValues[key] = value
-		}
-	}
+	secretValues := credentials
 	secret, err := json.Marshal(secretValues)
 	if err != nil {
 		return nil, ErrInvalidNotificationChannel
@@ -365,9 +355,35 @@ func channelFromRequest(ownerID uint, existing *model.NotificationChannel, reque
 func channelResponse(db *gorm.DB, channel *model.NotificationChannel) (NotificationChannelResponse, error) {
 	config := map[string]interface{}{}
 	_ = json.Unmarshal(channel.Config, &config)
+	credentials := map[string]interface{}{}
+	_ = json.Unmarshal(channel.SecretConfig, &credentials)
 	var count int64
 	if err := db.Model(&model.AppIntegration{}).Where("notification_channel_id = ?", channel.ID).Count(&count).Error; err != nil {
 		return NotificationChannelResponse{}, err
 	}
-	return NotificationChannelResponse{ID: channel.ID, Name: channel.Name, Type: channel.Type, Enabled: channel.Enabled, Config: config, HasCredentials: len(channel.SecretConfig) > 2, BindingCount: count, LastTestStatus: channel.LastTestStatus, LastTestAt: channel.LastTestAt, LastTestError: channel.LastTestError, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt}, nil
+	return NotificationChannelResponse{ID: channel.ID, Name: channel.Name, Type: channel.Type, Enabled: channel.Enabled, Config: config, Credentials: credentials, HasCredentials: hasNotificationCredentialValues(credentials), BindingCount: count, LastTestStatus: channel.LastTestStatus, LastTestAt: channel.LastTestAt, LastTestError: channel.LastTestError, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt}, nil
+}
+
+func hasNotificationCredentialValues(values map[string]interface{}) bool {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case string:
+			if strings.TrimSpace(typed) != "" {
+				return true
+			}
+		case map[string]interface{}:
+			if hasNotificationCredentialValues(typed) {
+				return true
+			}
+		case []interface{}:
+			if len(typed) > 0 {
+				return true
+			}
+		default:
+			if typed != nil {
+				return true
+			}
+		}
+	}
+	return false
 }

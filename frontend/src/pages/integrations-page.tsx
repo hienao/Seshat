@@ -12,6 +12,7 @@ import { FormField } from '@/components/common/form-field'
 import { PageHeader } from '@/components/common/page-header'
 import { Panel } from '@/components/common/panel'
 import { IntegrationGuideDialog } from '@/components/webhook/integration-guide-dialog'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { errorMessage } from '@/lib/error-message'
 import type { CreatedIntegration, Integration } from '@/api/types'
 
@@ -26,12 +27,20 @@ export function IntegrationsPage() {
   const [secrets, setSecrets] = useState<Record<number, string>>({})
   const [visibleSecrets, setVisibleSecrets] = useState<number[]>([])
   const [guideIntegration, setGuideIntegration] = useState<Integration | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState<'success' | 'error' | null>(null)
   const create = useMutation({ mutationFn: () => api.createIntegration(appCode, name.trim()), onSuccess: (data) => { setCreated(data); setCredentialAction('created'); setSecrets((current) => ({ ...current, [data.id]: data.secret })); setVisibleSecrets((current) => [...new Set([...current, data.id])]); setName(''); void client.invalidateQueries({ queryKey: ['webhooks', 'integrations'] }) } })
   const rotate = useMutation({ mutationFn: (id: number) => api.rotateIntegrationSecret(id), onSuccess: (data, id) => { setCreated(data); setCredentialAction(integrations.data?.find((item) => item.id === id)?.app_code === 'emby' ? 'endpoint_rotated' : 'rotated'); setSecrets((current) => ({ ...current, [data.id]: data.secret })); setVisibleSecrets((current) => [...new Set([...current, data.id])]); void client.invalidateQueries({ queryKey: ['webhooks', 'integrations'] }) } })
   const reveal = useMutation({ mutationFn: (id: number) => api.integrationSecret(id), onSuccess: (data, id) => { setSecrets((current) => ({ ...current, [id]: data.secret })); setVisibleSecrets((current) => [...new Set([...current, id])]) } })
 
   function submit(event: FormEvent) { event.preventDefault(); if (appCode && name.trim()) create.mutate() }
-  async function copy(value: string) { await navigator.clipboard?.writeText(value) }
+  async function copy(value: string) {
+    try {
+      await copyTextToClipboard(value)
+      setCopyFeedback('success')
+    } catch {
+      setCopyFeedback('error')
+    }
+  }
   function toggleSecret(id: number) {
     if (!secrets[id]) { reveal.mutate(id); return }
     setVisibleSecrets((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
@@ -42,6 +51,7 @@ export function IntegrationsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-7 px-4 py-10 sm:px-6">
       <PageHeader eyebrow="Webhook Sources" title="接入实例" description="为不同 App 创建独立的 Webhook 地址和签名密钥。" />
+      {copyFeedback && <Message variant={copyFeedback} title={copyFeedback === 'success' ? '已复制到剪贴板' : '复制失败，请手动选中内容复制'} />}
       {created && <Message variant="success" title={credentialAction === 'created' ? '接入实例已创建' : credentialAction === 'endpoint_rotated' ? '接入地址已轮换' : 'Secret 已轮换'} description={credentialAction === 'created' ? createdUsesEndpointCredential ? '请将随机 Webhook 地址视为敏感凭据，可通过接入说明完成配置。' : '可随时在实例卡片中查看 Secret 和接入说明。' : credentialAction === 'endpoint_rotated' ? '旧 Webhook 地址已立即失效，请同步更新 Emby 配置。' : '旧 Secret 已立即失效，请同步更新对应 App 的配置。'} />}
       {created && <Panel title={credentialAction === 'created' ? '本次生成的凭据' : '轮换后的凭据'} description={createdUsesEndpointCredential ? '随机 Webhook 地址本身就是该实例的接入凭据。' : 'Secret 可在接入实例卡片中按需查看。'}><div className="space-y-4"><div><p className="mb-1 text-xs text-neutral-500">Webhook 地址</p><div className="flex gap-2"><Input readOnly value={`${window.location.origin}${created.webhook_path}`} /><AppButton variant="outline" onClick={() => void copy(`${window.location.origin}${created.webhook_path}`)}><Copy size={16} />复制</AppButton></div></div>{!createdUsesEndpointCredential && <div><p className="mb-1 text-xs text-neutral-500">Secret</p><div className="flex gap-2"><Input readOnly value={created.secret} /><AppButton variant="outline" onClick={() => void copy(created.secret)}><Copy size={16} />复制</AppButton></div></div>}</div></Panel>}
       <Panel title="创建接入" icon={<Plus size={20} />}>

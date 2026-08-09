@@ -37,7 +37,7 @@ func (telegramNotificationAdapter) BuildRequest(channel *model.NotificationChann
 	return jsonNotificationRequest(endpoint, payload, nil, true, true)
 }
 
-func (telegramNotificationAdapter) ValidateResponse(body []byte) error {
+func (telegramNotificationAdapter) ValidateResponse(_ int, body []byte) error {
 	response, err := parseNotificationResponse(body)
 	if err != nil {
 		return err

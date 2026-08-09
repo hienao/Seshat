@@ -38,7 +38,7 @@ func buildMediaPresentation(appName string, definitions []EventTypeDefinition, e
 		Title:         title,
 		Summary:       presentationSummary(appName, label, category, media, actor, playback, system),
 		Severity:      eventSeverity(eventType, system),
-		Tags:          presentationTags(media, playback),
+		Tags:          presentationTags(playback),
 		Facts:         presentationFacts(category, media, actor, playback, system),
 		Links:         presentationLinks(payload, media),
 		Data:          data,
@@ -263,7 +263,7 @@ func presentationSummary(app, label, category string, media, actor, playback, sy
 		}
 	}
 	if category == "media" {
-		parts := nonEmptyStrings(stringValue(media, "type"), stringValue(media, "library"), stringValue(media, "duration_label"))
+		parts := nonEmptyStrings(stringValue(media, "library"), stringValue(media, "duration_label"))
 		if len(parts) > 0 {
 			return strings.Join(parts, " · ")
 		}
@@ -370,8 +370,8 @@ func digitsOnly(value string) bool {
 	return true
 }
 
-func presentationTags(media, playback map[string]interface{}) []string {
-	tags := nonEmptyStrings(stringValue(media, "type"), stringValue(playback, "method"))
+func presentationTags(playback map[string]interface{}) []string {
+	tags := nonEmptyStrings(stringValue(playback, "method"))
 	if paused, ok := playback["paused"].(bool); ok && paused {
 		tags = append(tags, "已暂停")
 	}

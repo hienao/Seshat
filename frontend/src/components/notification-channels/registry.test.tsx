@@ -1,11 +1,26 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { NotificationChannel, NotificationChannelType } from '@/api/types'
 import { notificationChannelAdapter, notificationChannelAdapters } from './registry'
-import type { ChannelCommonValues } from './types'
+import { notificationChannelBindingName, type ChannelCommonValues } from './types'
 
 function common(type: NotificationChannelType): ChannelCommonValues {
   return { name: '测试渠道', type, enabled: true, useProxy: true }
+}
+
+function channel(type: NotificationChannelType, config: Record<string, unknown>, credentials: Record<string, unknown>): NotificationChannel {
+  return {
+    id: 1,
+    name: type,
+    type,
+    enabled: true,
+    config,
+    credentials,
+    has_credentials: Object.keys(credentials).length > 0,
+    binding_count: 0,
+    created_at: '2026-08-09T00:00:00Z',
+    updated_at: '2026-08-09T00:00:00Z',
+  }
 }
 
 describe('notification channel adapter registry', () => {
@@ -25,6 +40,10 @@ describe('notification channel adapter registry', () => {
     expect(bark.config).toEqual({ base_url: 'https://api.day.app', group: 'Seshat', sound: '', use_proxy: true })
     expect(bark.credentials).toEqual({ device_key: 'device' })
     expect(bark.credentials).not.toHaveProperty('bot_token')
+
+    const apprise = notificationChannelAdapter('apprise').toPayload(common('apprise'), { baseUrl: 'https://apprise.example.com', configId: 'config-main', tag: '' })
+    expect(apprise.config).toEqual({ base_url: 'https://apprise.example.com', tag: '', use_proxy: true })
+    expect(apprise.credentials).toEqual({ config_id: 'config-main' })
   })
 
   it('hydrates only fields owned by the selected adapter', () => {
@@ -34,18 +53,50 @@ describe('notification channel adapter registry', () => {
       type: 'apprise',
       enabled: true,
       config: { base_url: 'https://apprise.example.com', tag: 'media', chat_id: 'should-not-leak' },
+      credentials: { config_id: 'config-main', bot_token: 'should-not-leak' },
       has_credentials: true,
       binding_count: 0,
       created_at: '2026-08-09T00:00:00Z',
       updated_at: '2026-08-09T00:00:00Z',
     }
-    expect(notificationChannelAdapter('apprise').fieldsFromChannel(channel)).toEqual({ baseUrl: 'https://apprise.example.com', configId: '', tag: 'media' })
+    expect(notificationChannelAdapter('apprise').fieldsFromChannel(channel)).toEqual({ baseUrl: 'https://apprise.example.com', configId: 'config-main', tag: 'media' })
+    expect(notificationChannelBindingName(channel.id, [channel], false)).toBe('Apprise')
+    expect(notificationChannelBindingName(undefined, [channel], false)).toBe('未绑定渠道')
+  })
+
+  it('hydrates every channel credential into its own adapter fields', () => {
+    expect(notificationChannelAdapter('webhook').fieldsFromChannel(channel('webhook', {}, { url: 'https://example.com/hook', headers: { Authorization: 'Bearer token' } }))).toEqual({ url: 'https://example.com/hook', headers: '{\n  "Authorization": "Bearer token"\n}' })
+    expect(notificationChannelAdapter('telegram').fieldsFromChannel(channel('telegram', { chat_id: '42' }, { bot_token: 'telegram-token' })).botToken).toBe('telegram-token')
+    expect(notificationChannelAdapter('email').fieldsFromChannel(channel('email', {}, { username: 'mailer', password: 'mail-password' }))).toMatchObject({ username: 'mailer', password: 'mail-password' })
+    expect(notificationChannelAdapter('serverchan').fieldsFromChannel(channel('serverchan', {}, { send_key: 'SCT-key' })).sendKey).toBe('SCT-key')
+    expect(notificationChannelAdapter('bark').fieldsFromChannel(channel('bark', {}, { device_key: 'device-key' })).deviceKey).toBe('device-key')
+    expect(notificationChannelAdapter('dingtalk').fieldsFromChannel(channel('dingtalk', {}, { webhook_url: 'https://ding.example/hook', signing_secret: 'ding-secret' }))).toEqual({ webhookUrl: 'https://ding.example/hook', signingSecret: 'ding-secret' })
+    expect(notificationChannelAdapter('feishu').fieldsFromChannel(channel('feishu', {}, { webhook_url: 'https://feishu.example/hook', signing_secret: 'feishu-secret' }))).toEqual({ webhookUrl: 'https://feishu.example/hook', signingSecret: 'feishu-secret' })
+    expect(notificationChannelAdapter('whatsapp').fieldsFromChannel(channel('whatsapp', {}, { access_token: 'wa-token', phone_number_id: '123', recipient: '86138' }))).toMatchObject({ token: 'wa-token', phoneNumberId: '123', recipient: '86138' })
+    expect(notificationChannelAdapter('wxpusher').fieldsFromChannel(channel('wxpusher', {}, { app_token: 'wx-token' })).appToken).toBe('wx-token')
+  })
+
+  it('requires a valid Apprise Config ID', () => {
+    const adapter = notificationChannelAdapter('apprise')
+    const fields = { baseUrl: 'https://apprise.example.com', configId: '', tag: '' }
+    expect(adapter.validate?.(fields)).toBe('Apprise Config ID 不能为空')
+    expect(adapter.validate?.({ ...fields, configId: 'invalid id' })).toContain('字母、数字')
+    expect(adapter.validate?.({ ...fields, configId: 'config-main' })).toBe('')
   })
 
   it('renders only the selected channel form', () => {
     const WebhookForm = notificationChannelAdapter('webhook').Form
-    render(<WebhookForm fields={notificationChannelAdapter('webhook').defaultFields()} keepsExistingCredential={false} update={vi.fn()} />)
+    render(<WebhookForm fields={notificationChannelAdapter('webhook').defaultFields()} update={vi.fn()} />)
     expect(screen.getByText('目标 URL')).toBeInTheDocument()
     expect(screen.queryByText('Bark 服务地址')).not.toBeInTheDocument()
+  })
+
+  it('conceals hydrated channel credentials until the reveal button is clicked', () => {
+    const AppriseForm = notificationChannelAdapter('apprise').Form
+    render(<AppriseForm fields={{ baseUrl: 'https://apprise.example.com', configId: 'config-main', tag: '' }} update={vi.fn()} />)
+    const input = screen.getByPlaceholderText('apprise')
+    expect(input).toHaveAttribute('type', 'password')
+    fireEvent.click(screen.getByRole('button', { name: '显示 Config ID' }))
+    expect(input).toHaveAttribute('type', 'text')
   })
 })

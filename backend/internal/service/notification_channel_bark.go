@@ -40,7 +40,7 @@ func (barkNotificationAdapter) BuildRequest(channel *model.NotificationChannel, 
 	return jsonNotificationRequest(strings.TrimRight(baseURL, "/")+"/push", payload, nil, true, false)
 }
 
-func (barkNotificationAdapter) ValidateResponse(body []byte) error {
+func (barkNotificationAdapter) ValidateResponse(_ int, body []byte) error {
 	response, err := parseNotificationResponse(body)
 	if err != nil {
 		return err

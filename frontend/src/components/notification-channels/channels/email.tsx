@@ -1,6 +1,7 @@
 import { Input } from '@appica/ui-react/input'
+import { SecretInput } from '../secret-input'
 import type { NotificationChannelAdapter } from '../types'
-import { channelInputClass, channelPayload, secretLabel, textField } from '../types'
+import { channelInputClass, channelPayload, credentialTextField, textField } from '../types'
 
 type SMTPEncryption = 'starttls' | 'tls' | 'none'
 
@@ -18,19 +19,15 @@ export const emailChannelAdapter: NotificationChannelAdapter = {
     encryption: smtpEncryption(channel.config.encryption),
     from: String(channel.config.from ?? ''),
     to: String(channel.config.to ?? ''),
-    username: '',
-    password: '',
+    username: credentialTextField(channel, 'username'),
+    password: credentialTextField(channel, 'password'),
   }),
   toPayload: (common, fields) => {
     const username = textField(fields, 'username').trim()
     const password = textField(fields, 'password')
-    return channelPayload(
-      common,
-      { smtp_host: textField(fields, 'host').trim(), smtp_port: Number(textField(fields, 'port')), encryption: smtpEncryption(fields.encryption), from: textField(fields, 'from').trim(), to: textField(fields, 'to').trim() },
-      username || password ? { ...(username ? { username } : {}), ...(password ? { password } : {}) } : undefined,
-    )
+    return channelPayload(common, { smtp_host: textField(fields, 'host').trim(), smtp_port: Number(textField(fields, 'port')), encryption: smtpEncryption(fields.encryption), from: textField(fields, 'from').trim(), to: textField(fields, 'to').trim() }, { username, password })
   },
-  Form: ({ fields, keepsExistingCredential, update }) => (
+  Form: ({ fields, update }) => (
     <>
       <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
         <label className="block space-y-2 text-sm font-medium">
@@ -61,11 +58,11 @@ export const emailChannelAdapter: NotificationChannelAdapter = {
       </label>
       <label className="block space-y-2 text-sm font-medium">
         <span>SMTP 用户名（可选，与密码同时填写）</span>
-        <Input value={textField(fields, 'username')} onChange={(event) => update('username', event.target.value)} autoComplete="off" />
+        <SecretInput revealLabel="SMTP 用户名" value={textField(fields, 'username')} onChange={(event) => update('username', event.target.value)} autoComplete="off" />
       </label>
       <label className="block space-y-2 text-sm font-medium">
-        <span>{secretLabel('SMTP 密码（可选，与用户名同时填写）', keepsExistingCredential)}</span>
-        <Input type="password" value={textField(fields, 'password')} onChange={(event) => update('password', event.target.value)} autoComplete="new-password" />
+        <span>SMTP 密码（可选，与用户名同时填写）</span>
+        <SecretInput revealLabel="SMTP 密码" value={textField(fields, 'password')} onChange={(event) => update('password', event.target.value)} autoComplete="new-password" />
       </label>
     </>
   ),

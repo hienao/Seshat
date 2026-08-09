@@ -1,5 +1,5 @@
 import { EventCardView } from './event-card-view'
-import { eventLabel, number, record, resolveCategory, safeWebUrl, text } from './model-utils'
+import { eventLabel, normalizedSummary, number, record, resolveCategory, safeWebUrl, tagsWithoutMediaType, text } from './model-utils'
 import type { EventCardModel, EventCardProps } from './types'
 
 export function EmbyEventCard(props: EventCardProps) {
@@ -20,8 +20,8 @@ function embyModel({ event }: EventCardProps): EventCardModel {
   if (category === 'system') title = text(system.name) || title
   return {
     renderer: 'emby', appName: 'Emby', appInitial: 'E', category, label, title,
-    summary: event.summary || `${label}事件`, imageUrl: safeWebUrl(text(media.image_url)), overview: text(media.overview),
-    facts: event.presentation?.facts ?? [], tags: event.presentation?.tags ?? [], percent: number(playback.percent),
+    summary: normalizedSummary(event.summary, `${label}事件`, category, media), imageUrl: safeWebUrl(text(media.image_url)), overview: text(media.overview),
+    facts: event.presentation?.facts ?? [], tags: tagsWithoutMediaType(event.presentation?.tags ?? [], media), percent: number(playback.percent),
     positionLabel: text(playback.position_label), durationLabel: text(media.duration_label),
     metadataAttribution: text(media.metadata_source) === 'tmdb' ? '媒体资料由 TMDB 提供' : '', rawPreview: '',
   }

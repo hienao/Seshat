@@ -10,7 +10,7 @@ import type { Integration, NotificationChannel, NotificationChannelInput, Notifi
 import { AppButton } from '@/components/common/app-button'
 import { EmptyState, ErrorState, Message } from '@/components/common/feedback'
 import { notificationChannelAdapter, notificationChannelAdapters, notificationChannelLabel } from '@/components/notification-channels/registry'
-import { channelInputClass, type ChannelCommonValues, type ChannelFields, type ChannelFieldValue } from '@/components/notification-channels/types'
+import { channelInputClass, notificationChannelBindingName, type ChannelCommonValues, type ChannelFields, type ChannelFieldValue } from '@/components/notification-channels/types'
 import { PageHeader } from '@/components/common/page-header'
 import { Panel } from '@/components/common/panel'
 import { errorMessage } from '@/lib/error-message'
@@ -219,19 +219,19 @@ export function NotificationChannelsPage() {
           <EmptyState title="还没有接入实例" />
         ) : (
           <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            {integrations.data.map((integration) => (
-              <div key={integration.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            {integrations.data.map((integration) => {
+              return <div key={integration.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="font-semibold">{integration.name}</h3>
                   <p className="mt-1 text-sm text-neutral-500">
-                    {integration.app_code} · {integration.notification_channel_id ? `渠道 #${integration.notification_channel_id}` : '未绑定渠道'}
+                    {integration.app_code} · {notificationChannelBindingName(integration.notification_channel_id, channels.data ?? [], channels.isPending)}
                   </p>
                 </div>
                 <AppButton size="sm" variant="outline" onClick={() => setSelectedIntegration(integration)}>
                   配置通知
                 </AppButton>
               </div>
-            ))}
+            })}
           </div>
         )}
       </Panel>
@@ -333,7 +333,6 @@ function ChannelFormDrawer({
     setForm((previous) => ({ ...previous, fields: { ...previous.fields, [key]: value } }))
   }
 
-  const keepsExistingCredential = Boolean(editing?.has_credentials)
   const adapter = notificationChannelAdapter(form.type)
   const AdapterForm = adapter.Form
   const validationError = adapter.validate?.(form.fields) ?? ''
@@ -375,7 +374,7 @@ function ChannelFormDrawer({
             </select>
           </label>
 
-          <AdapterForm fields={form.fields} keepsExistingCredential={keepsExistingCredential} update={updateField} />
+          <AdapterForm fields={form.fields} update={updateField} />
 
           <SwitchRow title="使用系统 HTTP 代理" description="仅此渠道的测试和消息推送经过系统设置中的代理。" checked={form.useProxy} onChange={(checked) => update('useProxy', checked)} />
           <SwitchRow title="启用渠道" description="建议先保存并测试成功后再启用。" checked={form.enabled} onChange={(checked) => update('enabled', checked)} />

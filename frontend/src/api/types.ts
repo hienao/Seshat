@@ -21,8 +21,10 @@ export interface SystemSettings {
   allow_register: boolean
   api_log_retention_days: number
   http_proxy_configured: boolean
-  http_proxy_display?: string
+  http_proxy_url: string
   tmdb_configured: boolean
+  tmdb_read_access_token: string
+  tmdb_use_proxy: boolean
   public_base_url: string
 }
 
@@ -31,6 +33,7 @@ export type UpdateSystemSettingsInput = Partial<Pick<SystemSettings, 'allow_regi
   clear_http_proxy?: boolean
   tmdb_read_access_token?: string
   clear_tmdb_token?: boolean
+  tmdb_use_proxy?: boolean
   public_base_url?: string
 }
 
@@ -201,6 +204,7 @@ export interface NotificationChannel {
   type: NotificationChannelType
   enabled: boolean
   config: Record<string, unknown>
+  credentials: Record<string, unknown>
   has_credentials: boolean
   binding_count: number
   last_test_status?: string

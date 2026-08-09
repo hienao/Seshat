@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -147,9 +148,13 @@ func (s *MediaMetadataService) fetchTMDB(lookup *mediaMetadataLookup, token stri
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	response, err := s.httpClient.Do(req)
+	httpClient, err := s.tmdbHTTPClient()
 	if err != nil {
 		return nil, err
+	}
+	response, err := httpClient.Do(req)
+	if err != nil {
+		return nil, errors.New("请求 TMDB API 失败")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
@@ -180,6 +185,24 @@ func (s *MediaMetadataService) fetchTMDB(lookup *mediaMetadataLookup, token stri
 	}
 	item.SourceURL = tmdbSourceURL(selected)
 	return item, nil
+}
+
+func (s *MediaMetadataService) tmdbHTTPClient() (*http.Client, error) {
+	if !s.settings.TMDBUsesHTTPProxy() {
+		return s.httpClient, nil
+	}
+	proxyURL, err := url.Parse(s.settings.HTTPProxyURL())
+	if err != nil || proxyURL.Hostname() == "" {
+		return nil, errors.New("TMDB 已启用系统 HTTP 代理，但代理地址未配置")
+	}
+	client := *s.httpClient
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if configured, ok := s.httpClient.Transport.(*http.Transport); ok {
+		transport = configured.Clone()
+	}
+	transport.Proxy = http.ProxyURL(proxyURL)
+	client.Transport = transport
+	return &client, nil
 }
 
 func selectTMDBFindResult(result tmdbFindResponse, mediaType string) tmdbMedia {

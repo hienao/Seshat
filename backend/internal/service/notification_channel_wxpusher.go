@@ -39,7 +39,7 @@ func (wxPusherNotificationAdapter) BuildRequest(channel *model.NotificationChann
 	return jsonNotificationRequest("https://wxpusher.zjiecode.com/api/send/message", payload, nil, true, true)
 }
 
-func (wxPusherNotificationAdapter) ValidateResponse(body []byte) error {
+func (wxPusherNotificationAdapter) ValidateResponse(_ int, body []byte) error {
 	response, err := parseNotificationResponse(body)
 	if err != nil {
 		return err

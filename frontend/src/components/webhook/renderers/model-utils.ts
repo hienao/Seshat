@@ -39,6 +39,17 @@ export function number(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
+export function normalizedSummary(summary: string, fallback: string, category: EventCategory, media: DataRecord) {
+  const value = summary.trim()
+  if (category === 'media' && value && value === text(media.type)) return fallback
+  return value || fallback
+}
+
+export function tagsWithoutMediaType(tags: string[], media: DataRecord) {
+  const mediaType = text(media.type)
+  return tags.filter((tag, index) => tag && tag !== mediaType && tags.indexOf(tag) === index)
+}
+
 export function safeWebUrl(value: string) {
   try {
     const parsed = new URL(value)
