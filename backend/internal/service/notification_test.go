@@ -116,7 +116,7 @@ func TestQueueNotificationDeliveryUsesRulesAndDeduplicates(t *testing.T) {
 	}
 }
 
-func TestUpdateChannelMergesCredentialsWithoutReturningSecrets(t *testing.T) {
+func TestUpdateChannelReplacesAndReturnsCredentials(t *testing.T) {
 	setupNotificationTestDB(t)
 	service := NewNotificationService()
 	created, err := service.CreateChannel(7, &NotificationChannelRequest{Name: "Webhook", Type: "webhook", Config: map[string]interface{}{"use_proxy": true}, Credentials: map[string]interface{}{"url": "https://example.com/one", "headers": map[string]interface{}{"Authorization": "Bearer old"}}})
@@ -133,9 +133,8 @@ func TestUpdateChannelMergesCredentialsWithoutReturningSecrets(t *testing.T) {
 	if updated.Config["use_proxy"] != true {
 		t.Fatalf("channel proxy setting was not persisted: %+v", updated.Config)
 	}
-	encoded, _ := json.Marshal(updated)
-	if string(encoded) == "" || containsSecret(string(encoded), "Bearer old") {
-		t.Fatal("channel response exposed secret credentials")
+	if updated.Credentials["url"] != "https://example.com/two" || updated.Credentials["headers"] != nil {
+		t.Fatalf("channel response did not return the replacement credentials: %+v", updated.Credentials)
 	}
 	var channel model.NotificationChannel
 	if err := database.GetDB().First(&channel, created.ID).Error; err != nil {
@@ -145,8 +144,11 @@ func TestUpdateChannelMergesCredentialsWithoutReturningSecrets(t *testing.T) {
 	if err := json.Unmarshal(channel.SecretConfig, &credentials); err != nil {
 		t.Fatal(err)
 	}
-	if credentials["url"] != "https://example.com/two" || credentials["headers"] == nil {
-		t.Fatalf("credentials were not merged: %+v", credentials)
+	if credentials["url"] != "https://example.com/two" || credentials["headers"] != nil {
+		t.Fatalf("credentials were not replaced: %+v", credentials)
+	}
+	if _, err := service.UpdateChannel(7, created.ID, &NotificationChannelRequest{Name: "Webhook 3", Type: "webhook", Config: map[string]interface{}{"use_proxy": true}}); err == nil {
+		t.Fatal("an update without the required current credentials must be rejected")
 	}
 }
 
@@ -201,6 +203,99 @@ func TestAppriseConfigIDValidation(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("invalid Apprise Config ID should be rejected")
+	}
+}
+
+func TestAppriseEditReturnsConfigIDAndBlankTagTargetsAllServices(t *testing.T) {
+	setupNotificationTestDB(t)
+	service := NewNotificationService()
+	created, err := service.CreateChannel(7, &NotificationChannelRequest{
+		Name:        "Apprise",
+		Type:        "apprise",
+		Enabled:     true,
+		Config:      map[string]interface{}{"base_url": "http://apprise.internal:8000", "tag": "media"},
+		Credentials: map[string]interface{}{"config_id": "seshat-main"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := service.UpdateChannel(7, created.ID, &NotificationChannelRequest{
+		Name:        "Apprise",
+		Type:        "apprise",
+		Enabled:     true,
+		Config:      map[string]interface{}{"base_url": "http://apprise.internal:8000", "tag": ""},
+		Credentials: map[string]interface{}{"config_id": "seshat-main"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.HasCredentials || updated.Config["tag"] != "" || updated.Credentials["config_id"] != "seshat-main" {
+		t.Fatalf("unexpected updated channel: %+v", updated)
+	}
+	var channel model.NotificationChannel
+	if err := database.GetDB().First(&channel, created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	spec, err := buildTestNotificationRequest(&channel, outboundMessage{Title: "测试", Body: "通知"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.endpoint != "http://apprise.internal:8000/notify/seshat-main" {
+		t.Fatalf("Config ID was not submitted: %q", spec.endpoint)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(spec.body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := payload["tag"]; exists {
+		t.Fatalf("blank tag must be omitted: %+v", payload)
+	}
+}
+
+func TestNotificationChannelDoesNotReportBlankCredentialsAsConfigured(t *testing.T) {
+	db := setupNotificationTestDB(t)
+	channel := model.NotificationChannel{OwnerID: 7, Name: "Legacy Apprise", Type: "apprise", Config: []byte(`{"base_url":"http://apprise.internal:8000"}`), SecretConfig: []byte(`{"config_id":""}`)}
+	if err := db.Create(&channel).Error; err != nil {
+		t.Fatal(err)
+	}
+	response, err := channelResponse(db, &channel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.HasCredentials {
+		t.Fatal("blank legacy credentials must not be reported as configured")
+	}
+	if _, err := buildTestNotificationRequest(&channel, outboundMessage{Title: "测试"}); err == nil {
+		t.Fatal("Apprise request must not be sent without a Config ID")
+	}
+}
+
+func TestAppriseChannelTestRejectsAnEmptyConfig(t *testing.T) {
+	db := setupNotificationTestDB(t)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	service := NewNotificationService()
+	created, err := service.CreateChannel(7, &NotificationChannelRequest{
+		Name:        "Apprise",
+		Type:        "apprise",
+		Enabled:     true,
+		Config:      map[string]interface{}{"base_url": server.URL},
+		Credentials: map[string]interface{}{"config_id": "missing"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.TestChannel(7, created.ID); err == nil {
+		t.Fatal("Apprise HTTP 204 must not be reported as a successful channel test")
+	}
+	var channel model.NotificationChannel
+	if err := db.First(&channel, created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if channel.LastTestStatus != "failed" || !strings.Contains(channel.LastTestError, "Config ID") {
+		t.Fatalf("unexpected channel test result: status=%q error=%q", channel.LastTestStatus, channel.LastTestError)
 	}
 }
 
@@ -354,6 +449,45 @@ func TestNotificationWorkerRecoversSendingDeliveries(t *testing.T) {
 	}
 	if delivery.Status != "retrying" || delivery.NextAttemptAt == nil {
 		t.Fatalf("orphaned delivery was not recovered: %+v", delivery)
+	}
+}
+
+func TestNotificationWorkerRetriesSixTimesAtTenSecondIntervals(t *testing.T) {
+	db := setupNotificationTestDB(t)
+	delivery := model.NotificationDelivery{ChannelName: "test", ChannelType: "webhook", Status: "sending", AttemptCount: maxNotificationRetries}
+	if err := db.Create(&delivery).Error; err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now()
+	NewNotificationWorker().fail(&delivery, 503, errors.New("temporary failure"), true)
+	if err := db.First(&delivery, delivery.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if delivery.Status != "retrying" || delivery.NextAttemptAt == nil {
+		t.Fatalf("sixth retry was not scheduled: %+v", delivery)
+	}
+	delay := delivery.NextAttemptAt.Sub(before)
+	if delay < notificationRetryInterval-time.Second || delay > notificationRetryInterval+time.Second {
+		t.Fatalf("retry delay = %v, want %v", delay, notificationRetryInterval)
+	}
+
+	delivery.AttemptCount = maxNotificationRetries + 1
+	if err := db.Model(&delivery).Update("attempt_count", delivery.AttemptCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	NewNotificationWorker().fail(&delivery, 503, errors.New("temporary failure"), true)
+	if err := db.First(&delivery, delivery.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if delivery.Status != "failed" || delivery.NextAttemptAt != nil {
+		t.Fatalf("delivery did not stop after six retries: %+v", delivery)
+	}
+}
+
+func TestNotificationWorkerTreatsAnEmptyQueueAsIdle(t *testing.T) {
+	setupNotificationTestDB(t)
+	if NewNotificationWorker().processOne() {
+		t.Fatal("empty queue should not report processed work")
 	}
 }
 

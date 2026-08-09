@@ -63,3 +63,18 @@ func TestJellyfinPlaybackPresentation(t *testing.T) {
 		t.Fatalf("unexpected provider IDs: %+v", providers)
 	}
 }
+
+func TestJellyfinMediaPresentationDoesNotRepeatMediaType(t *testing.T) {
+	provider := NewJellyfinProvider()
+	request := IncomingRequest{Body: []byte(`{"NotificationType":"ItemAdded","Name":"我的团长我的团 · S01E04 · 团长龙文章现身带领众人","ItemType":"Episode","Overview":"自称团长的家伙把他们带出了板房。"}`)}
+	presentation := provider.Normalize("media_added", request)
+	if presentation.Summary != "收到 Jellyfin 新增媒体事件" {
+		t.Fatalf("summary = %q", presentation.Summary)
+	}
+	if len(presentation.Tags) != 0 {
+		t.Fatalf("media type must not be repeated as tags: %+v", presentation.Tags)
+	}
+	if len(presentation.Facts) != 1 || presentation.Facts[0]["label"] != "类型" || presentation.Facts[0]["value"] != "Episode" {
+		t.Fatalf("media type must remain as one fact: %+v", presentation.Facts)
+	}
+}

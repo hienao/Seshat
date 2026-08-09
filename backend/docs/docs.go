@@ -706,13 +706,19 @@ const docTemplate = `{
                 "http_proxy_configured": {
                     "type": "boolean"
                 },
-                "http_proxy_display": {
+                "http_proxy_url": {
                     "type": "string"
                 },
                 "public_base_url": {
                     "type": "string"
                 },
                 "tmdb_configured": {
+                    "type": "boolean"
+                },
+                "tmdb_read_access_token": {
+                    "type": "string"
+                },
+                "tmdb_use_proxy": {
                     "type": "boolean"
                 }
             }
@@ -751,6 +757,9 @@ const docTemplate = `{
                 },
                 "tmdb_read_access_token": {
                     "type": "string"
+                },
+                "tmdb_use_proxy": {
+                    "type": "boolean"
                 }
             }
         },

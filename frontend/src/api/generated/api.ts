@@ -69,9 +69,11 @@ export interface ServiceSystemSettingsResponse {
   allow_register?: boolean;
   api_log_retention_days?: number;
   http_proxy_configured?: boolean;
-  http_proxy_display?: string;
+  http_proxy_url?: string;
   public_base_url?: string;
   tmdb_configured?: boolean;
+  tmdb_read_access_token?: string;
+  tmdb_use_proxy?: boolean;
 }
 
 export interface ServiceTokenResponse {
@@ -87,6 +89,7 @@ export interface ServiceUpdateSystemSettingsRequest {
   http_proxy_url?: string;
   public_base_url?: string;
   tmdb_read_access_token?: string;
+  tmdb_use_proxy?: boolean;
 }
 
 export interface ServiceUserResponse {

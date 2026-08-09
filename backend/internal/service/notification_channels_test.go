@@ -34,7 +34,36 @@ func validateTestNotificationResponse(channelType string, body []byte) error {
 	if !ok {
 		return errors.New("adapter is not HTTP based")
 	}
-	return httpAdapter.ValidateResponse(body)
+	return httpAdapter.ValidateResponse(http.StatusOK, body)
+}
+
+func TestAppriseRequiresSentResponseStatus(t *testing.T) {
+	adapter, ok := defaultNotificationChannelRegistry.Get("apprise")
+	if !ok {
+		t.Fatal("Apprise adapter not registered")
+	}
+	httpAdapter := adapter.(notificationHTTPChannelAdapter)
+	if err := httpAdapter.ValidateResponse(http.StatusOK, nil); err != nil {
+		t.Fatalf("Apprise HTTP 200 should succeed: %v", err)
+	}
+	err := httpAdapter.ValidateResponse(http.StatusNoContent, nil)
+	var sendErr *deliveryError
+	if err == nil || !errors.As(err, &sendErr) || sendErr.retryable || sendErr.statusCode != http.StatusNoContent {
+		t.Fatalf("Apprise HTTP 204 must be a permanent delivery failure: %v", err)
+	}
+}
+
+func TestAppriseHTTP204FailsThroughTheSharedSender(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	channel := model.NotificationChannel{Type: "apprise", Config: []byte(`{"base_url":"` + server.URL + `"}`), SecretConfig: []byte(`{"config_id":"missing"}`)}
+	err := sendChannel(t.Context(), &channel, outboundMessage{Title: "测试", Body: "通知"}, true, "")
+	var sendErr *deliveryError
+	if err == nil || !errors.As(err, &sendErr) || sendErr.statusCode != http.StatusNoContent {
+		t.Fatalf("shared sender accepted Apprise HTTP 204: %v", err)
+	}
 }
 
 func TestBarkSenderChecksBusinessResponse(t *testing.T) {
@@ -65,7 +94,7 @@ func TestBarkSenderChecksBusinessResponse(t *testing.T) {
 	}
 }
 
-func TestAdditionalNotificationChannelsPersistWithoutExposingCredentials(t *testing.T) {
+func TestAdditionalNotificationChannelsPersistAndReturnCredentials(t *testing.T) {
 	setupNotificationTestDB(t)
 	service := NewNotificationService()
 	tests := []struct {
@@ -97,9 +126,9 @@ func TestAdditionalNotificationChannelsPersistWithoutExposingCredentials(t *test
 			if !response.HasCredentials || response.Type != test.channelType {
 				t.Fatalf("unexpected response: %+v", response)
 			}
-			encoded, _ := json.Marshal(response)
-			if strings.Contains(string(encoded), test.secret) {
-				t.Fatalf("response exposed %s credentials", test.channelType)
+			encoded, _ := json.Marshal(response.Credentials)
+			if !strings.Contains(string(encoded), test.secret) {
+				t.Fatalf("response did not return %s credentials", test.channelType)
 			}
 		})
 	}

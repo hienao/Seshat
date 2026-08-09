@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -36,6 +37,9 @@ func (appriseNotificationAdapter) BuildRequest(channel *model.NotificationChanne
 	config, credentials := notificationChannelConfiguration(channel)
 	baseURL, _ := config["base_url"].(string)
 	configID, _ := credentials["config_id"].(string)
+	if !validAppriseConfigID(configID) {
+		return nil, &deliveryError{message: "Apprise Config ID 未配置"}
+	}
 	endpoint := strings.TrimRight(baseURL, "/") + "/notify/" + url.PathEscape(configID)
 	payload := map[string]interface{}{"title": message.Title, "body": notificationBody(message), "type": appriseSeverity(message.Severity), "format": "text"}
 	if tag, _ := config["tag"].(string); strings.TrimSpace(tag) != "" {
@@ -44,7 +48,12 @@ func (appriseNotificationAdapter) BuildRequest(channel *model.NotificationChanne
 	return jsonNotificationRequest(endpoint, payload, nil, true, false)
 }
 
-func (appriseNotificationAdapter) ValidateResponse(_ []byte) error { return nil }
+func (appriseNotificationAdapter) ValidateResponse(statusCode int, _ []byte) error {
+	if statusCode != http.StatusOK {
+		return &deliveryError{message: "Apprise Config ID 不存在或未配置通知目标", statusCode: statusCode}
+	}
+	return nil
+}
 
 func validAppriseConfigID(value string) bool {
 	if len(value) < 1 || len(value) > 128 {

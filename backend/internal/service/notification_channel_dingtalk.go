@@ -43,7 +43,7 @@ func (dingTalkNotificationAdapter) BuildRequest(channel *model.NotificationChann
 	return jsonNotificationRequest(endpoint, payload, nil, true, false)
 }
 
-func (dingTalkNotificationAdapter) ValidateResponse(body []byte) error {
+func (dingTalkNotificationAdapter) ValidateResponse(_ int, body []byte) error {
 	response, err := parseNotificationResponse(body)
 	if err != nil {
 		return err

@@ -51,8 +51,10 @@ type SystemSettingsResponse struct {
 	AllowRegister       bool   `json:"allow_register"`
 	APILogRetentionDays int    `json:"api_log_retention_days"`
 	HTTPProxyConfigured bool   `json:"http_proxy_configured"`
-	HTTPProxyDisplay    string `json:"http_proxy_display,omitempty"`
+	HTTPProxyURL        string `json:"http_proxy_url"`
 	TMDBConfigured      bool   `json:"tmdb_configured"`
+	TMDBReadAccessToken string `json:"tmdb_read_access_token"`
+	TMDBUseProxy        bool   `json:"tmdb_use_proxy"`
 	PublicBaseURL       string `json:"public_base_url"`
 }
 
@@ -75,10 +77,13 @@ func (s *SettingService) GetSystemSettings() (*SystemSettingsResponse, error) {
 		case "http_proxy_url":
 			if setting.Value != "" {
 				response.HTTPProxyConfigured = true
-				response.HTTPProxyDisplay = displayHTTPProxyURL(setting.Value)
+				response.HTTPProxyURL = setting.Value
 			}
 		case "tmdb_read_access_token":
-			response.TMDBConfigured = strings.TrimSpace(setting.Value) != ""
+			response.TMDBReadAccessToken = strings.TrimSpace(setting.Value)
+			response.TMDBConfigured = response.TMDBReadAccessToken != ""
+		case "tmdb_use_proxy":
+			response.TMDBUseProxy = setting.Value == "true"
 		case "public_base_url":
 			if validPublicBaseURL(setting.Value) {
 				response.PublicBaseURL = normalizePublicBaseURL(setting.Value)
@@ -96,6 +101,7 @@ type UpdateSystemSettingsRequest struct {
 	ClearHTTPProxy      *bool   `json:"clear_http_proxy"`
 	TMDBReadAccessToken *string `json:"tmdb_read_access_token"`
 	ClearTMDBToken      *bool   `json:"clear_tmdb_token"`
+	TMDBUseProxy        *bool   `json:"tmdb_use_proxy"`
 	PublicBaseURL       *string `json:"public_base_url"`
 }
 
@@ -162,6 +168,15 @@ func (s *SettingService) UpdateSystemSettings(req *UpdateSystemSettingsRequest) 
 			return err
 		}
 	}
+	if req.TMDBUseProxy != nil {
+		value := "false"
+		if *req.TMDBUseProxy {
+			value = "true"
+		}
+		if err := s.settingRepo.SetSystemSetting("tmdb_use_proxy", value); err != nil {
+			return err
+		}
+	}
 	if req.PublicBaseURL != nil {
 		if err := s.settingRepo.SetSystemSetting("public_base_url", normalizePublicBaseURL(*req.PublicBaseURL)); err != nil {
 			return err
@@ -184,6 +199,11 @@ func (s *SettingService) TMDBReadAccessToken() string {
 		return ""
 	}
 	return strings.TrimSpace(setting.Value)
+}
+
+func (s *SettingService) TMDBUsesHTTPProxy() bool {
+	setting, err := s.settingRepo.GetSystemSetting("tmdb_use_proxy")
+	return err == nil && setting.Value == "true"
 }
 
 func (s *SettingService) PublicBaseURL() string {
@@ -255,17 +275,4 @@ func validPublicBaseURL(value string) bool {
 
 func normalizePublicBaseURL(value string) string {
 	return strings.TrimRight(strings.TrimSpace(value), "/")
-}
-
-func displayHTTPProxyURL(value string) string {
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return "已配置"
-	}
-	parsed.User = nil
-	parsed.Path = ""
-	parsed.RawPath = ""
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed.String()
 }

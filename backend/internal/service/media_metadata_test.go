@@ -84,3 +84,41 @@ func TestMediaMetadataEnrichmentUsesTMDBAndPersistentCache(t *testing.T) {
 		t.Fatalf("TMDB request count = %d, want 1", requests)
 	}
 }
+
+func TestMediaMetadataCanUseTheSystemHTTPProxy(t *testing.T) {
+	setupMediaMetadataTestDB(t)
+	settings := NewSettingService()
+	if err := settings.InitDefaultSettings(); err != nil {
+		t.Fatal(err)
+	}
+	token := "test-read-access-token"
+	useProxy := true
+	proxyRequests := 0
+	proxy := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		proxyRequests++
+		if request.URL.Host != "tmdb.example" || request.URL.Path != "/3/movie/42" {
+			t.Errorf("unexpected proxied TMDB request: %s", request.URL.String())
+		}
+		if request.Header.Get("Authorization") != "Bearer "+token {
+			t.Errorf("authorization header = %q", request.Header.Get("Authorization"))
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"id":42,"title":"Arrival","overview":"TMDB 电影简介","poster_path":"/arrival.jpg","media_type":"movie"}`))
+	}))
+	defer proxy.Close()
+	proxyURL := proxy.URL
+	if err := settings.UpdateSystemSettings(&UpdateSystemSettingsRequest{TMDBReadAccessToken: &token, HTTPProxyURL: &proxyURL, TMDBUseProxy: &useProxy}); err != nil {
+		t.Fatal(err)
+	}
+	metadataService := &MediaMetadataService{apiBaseURL: "http://tmdb.example/3", httpClient: &http.Client{Timeout: time.Second}, settings: settings}
+	presentation := webhook.Presentation{Data: map[string]interface{}{"media": map[string]interface{}{
+		"type": "Movie", "provider_ids": map[string]interface{}{"tmdb": "42"},
+	}}}
+	if err := metadataService.Enrich(&presentation); err != nil {
+		t.Fatal(err)
+	}
+	media := presentation.Data["media"].(map[string]interface{})
+	if proxyRequests != 1 || media["overview"] != "TMDB 电影简介" {
+		t.Fatalf("TMDB proxy was not used: requests=%d media=%+v", proxyRequests, media)
+	}
+}

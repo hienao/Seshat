@@ -2,7 +2,7 @@ import { Badge } from '@appica/ui-react/badge'
 import { Input } from '@appica/ui-react/input'
 import { Switch } from '@appica/ui-react/switch'
 import { Spinner } from '@appica/ui-react/spinner'
-import { Refresh, Settings, ShieldCheck, User, Users } from '@appica/icons-react'
+import { Eye, EyeOff, Refresh, Settings, ShieldCheck, User, Users } from '@appica/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useEffect, useMemo, useState } from 'react'
@@ -23,14 +23,14 @@ export function AdminPage() {
   const [retentionDays, setRetentionDays] = useState('7')
   const [httpProxyURL, setHTTPProxyURL] = useState('')
   const [tmdbToken, setTMDBToken] = useState('')
+  const [tmdbTokenVisible, setTMDBTokenVisible] = useState(false)
   const [publicBaseURL, setPublicBaseURL] = useState('')
   const users = useQuery({ queryKey: ['admin', 'users'], queryFn: api.users })
   const settings = useQuery({ queryKey: ['admin', 'settings'], queryFn: api.systemSettings })
   const updateSettings = useMutation({
     mutationFn: api.updateSystemSettings,
     onSuccess: (_, variables) => {
-      if (variables.http_proxy_url !== undefined || variables.clear_http_proxy) setHTTPProxyURL('')
-      if (variables.tmdb_read_access_token !== undefined || variables.clear_tmdb_token) setTMDBToken('')
+      if (variables.clear_tmdb_token) setTMDBTokenVisible(false)
       void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] })
     },
   })
@@ -42,6 +42,8 @@ export function AdminPage() {
   useEffect(() => {
     if (settings.data) {
       setRetentionDays(String(settings.data.api_log_retention_days))
+      setHTTPProxyURL(settings.data.http_proxy_url || '')
+      setTMDBToken(settings.data.tmdb_read_access_token || '')
       setPublicBaseURL(settings.data.public_base_url || window.location.origin)
     }
   }, [settings.data])
@@ -99,25 +101,39 @@ export function AdminPage() {
             <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
               <label className="min-w-0 flex-1 space-y-2 text-sm font-medium">
                 <span>HTTP 代理</span>
-                <Input type="password" autoComplete="off" value={httpProxyURL} disabled={updateSettings.isPending} onChange={(event) => setHTTPProxyURL(event.target.value)} placeholder={settings.data?.http_proxy_configured ? `已配置：${settings.data.http_proxy_display || '地址已隐藏'}（留空保持）` : 'http://user:password@proxy.example.com:7890'} />
-                <span className="block text-xs text-neutral-500">支持 HTTP/HTTPS 代理，可包含用户名和密码。地址不会通过设置接口返回。</span>
+                <Input type="url" autoComplete="off" value={httpProxyURL} disabled={updateSettings.isPending} onChange={(event) => setHTTPProxyURL(event.target.value)} placeholder="http://proxy.example.com:7890" />
+                <span className="block text-xs text-neutral-500">支持 HTTP/HTTPS 代理，保存后会作为普通系统配置回填显示。</span>
               </label>
               <div className="flex flex-wrap gap-2">
-                {settings.data?.http_proxy_configured && <ConfirmDialog title="清空 HTTP 代理？" description="启用了“使用系统代理”的推送渠道将无法发送，直到重新配置代理或关闭渠道代理开关。" confirmLabel="清空代理" destructive busy={updateSettings.isPending} onConfirm={() => updateSettings.mutate({ clear_http_proxy: true })} trigger={<AppButton variant="outline" disabled={updateSettings.isPending}>清空代理</AppButton>} />}
-                <AppButton disabled={updateSettings.isPending || !httpProxyURL.trim()} onClick={() => updateSettings.mutate({ http_proxy_url: httpProxyURL.trim() })}>{updateSettings.isPending ? '正在保存…' : '保存代理'}</AppButton>
+                {settings.data?.http_proxy_configured && <ConfirmDialog title="清空 HTTP 代理？" description="启用了系统代理的推送渠道和 TMDB API 请求将无法访问，直到重新配置代理或关闭对应代理开关。" confirmLabel="清空代理" destructive busy={updateSettings.isPending} onConfirm={() => updateSettings.mutate({ clear_http_proxy: true })} trigger={<AppButton variant="outline" disabled={updateSettings.isPending}>清空代理</AppButton>} />}
+                <AppButton disabled={updateSettings.isPending || !httpProxyURL.trim() || httpProxyURL.trim() === settings.data?.http_proxy_url} onClick={() => updateSettings.mutate({ http_proxy_url: httpProxyURL.trim() })}>{updateSettings.isPending ? '正在保存…' : '保存代理'}</AppButton>
               </div>
             </div>
             <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
-              <label className="min-w-0 flex-1 space-y-2 text-sm font-medium">
-                <span>TMDB API Read Access Token</span>
-                <Input type="password" autoComplete="off" value={tmdbToken} disabled={updateSettings.isPending} onChange={(event) => setTMDBToken(event.target.value)} placeholder={settings.data?.tmdb_configured ? '已配置（留空保持原值）' : '用于按 Provider ID 获取海报和补充简介'} />
-                <span className="block text-xs text-neutral-500">可选。配置后会补充 Jellyfin/Emby 媒体海报与简介，Token 不会通过设置接口返回。</span>
-              </label>
+              <div className="min-w-0 flex-1 space-y-4">
+                <label className="block space-y-2 text-sm font-medium">
+                  <span>TMDB API Read Access Token</span>
+                  <Input
+                    type={tmdbTokenVisible ? 'text' : 'password'}
+                    autoComplete="off"
+                    value={tmdbToken}
+                    disabled={updateSettings.isPending}
+                    onChange={(event) => setTMDBToken(event.target.value)}
+                    placeholder="用于按 Provider ID 获取海报和补充简介"
+                    endSlot={tmdbToken && <button type="button" disabled={updateSettings.isPending} className="rounded p-1 text-neutral-500 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-white" aria-label={tmdbTokenVisible ? '隐藏 TMDB Token' : '显示 TMDB Token'} title={tmdbTokenVisible ? '隐藏 Token' : '显示 Token'} onClick={() => setTMDBTokenVisible((visible) => !visible)}>{tmdbTokenVisible ? <EyeOff size={17} /> : <Eye size={17} />}</button>}
+                  />
+                  <span className="block text-xs text-neutral-500">可选。配置后会补充 Jellyfin/Emby 媒体海报与简介；默认隐藏，可点击输入框右侧图标查看。</span>
+                </label>
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+                  <div><p className="text-sm font-medium">通过系统 HTTP 代理请求 TMDB</p><p className="mt-1 text-xs text-neutral-500">{settings.data?.http_proxy_configured ? '仅 TMDB API 元数据请求使用上方代理。' : '开启前请先配置上方 HTTP 代理。'}</p></div>
+                  <Switch aria-label="TMDB 使用系统 HTTP 代理" checked={settings.data?.tmdb_use_proxy ?? false} disabled={updateSettings.isPending} onCheckedChange={(checked) => updateSettings.mutate({ tmdb_use_proxy: checked })} />
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {settings.data?.tmdb_configured && <ConfirmDialog title="清空 TMDB Token？" description="清空后不再获取新的外部媒体资料，已缓存内容会保留至到期。" confirmLabel="清空 Token" destructive busy={updateSettings.isPending} onConfirm={() => updateSettings.mutate({ clear_tmdb_token: true })} trigger={<AppButton variant="outline" disabled={updateSettings.isPending}>清空 Token</AppButton>} />}
-                <AppButton disabled={updateSettings.isPending || !tmdbToken.trim()} onClick={() => updateSettings.mutate({ tmdb_read_access_token: tmdbToken.trim() })}>{updateSettings.isPending ? '正在保存…' : '保存 Token'}</AppButton>
+                <AppButton disabled={updateSettings.isPending || !tmdbToken.trim() || tmdbToken.trim() === settings.data?.tmdb_read_access_token} onClick={() => updateSettings.mutate({ tmdb_read_access_token: tmdbToken.trim() })}>{updateSettings.isPending ? '正在保存…' : '保存 Token'}</AppButton>
               </div>
-              <p className="text-xs text-neutral-400 sm:max-w-52">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+              <p className="text-xs text-neutral-400 sm:max-w-52">TMDB 要求的 API 使用声明：This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
             </div>
             <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
               <label className="max-w-xs flex-1 space-y-2 text-sm font-medium">

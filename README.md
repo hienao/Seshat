@@ -51,6 +51,7 @@ npm run dev
 | `SQLITE_PATH` | ❌ | SQLite 数据库文件路径，开发环境可覆盖 | `/data/db/seshat.db` |
 | `DATABASE_URL` | `postgres` 模式必填 | PostgreSQL 连接串 | `postgres://user:pass@host:5432/dbname?sslmode=disable` |
 | `JWT_SECRET` | ✅ | JWT 签名密钥（生产环境请使用强随机字符串） | `your-secret-key-at-least-32-chars` |
+| `TZ` | ❌ | 容器日志和应用本地时间，默认 `UTC` | `UTC` |
 
 #### 挂载目录
 
@@ -99,6 +100,7 @@ docker run -d \
   -v seshat_data:/data \
   -v seshat_cache:/cache \
   -e JWT_SECRET="your-secret-key-at-least-32-chars" \
+  -e TZ="UTC" \
   seshat
 ```
 

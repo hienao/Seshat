@@ -56,6 +56,7 @@ func (r *SettingRepository) InitDefaultSettings() error {
 		"api_log_retention_days": "7",
 		"http_proxy_url":         "",
 		"tmdb_read_access_token": "",
+		"tmdb_use_proxy":         "false",
 		"public_base_url":        "",
 	}
 

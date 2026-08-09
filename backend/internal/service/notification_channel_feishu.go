@@ -43,7 +43,7 @@ func (feishuNotificationAdapter) BuildRequest(channel *model.NotificationChannel
 	return jsonNotificationRequest(endpoint, payload, nil, true, false)
 }
 
-func (feishuNotificationAdapter) ValidateResponse(body []byte) error {
+func (feishuNotificationAdapter) ValidateResponse(_ int, body []byte) error {
 	response, err := parseNotificationResponse(body)
 	if err != nil {
 		return err

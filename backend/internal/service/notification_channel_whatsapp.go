@@ -47,7 +47,7 @@ func (whatsAppNotificationAdapter) BuildRequest(channel *model.NotificationChann
 	return jsonNotificationRequest(endpoint, payload, headers, true, true)
 }
 
-func (whatsAppNotificationAdapter) ValidateResponse(body []byte) error {
+func (whatsAppNotificationAdapter) ValidateResponse(_ int, body []byte) error {
 	response, err := parseNotificationResponse(body)
 	if err != nil {
 		return err
