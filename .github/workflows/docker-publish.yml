@@ -313,13 +313,12 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
 
-      - name: Build bilingual update feed and release body
+      - name: Build bilingual release body
         shell: bash
         run: |
           set -euo pipefail
           cd backend
           go run ./cmd/release-notes validate "${CHANNEL}" "${APP_VERSION}"
-          go run ./cmd/release-notes feed "${CHANNEL}" "${APP_VERSION}" "${RUNNER_TEMP}/update-feed.json"
           go run ./cmd/release-notes markdown "${CHANNEL}" "${APP_VERSION}" "${RUNNER_TEMP}/release-notes.md"
 
       - name: Create or recover GitHub release
@@ -336,13 +335,9 @@ jobs:
 
           if gh release view "${VERSION}" --json isDraft >/tmp/seshat-release.json 2>/dev/null; then
             if [[ "$(jq -r '.isDraft' /tmp/seshat-release.json)" != "true" ]]; then
-              mkdir -p "${RUNNER_TEMP}/published-feed"
-              gh release download "${VERSION}" --pattern update-feed.json --dir "${RUNNER_TEMP}/published-feed"
-              cmp "${RUNNER_TEMP}/update-feed.json" "${RUNNER_TEMP}/published-feed/update-feed.json"
-              echo "Published release ${VERSION} already contains the expected update feed."
+              echo "Published release ${VERSION} already exists."
               exit 0
             fi
-            gh release upload "${VERSION}" "${RUNNER_TEMP}/update-feed.json#Seshat update feed" --clobber
             gh release edit "${VERSION}" --title "${VERSION}" --notes-file "${RUNNER_TEMP}/release-notes.md" "${prerelease_args[@]}" "${latest_args[@]}" --draft=false
             exit 0
           fi
@@ -353,9 +348,65 @@ jobs:
             --notes-file "${RUNNER_TEMP}/release-notes.md" \
             --draft \
             "${prerelease_args[@]}" \
-            "${latest_args[@]}" \
-            "${RUNNER_TEMP}/update-feed.json#Seshat update feed"
+            "${latest_args[@]}"
           gh release edit "${VERSION}" --draft=false
+
+  pages:
+    name: Publish website and update feeds
+    needs:
+      - prepare
+      - release-metadata
+    if: always() && needs.prepare.result == 'success' && needs.release-metadata.result == 'success' && vars.CLOUDFLARE_PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Set up Go for update feeds
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Node for website build
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Validate Cloudflare Pages configuration
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" || -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required when CLOUDFLARE_PAGES_ENABLED=true"
+            exit 1
+          fi
+
+      - name: Test and build bilingual website
+        working-directory: website
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run build
+
+      - name: Deploy website to Cloudflare Pages
+        id: pages-deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: website
+          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'seshatapp' }} --branch=main --commit-hash=${{ github.event.pull_request.merge_commit_sha }}
 
   summary:
     name: Write publish summary
@@ -364,6 +415,7 @@ jobs:
       - build
       - merge
       - release-metadata
+      - pages
     if: always() && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     env:
@@ -382,6 +434,8 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           MERGE_RESULT: ${{ needs.merge.result }}
           RELEASE_METADATA_RESULT: ${{ needs.release-metadata.result }}
+          PAGES_RESULT: ${{ needs.pages.result }}
+          PAGES_ENABLED: ${{ vars.CLOUDFLARE_PAGES_ENABLED || 'false' }}
         run: |
           image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
           {
@@ -396,6 +450,8 @@ jobs:
             echo "- Platform build jobs: \`${BUILD_RESULT}\`"
             echo "- Manifest job: \`${MERGE_RESULT}\`"
             echo "- Update metadata job: \`${RELEASE_METADATA_RESULT}\`"
+            echo "- Cloudflare Pages enabled: \`${PAGES_ENABLED}\`"
+            echo "- Website and static feeds job: \`${PAGES_RESULT}\`"
             if [[ "${PREPARE_RESULT}" != "success" ]]; then
               echo "- Result: metadata resolution or version check failed"
             elif [[ "${EXISTS}" == "true" ]]; then

@@ -1,0 +1,82 @@
+{
+  "meta": {
+    "homeTitle": "Seshat — 让每一条 Webhook 都清晰可读",
+    "homeDescription": "面向媒体服务器及周边服务的自托管 Webhook 信息流与通知路由平台。",
+    "releasesTitle": "Seshat 更新记录",
+    "releasesDescription": "Seshat Beta 与 Release 渠道的双语更新记录。"
+  },
+  "nav": {
+    "product": "产品",
+    "releases": "更新记录",
+    "github": "GitHub",
+    "language": "语言",
+    "english": "EN",
+    "chinese": "中文"
+  },
+  "accessibility": {
+    "skip": "跳到主要内容",
+    "home": "Seshat 主页",
+    "primaryNavigation": "主导航",
+    "eventPreview": "Seshat 标准化事件预览",
+    "releaseChannel": "发布通道"
+  },
+  "home": {
+    "eyebrow": "自托管 Webhook 运营平台",
+    "headline": "让每个事件都清晰可读。",
+    "lead": "Seshat 将嘈杂的 Webhook 数据转化为清晰的信息流，并在你自己的基础设施上把合适的消息送到合适的渠道。",
+    "githubCta": "前往 GitHub",
+    "releasesCta": "查看更新记录",
+    "signalLabel": "实时信号",
+    "mockApp": "Jellyfin",
+    "mockEvent": "播放进度",
+    "mockTitle": "清晰规范化的媒体事件",
+    "mockBody": "海报、剧集上下文、播放信息和外部资料链接，无需翻找原始 JSON。",
+    "mockRoute": "已路由至钉钉 · Markdown",
+    "principlesEyebrow": "为运营管理而设计",
+    "principlesTitle": "繁忙服务背后的从容控制面。",
+    "principlesLead": "保持协议隔离、投递可观察，并让每个事件都真正对人有用。",
+    "featureInboxTitle": "类型化信息流",
+    "featureInboxBody": "按 App 和消息类型筛选，查看标准化数据，并通过分页浏览历史记录。",
+    "featureAppsTitle": "感知 App 的数据补充",
+    "featureAppsBody": "以 Jellyfin 和 Emby 为数据来源，在缺失时由 TMDB 专注补充媒体信息。",
+    "featureRoutingTitle": "按能力选择消息格式",
+    "featureRoutingBody": "消息内容只生成一次，再由各推送渠道选择纯文本或 Markdown。",
+    "featureDeliveryTitle": "可观察的消息投递",
+    "featureDeliveryBody": "有限重试、清晰的渠道诊断和业务日志，让失败原因容易理解。",
+    "ecosystemEyebrow": "一个信息流，连接多种服务",
+    "ecosystemTitle": "把媒体事件连接到团队已经在使用的通知渠道。",
+    "appsLabel": "App",
+    "channelsLabel": "渠道",
+    "deployEyebrow": "掌控完整链路",
+    "deployTitle": "一份 Compose 文件即可部署。",
+    "deployBody": "默认使用 SQLite 运行前后端一体化容器，也可以在部署规模增长后连接 PostgreSQL。",
+    "copyHint": "生产部署建议固定到不可变版本标签。",
+    "versionEyebrow": "发布通道",
+    "versionTitle": "选择适合你的更新节奏。",
+    "betaLabel": "Beta",
+    "betaBody": "提前体验最新完成集成的功能变化。",
+    "releaseLabel": "Release",
+    "releaseBody": "适合生产环境的稳定发布通道。",
+    "latest": "最新",
+    "footer": "开源、自托管，并专注于清晰可理解的系统运营。"
+  },
+  "releases": {
+    "eyebrow": "更新历史",
+    "title": "用你的语言了解每次变化。",
+    "lead": "Beta 与 Release 的更新历史相互独立，应用只检查自身正在运行的通道。",
+    "allChanges": "全部变化",
+    "betaDescription": "预览构建与最新完成集成的功能。",
+    "releaseDescription": "面向生产环境的稳定构建。",
+    "latest": "最新",
+    "viewOnGithub": "在 GitHub 查看",
+    "upgradeNotes": "升级说明",
+    "empty": "该通道暂时还没有发布记录。",
+    "types": {
+      "feature": "功能",
+      "fix": "修复",
+      "security": "安全",
+      "change": "变更",
+      "deprecated": "弃用"
+    }
+  }
+}

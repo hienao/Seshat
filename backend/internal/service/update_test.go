@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,38 +28,30 @@ func localizedUpdateRelease(channel, version string) releasenotes.Release {
 	}
 }
 
-func TestUpdateServiceKeepsBetaAndReleaseIndependent(t *testing.T) {
+func TestUpdateServiceReadsOnlyCurrentChannelStaticFeed(t *testing.T) {
 	var requests atomic.Int32
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requests.Add(1)
-		writer.Header().Set("Content-Type", "application/json")
-		switch request.URL.Path {
-		case "/releases":
-			_ = json.NewEncoder(writer).Encode([]githubUpdateRelease{
-				{TagName: "beta-v0.9.0", Prerelease: true, PublishedAt: "2026-08-09T10:00:00Z", HTMLURL: "https://github.com/hienao/Seshat/releases/tag/beta-v0.9.0", Assets: []githubUpdateAsset{{Name: updateFeedAssetName, BrowserDownloadURL: server.URL + "/beta-feed", Size: 512}}},
-				{TagName: "v9.0.0", Prerelease: false, Assets: []githubUpdateAsset{{Name: updateFeedAssetName, BrowserDownloadURL: server.URL + "/release-feed", Size: 512}}},
-				{TagName: "beta-v99.0.0", Prerelease: true, Draft: true, Assets: []githubUpdateAsset{{Name: updateFeedAssetName, BrowserDownloadURL: server.URL + "/beta-feed", Size: 512}}},
-				{TagName: "beta-v0.8.0", Prerelease: true, PublishedAt: "2026-08-08T10:00:00Z", HTMLURL: "https://github.com/hienao/Seshat/releases/tag/beta-v0.8.0"},
-			})
-		case "/beta-feed":
-			_ = json.NewEncoder(writer).Encode(releasenotes.Feed{
-				SchemaVersion: releasenotes.SchemaVersion,
-				Channel:       "beta",
-				LatestVersion: "v0.9.0",
-				Releases: []releasenotes.Release{
-					localizedUpdateRelease("beta", "v0.9.0"),
-					localizedUpdateRelease("beta", "v0.7.0"),
-					localizedUpdateRelease("beta", "v0.8.0"),
-				},
-			})
-		default:
+		if request.URL.Path != "/updates/v1/beta.json" {
+			t.Errorf("unexpected update feed path: %s", request.URL.Path)
 			http.NotFound(writer, request)
+			return
 		}
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(releasenotes.Feed{
+			SchemaVersion: releasenotes.SchemaVersion,
+			Channel:       "beta",
+			LatestVersion: "v0.9.0",
+			Releases: []releasenotes.Release{
+				localizedUpdateRelease("beta", "v0.9.0"),
+				localizedUpdateRelease("beta", "v0.7.0"),
+				localizedUpdateRelease("beta", "v0.8.0"),
+			},
+		})
 	}))
 	defer server.Close()
 
-	service := newUpdateService(buildinfo.Info{Version: "v0.7.0", Channel: "beta", Commit: "abc", BuildTime: "now"}, server.URL+"/releases", server.Client(), nil)
+	service := newUpdateService(buildinfo.Info{Version: "v0.7.0", Channel: "beta", Commit: "abc", BuildTime: "now"}, server.URL+"/updates/v1/", server.Client(), nil)
 	service.cacheTTL = time.Hour
 	status, err := service.Check(t.Context(), false)
 	if err != nil {
@@ -70,39 +63,32 @@ func TestUpdateServiceKeepsBetaAndReleaseIndependent(t *testing.T) {
 	if len(status.Releases) != 2 || status.Releases[0].Version != "v0.8.0" || status.Releases[1].Version != "v0.9.0" {
 		t.Fatalf("unexpected beta release range: %+v", status.Releases)
 	}
-	if status.Releases[0].ImageTag != "beta-v0.8.0" || status.Releases[0].ReleaseURL == "" || status.Releases[1].PublishedAt == "" {
-		t.Fatalf("missing release metadata: %+v", status.Releases)
+	if status.Releases[0].ImageTag != "beta-v0.8.0" || status.Releases[0].ReleaseURL != "https://github.com/hienao/Seshat/releases/tag/beta-v0.8.0" {
+		t.Fatalf("missing generated release metadata: %+v", status.Releases)
 	}
-	requestCount := requests.Load()
 	if _, err := service.Check(t.Context(), false); err != nil {
 		t.Fatal(err)
 	}
-	if requests.Load() != requestCount {
-		t.Fatal("cached update check performed another remote request")
+	if requests.Load() != 1 {
+		t.Fatalf("cached update check performed %d requests, want 1", requests.Load())
 	}
 	if _, err := service.Check(t.Context(), true); err != nil {
 		t.Fatal(err)
 	}
-	if requests.Load() <= requestCount {
-		t.Fatal("forced update check did not refresh remote data")
+	if requests.Load() != 2 {
+		t.Fatalf("forced update check performed %d requests, want 2", requests.Load())
 	}
 }
 
-func TestUpdateServiceChecksOnlyStableReleases(t *testing.T) {
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		if request.URL.Path == "/releases" {
-			_ = json.NewEncoder(writer).Encode([]githubUpdateRelease{
-				{TagName: "beta-v99.0.0", Prerelease: true, Assets: []githubUpdateAsset{{Name: updateFeedAssetName, BrowserDownloadURL: server.URL + "/beta", Size: 100}}},
-				{TagName: "v0.2.0", HTMLURL: "https://github.com/hienao/Seshat/releases/tag/v0.2.0", Assets: []githubUpdateAsset{{Name: updateFeedAssetName, BrowserDownloadURL: server.URL + "/feed", Size: 100}}},
-			})
-			return
+func TestUpdateServiceChecksOnlyStableFeed(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/release.json" {
+			t.Errorf("unexpected update feed path: %s", request.URL.Path)
 		}
 		_ = json.NewEncoder(writer).Encode(releasenotes.Feed{SchemaVersion: 1, Channel: "release", LatestVersion: "v0.2.0", Releases: []releasenotes.Release{localizedUpdateRelease("release", "v0.1.0"), localizedUpdateRelease("release", "v0.2.0")}})
 	}))
 	defer server.Close()
-	service := newUpdateService(buildinfo.Info{Version: "v0.1.0", Channel: "release"}, server.URL+"/releases", server.Client(), nil)
+	service := newUpdateService(buildinfo.Info{Version: "v0.1.0", Channel: "release"}, server.URL, server.Client(), nil)
 	status, err := service.Check(t.Context(), false)
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +99,7 @@ func TestUpdateServiceChecksOnlyStableReleases(t *testing.T) {
 }
 
 func TestUpdateServiceDoesNotCheckDevelopmentBuilds(t *testing.T) {
-	service := newUpdateService(buildinfo.Info{Version: "dev", Channel: "dev"}, "https://invalid.example/releases", &http.Client{}, nil)
+	service := newUpdateService(buildinfo.Info{Version: "dev", Channel: "dev"}, "https://invalid.example/updates/v1", &http.Client{}, nil)
 	status, err := service.Check(t.Context(), false)
 	if err != nil {
 		t.Fatal(err)
@@ -124,18 +110,63 @@ func TestUpdateServiceDoesNotCheckDevelopmentBuilds(t *testing.T) {
 }
 
 func TestUpdateServiceRejectsCrossChannelFeed(t *testing.T) {
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		if request.URL.Path == "/releases" {
-			_ = json.NewEncoder(writer).Encode([]githubUpdateRelease{{TagName: "beta-v0.8.0", Prerelease: true, Assets: []githubUpdateAsset{{Name: updateFeedAssetName, BrowserDownloadURL: server.URL + "/feed", Size: 100}}}})
-			return
-		}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		_ = json.NewEncoder(writer).Encode(releasenotes.Feed{SchemaVersion: 1, Channel: "release", LatestVersion: "v0.8.0", Releases: []releasenotes.Release{localizedUpdateRelease("release", "v0.8.0")}})
 	}))
 	defer server.Close()
-	service := newUpdateService(buildinfo.Info{Version: "v0.7.0", Channel: "beta"}, server.URL+"/releases", server.Client(), nil)
+	service := newUpdateService(buildinfo.Info{Version: "v0.7.0", Channel: "beta"}, server.URL, server.Client(), nil)
 	if _, err := service.Check(t.Context(), false); err == nil {
 		t.Fatal("cross-channel update feed was accepted")
+	}
+}
+
+func TestUpdateServiceReturnsLastSuccessWhenRefreshFails(t *testing.T) {
+	var fail atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if fail.Load() {
+			http.Error(writer, "temporary failure", http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(writer).Encode(releasenotes.Feed{SchemaVersion: 1, Channel: "beta", LatestVersion: "v0.9.0", Releases: []releasenotes.Release{localizedUpdateRelease("beta", "v0.9.0")}})
+	}))
+	defer server.Close()
+	service := newUpdateService(buildinfo.Info{Version: "v0.8.0", Channel: "beta"}, server.URL, server.Client(), nil)
+	first, err := service.Check(t.Context(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fail.Store(true)
+	stale, err := service.Check(t.Context(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stale.LatestVersion != first.LatestVersion || !stale.CheckedAt.Equal(first.CheckedAt) {
+		t.Fatalf("last successful status was not preserved: first=%+v stale=%+v", first, stale)
+	}
+}
+
+func TestUpdateServiceCoalescesConcurrentCacheMisses(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests.Add(1)
+		time.Sleep(20 * time.Millisecond)
+		_ = json.NewEncoder(writer).Encode(releasenotes.Feed{SchemaVersion: 1, Channel: "beta", LatestVersion: "v0.9.0", Releases: []releasenotes.Release{localizedUpdateRelease("beta", "v0.9.0")}})
+	}))
+	defer server.Close()
+	service := newUpdateService(buildinfo.Info{Version: "v0.8.0", Channel: "beta"}, server.URL, server.Client(), nil)
+
+	var group sync.WaitGroup
+	for range 8 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if _, err := service.Check(t.Context(), false); err != nil {
+				t.Errorf("concurrent update check failed: %v", err)
+			}
+		}()
+	}
+	group.Wait()
+	if requests.Load() != 1 {
+		t.Fatalf("concurrent update checks performed %d requests, want 1", requests.Load())
 	}
 }

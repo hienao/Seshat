@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "channel": "beta",
+  "version": "v0.10.0",
+  "summary": {
+    "en": "A bilingual project site and rate-limit-free update delivery through Cloudflare Pages",
+    "zh-CN": "新增双语项目主页，并通过 Cloudflare Pages 提供不受 GitHub API 限流影响的更新检查"
+  },
+  "changes": [
+    {
+      "id": "cloudflare-pages-site",
+      "type": "feature",
+      "text": {
+        "en": "Added a responsive bilingual Seshat landing page and release-history page, with browser-language detection and a persistent manual language preference.",
+        "zh-CN": "新增响应式中英文 Seshat 项目主页和更新历史页面，支持浏览器语言自动识别以及优先级更高的持久化手动语言选择。"
+      }
+    },
+    {
+      "id": "static-channel-update-feeds",
+      "type": "feature",
+      "text": {
+        "en": "Beta and Release builds now use independent fixed JSON feeds on Cloudflare Pages, removing GitHub Releases API rate limits from application update checks.",
+        "zh-CN": "Beta 和 Release 现在通过 Cloudflare Pages 上相互独立的固定 JSON Feed 检查更新，不再受到 GitHub Releases API 限流影响。"
+      }
+    },
+    {
+      "id": "resilient-update-cache",
+      "type": "change",
+      "text": {
+        "en": "Update checks now coalesce concurrent cache misses and retain the most recent successful result when the static feed is temporarily unavailable or invalid.",
+        "zh-CN": "更新检查现在会合并并发缓存未命中请求，并在静态 Feed 暂时不可用或无效时保留最近一次成功结果。"
+      }
+    },
+    {
+      "id": "release-site-automation",
+      "type": "change",
+      "text": {
+        "en": "Beta and Release publishing can now rebuild and deploy the project site, bilingual release history, and both channel feeds to the seshatapp Cloudflare Pages project.",
+        "zh-CN": "Beta 和 Release 发版现在可以自动重建并部署项目主页、双语更新历史以及两个渠道的 Feed 到 seshatapp Cloudflare Pages 项目。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [
+      "Deploy the immutable beta-v0.10.0 image and restart the container.",
+      "The default update source is https://seshatapp.pages.dev/updates/v1. Set SESHAT_UPDATE_FEED_BASE_URL only when using a different Pages or custom domain."
+    ],
+    "zh-CN": [
+      "部署不可变镜像 beta-v0.10.0 并重启容器。",
+      "默认更新源为 https://seshatapp.pages.dev/updates/v1；只有使用其他 Pages 地址或自定义域名时才需要设置 SESHAT_UPDATE_FEED_BASE_URL。"
+    ]
+  }
+}

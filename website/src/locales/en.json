@@ -1,0 +1,82 @@
+{
+  "meta": {
+    "homeTitle": "Seshat — Make every webhook legible",
+    "homeDescription": "A self-hosted webhook inbox and notification router for media servers and the services around them.",
+    "releasesTitle": "Seshat releases",
+    "releasesDescription": "Bilingual release notes for Seshat Beta and Release channels."
+  },
+  "nav": {
+    "product": "Product",
+    "releases": "Releases",
+    "github": "GitHub",
+    "language": "Language",
+    "english": "EN",
+    "chinese": "中文"
+  },
+  "accessibility": {
+    "skip": "Skip to content",
+    "home": "Seshat home",
+    "primaryNavigation": "Primary navigation",
+    "eventPreview": "Seshat normalized event preview",
+    "releaseChannel": "Release channel"
+  },
+  "home": {
+    "eyebrow": "Self-hosted webhook operations",
+    "headline": "Every event, made legible.",
+    "lead": "Seshat turns noisy webhook payloads into a clear event stream, then routes the right message to the right channel—on your infrastructure.",
+    "githubCta": "View on GitHub",
+    "releasesCta": "Explore releases",
+    "signalLabel": "Live signal",
+    "mockApp": "Jellyfin",
+    "mockEvent": "Playback progress",
+    "mockTitle": "A beautifully normalized media event",
+    "mockBody": "Artwork, episode context, playback details and provider links—without digging through raw JSON.",
+    "mockRoute": "Routed to DingTalk · Markdown",
+    "principlesEyebrow": "Built for operators",
+    "principlesTitle": "A calm control plane for busy services.",
+    "principlesLead": "Keep protocols isolated, delivery observable and every event useful to a human.",
+    "featureInboxTitle": "Typed event stream",
+    "featureInboxBody": "Filter by app and message type, inspect normalized data, and page through history without loading everything at once.",
+    "featureAppsTitle": "App-aware enrichment",
+    "featureAppsBody": "Jellyfin and Emby remain the source of truth, with TMDB as a focused metadata fallback.",
+    "featureRoutingTitle": "Capability-based routing",
+    "featureRoutingBody": "Generate structured content once, then let each notification channel choose plain text or Markdown.",
+    "featureDeliveryTitle": "Observable delivery",
+    "featureDeliveryBody": "Bounded retries, clear channel diagnostics and business logs keep failures understandable.",
+    "ecosystemEyebrow": "One inbox, many edges",
+    "ecosystemTitle": "Connect media events to the channels your team already watches.",
+    "appsLabel": "Apps",
+    "channelsLabel": "Channels",
+    "deployEyebrow": "Own the whole path",
+    "deployTitle": "Deploy with one Compose file.",
+    "deployBody": "Run the unified Seshat container with SQLite by default, or connect PostgreSQL when your deployment grows.",
+    "copyHint": "Pin an immutable version tag for production deployments.",
+    "versionEyebrow": "Release lanes",
+    "versionTitle": "Choose the pace that fits your deployment.",
+    "betaLabel": "Beta",
+    "betaBody": "Early access to the newest integrated changes.",
+    "releaseLabel": "Release",
+    "releaseBody": "The stable lane for production environments.",
+    "latest": "Latest",
+    "footer": "Open source, self-hosted, and designed for understandable operations."
+  },
+  "releases": {
+    "eyebrow": "Release history",
+    "title": "What changed, in your language.",
+    "lead": "Beta and Release histories stay independent. Your installation only checks the lane it is running.",
+    "allChanges": "All changes",
+    "betaDescription": "Preview builds and the newest integrated features.",
+    "releaseDescription": "Stable builds intended for production use.",
+    "latest": "Latest",
+    "viewOnGithub": "View on GitHub",
+    "upgradeNotes": "Upgrade notes",
+    "empty": "No releases have been published in this channel yet.",
+    "types": {
+      "feature": "Feature",
+      "fix": "Fix",
+      "security": "Security",
+      "change": "Change",
+      "deprecated": "Deprecated"
+    }
+  }
+}
