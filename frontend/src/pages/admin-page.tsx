@@ -58,7 +58,7 @@ export function AdminPage() {
       setRetentionDays(String(settings.data.api_log_retention_days))
       setHTTPProxyURL(settings.data.http_proxy_url || '')
       setTMDBAPIKey(settings.data.tmdb_api_key || '')
-      setPublicBaseURL(settings.data.public_base_url || window.location.origin)
+      setPublicBaseURL(settings.data.public_base_url || '')
     }
   }, [settings.data])
 
@@ -104,8 +104,8 @@ export function AdminPage() {
             <div className="flex flex-col gap-4 rounded-xl bg-neutral-50 p-4 dark:bg-neutral-900 sm:flex-row sm:items-end sm:justify-between">
               <label className="min-w-0 flex-1 space-y-2 text-sm font-medium">
                 <span>{t('admin.publicBaseUrl')}</span>
-                <Input type="url" value={publicBaseURL} disabled={updateSettings.isPending} onChange={(event) => setPublicBaseURL(event.target.value)} placeholder="https://seshat.example.com" />
-                <span className={`block text-xs ${publicBaseURL && !publicBaseURLValid ? 'text-red-600' : 'text-neutral-500'}`}>{t('admin.publicBaseUrlHelp')}</span>
+                <Input type="url" value={publicBaseURL} disabled={updateSettings.isPending} onChange={(event) => setPublicBaseURL(event.target.value)} placeholder={window.location.origin} />
+                <span className={`block text-xs ${publicBaseURL && !publicBaseURLValid ? 'text-red-600' : 'text-neutral-500'}`}>{t('adminPublicBaseUrlOptionalHelp')}</span>
               </label>
               <AppButton disabled={updateSettings.isPending || !publicBaseURLValid || publicBaseURL.trim().replace(/\/$/, '') === settings.data?.public_base_url} onClick={() => updateSettings.mutate({ public_base_url: publicBaseURL.trim().replace(/\/$/, '') })}>{t(updateSettings.isPending ? 'common.states.saving' : 'admin.savePublicUrl')}</AppButton>
             </div>

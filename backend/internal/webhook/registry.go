@@ -27,8 +27,9 @@ type AppDefinition struct {
 }
 
 type IncomingRequest struct {
-	Headers map[string]string
-	Body    []byte
+	Headers         map[string]string
+	Body            []byte
+	SourceEventType string
 }
 
 type Presentation struct {
@@ -105,6 +106,9 @@ func (p *genericProvider) Verify(secret string, request IncomingRequest) bool {
 	return verifyRequest(secret, request)
 }
 func (p *genericProvider) DetectType(request IncomingRequest) string {
+	if request.SourceEventType != "" {
+		return request.SourceEventType
+	}
 	if value := header(request, "X-Webhook-Event"); value != "" {
 		return value
 	}
@@ -166,6 +170,9 @@ func (p *githubProvider) Verify(secret string, request IncomingRequest) bool {
 	return err == nil && hmac.Equal(actual.Sum(nil), expected)
 }
 func (p *githubProvider) DetectType(request IncomingRequest) string {
+	if request.SourceEventType != "" {
+		return request.SourceEventType
+	}
 	if value := header(request, "X-GitHub-Event"); value != "" {
 		return value
 	}

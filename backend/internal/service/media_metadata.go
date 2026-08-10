@@ -27,6 +27,7 @@ const (
 	defaultTMDBAPIBaseURL = "https://api.themoviedb.org/3"
 	tmdbImageBaseURL      = "https://image.tmdb.org/t/p/w342"
 	defaultProxyTestURL   = "https://api.themoviedb.org/3/configuration"
+	mediaServerFreshness  = time.Minute
 )
 
 type MediaMetadataService struct {
@@ -199,6 +200,10 @@ func (s *MediaMetadataService) TestConnection(request *TestTMDBConnectionRequest
 }
 
 func (s *MediaMetadataService) Enrich(presentation *webhook.Presentation, integrations ...*model.AppIntegration) error {
+	return s.EnrichContext(context.Background(), presentation, integrations...)
+}
+
+func (s *MediaMetadataService) EnrichContext(ctx context.Context, presentation *webhook.Presentation, integrations ...*model.AppIntegration) error {
 	if presentation == nil {
 		return nil
 	}
@@ -215,13 +220,13 @@ func (s *MediaMetadataService) Enrich(presentation *webhook.Presentation, integr
 
 	if len(integrations) > 0 && integrations[0] != nil {
 		integration := integrations[0]
-		used, err := s.enrichFromMediaServer(context.Background(), integration, presentation, media, now, retentionCutoff, retentionDays)
+		used, err := s.enrichFromMediaServer(ctx, integration, presentation, media, now, retentionCutoff, retentionDays)
+		if err != nil {
+			appLogging.Warn("webhook", "媒体服务器信息获取失败，将尝试可用缓存或 TMDB 回退", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "error": err})
+		}
 		if used {
 			webhook.RefreshMediaPresentation(presentation)
 			return nil
-		}
-		if err != nil {
-			appLogging.Warn("webhook", "媒体服务器信息获取失败，将尝试 TMDB 回退", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "error": err})
 		}
 	}
 	return s.enrichFromTMDB(presentation, media, now, retentionCutoff, retentionDays)
@@ -286,7 +291,8 @@ func (s *MediaMetadataService) enrichFromMediaServer(ctx context.Context, integr
 	if result.Error != nil {
 		return false, result.Error
 	}
-	if result.RowsAffected > 0 {
+	hasCached := result.RowsAffected > 0
+	if hasCached && cached.UpdatedAt.After(now.Add(-mediaServerFreshness)) {
 		if err := applyMediaServerMetadata(media, &cached); err != nil {
 			return false, err
 		}
@@ -294,6 +300,11 @@ func (s *MediaMetadataService) enrichFromMediaServer(ctx context.Context, integr
 	}
 	fetched, err := adapter.Fetch(ctx, settings, itemID)
 	if err != nil {
+		if hasCached {
+			if cacheErr := applyMediaServerMetadata(media, &cached); cacheErr == nil {
+				return true, err
+			}
+		}
 		return false, err
 	}
 	metadataJSON, err := json.Marshal(fetched.Fields)
