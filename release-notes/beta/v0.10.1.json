@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "channel": "beta",
+  "version": "v0.10.1",
+  "summary": {
+    "en": "Webhook media details are generated on demand, and notifications no longer require a public base URL",
+    "zh-CN": "Webhook 媒体详情改为按需生成，推送不再强制要求配置对外访问地址"
+  },
+  "changes": [
+    {
+      "id": "on-demand-webhook-presentation",
+      "type": "fix",
+      "text": {
+        "en": "Webhook events now persist the original payload and routing metadata, then generate normalized list, detail, public-page, and first-notification content when it is displayed.",
+        "zh-CN": "Webhook 事件现在只持久化原始消息和路由元数据，并在列表、详情、公开页面及首次推送展示时生成标准化内容。"
+      }
+    },
+    {
+      "id": "fresh-media-server-metadata",
+      "type": "fix",
+      "text": {
+        "en": "Jellyfin and Emby displays now refresh media details from the matching server by Item ID, while briefly reusing fresh cache entries and falling back to stale cache when the server is unavailable.",
+        "zh-CN": "Jellyfin 和 Emby 展示现在会按 Item ID 从对应媒体服务器刷新详情，同时短暂复用新鲜缓存，并在服务器不可用时回退到已有缓存。"
+      }
+    },
+    {
+      "id": "optional-public-base-url",
+      "type": "fix",
+      "text": {
+        "en": "Notification delivery now succeeds without a public base URL and only appends a no-sign-in detail link when the setting is explicitly configured.",
+        "zh-CN": "未配置对外访问地址时推送现在仍可正常发送；只有明确保存该设置后，消息才会附加免登录详情链接。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [
+      "Deploy the immutable beta-v0.10.1 image and restart the container.",
+      "No database migration or required configuration change is needed. Configure the public base URL only if notification detail links are desired."
+    ],
+    "zh-CN": [
+      "部署不可变镜像 beta-v0.10.1 并重启容器。",
+      "本次无需数据库迁移或必填配置变更；仅在需要推送详情链接时配置对外访问地址。"
+    ]
+  }
+}
