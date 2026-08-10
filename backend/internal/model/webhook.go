@@ -24,7 +24,8 @@ type AppIntegration struct {
 
 func (AppIntegration) TableName() string { return "app_integrations" }
 
-// WebhookEvent 是一次收到的 Webhook 消息及其归一化结果。
+// WebhookEvent 持久化一次 Webhook 原始消息及去重、筛选和通知路由所需的元数据。
+// Title、Summary、Severity 和 Presentation 仅在 API 响应或首次推送时按需填充，不写回事件记录。
 type WebhookEvent struct {
 	ID                  uint           `gorm:"primarykey" json:"id"`
 	PublicToken         string         `gorm:"uniqueIndex;size:64;default:null" json:"-"`

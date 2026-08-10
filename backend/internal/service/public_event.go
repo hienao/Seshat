@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -30,6 +31,10 @@ type PublicEventResponse struct {
 }
 
 func (s *WebhookService) GetPublicEvent(publicToken string) (*PublicEventResponse, error) {
+	return s.GetPublicEventContext(context.Background(), publicToken)
+}
+
+func (s *WebhookService) GetPublicEventContext(ctx context.Context, publicToken string) (*PublicEventResponse, error) {
 	publicToken = strings.TrimSpace(publicToken)
 	if len(publicToken) < 32 || len(publicToken) > 64 {
 		return nil, ErrPublicEventNotFound
@@ -39,6 +44,13 @@ func (s *WebhookService) GetPublicEvent(publicToken string) (*PublicEventRespons
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrPublicEventNotFound
 		}
+		return nil, err
+	}
+	var integration model.AppIntegration
+	if err := database.GetDB().First(&integration, event.IntegrationID).Error; err != nil {
+		return nil, err
+	}
+	if err := s.materializeEvent(ctx, &event, &integration); err != nil {
 		return nil, err
 	}
 	var presentation webhook.Presentation

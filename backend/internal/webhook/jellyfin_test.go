@@ -64,6 +64,19 @@ func TestJellyfinPlaybackPresentation(t *testing.T) {
 	}
 }
 
+func TestJellyfinItemAddedEpisodePayloadKeepsMediaLookupIdentity(t *testing.T) {
+	provider := NewJellyfinProvider()
+	request := IncomingRequest{Body: []byte(`{"ServerId":"71fb2932097a4c21bfb1ed685db098e6","ServerName":"Hienao的影院","NotificationType":"ItemAdded","Name":"苟师猛踹老流氓","Overview":"廖师傅欺软怕硬。","ItemId":"05717b8bfec2c871b7d37f2644e84f97","ItemType":"Episode","Year":2026,"SeriesName":"主角","SeriesId":"a049c405030967f7ad186708d0793d87","SeriesPremiereDate":"2026-05-10","SeasonNumber":1,"EpisodeNumber":15}`)}
+	presentation := provider.Normalize("media_added", request)
+	media := presentation.Data["media"].(map[string]interface{})
+	if media["id"] != "05717b8bfec2c871b7d37f2644e84f97" || media["series"] != "主角" || media["season"] != "1" || media["episode"] != "15" {
+		t.Fatalf("unexpected ItemAdded lookup identity: %+v", media)
+	}
+	if media["name"] != "苟师猛踹老流氓" || media["overview"] != "廖师傅欺软怕硬。" || media["display_name"] != "主角 · S01E15 · 苟师猛踹老流氓" {
+		t.Fatalf("unexpected ItemAdded presentation: %+v", media)
+	}
+}
+
 func TestJellyfinMediaPresentationDoesNotRepeatMediaType(t *testing.T) {
 	provider := NewJellyfinProvider()
 	request := IncomingRequest{Body: []byte(`{"NotificationType":"ItemAdded","Name":"我的团长我的团 · S01E04 · 团长龙文章现身带领众人","ItemType":"Episode","Overview":"自称团长的家伙把他们带出了板房。"}`)}

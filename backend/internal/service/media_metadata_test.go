@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -273,6 +274,7 @@ func TestJellyfinMetadataTakesPriorityAndCachesProtectedImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	mediaRequests, tmdbRequests := 0, 0
+	mediaTitle := "服务端标题"
 	mediaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		mediaRequests++
 		if request.Header.Get("X-Emby-Token") != "jellyfin-key" {
@@ -281,7 +283,7 @@ func TestJellyfinMetadataTakesPriorityAndCachesProtectedImage(t *testing.T) {
 		switch request.URL.Path {
 		case "/Items/item-10":
 			writer.Header().Set("Content-Type", "application/json")
-			_, _ = writer.Write([]byte(`{"Id":"item-10","Name":"服务端标题","Type":"Episode","SeriesName":"服务端剧集","ParentIndexNumber":2,"IndexNumber":3,"ProductionYear":2026,"Overview":"Jellyfin 简介","RunTimeTicks":6000000000,"ProviderIds":{"Tmdb":"88","Tvdb":"99"},"ImageTags":{"Primary":"tag"}}`))
+			_, _ = writer.Write([]byte(fmt.Sprintf(`{"Id":"item-10","Name":%q,"Type":"Episode","SeriesName":"服务端剧集","ParentIndexNumber":2,"IndexNumber":3,"ProductionYear":2026,"Overview":"Jellyfin 简介","RunTimeTicks":6000000000,"ProviderIds":{"Tmdb":"88","Tvdb":"99"},"ImageTags":{"Primary":"tag"}}`, mediaTitle)))
 		case "/Items/item-10/Images/Primary":
 			writer.Header().Set("Content-Type", "image/png")
 			_, _ = writer.Write([]byte("png-image-data"))
@@ -329,6 +331,29 @@ func TestJellyfinMetadataTakesPriorityAndCachesProtectedImage(t *testing.T) {
 	}
 	if presentation.Title != "Jellyfin · 播放进度 · 服务端剧集 · S02E03 · 服务端标题" {
 		t.Fatalf("presentation title was not refreshed: %q", presentation.Title)
+	}
+	cachedPresentation := webhook.Presentation{Title: "Jellyfin · 播放进度 · Webhook 标题", Data: map[string]interface{}{
+		"category": "playback", "event_label": "播放进度", "media": map[string]interface{}{"id": "item-10", "type": "Episode", "name": "Webhook 标题"},
+	}}
+	if err := metadataService.Enrich(&cachedPresentation, integration); err != nil {
+		t.Fatal(err)
+	}
+	if mediaRequests != 2 {
+		t.Fatalf("fresh media cache made %d requests, want 2", mediaRequests)
+	}
+	if err := database.GetDB().Model(&model.MediaMetadataCache{}).Where("provider = ? AND external_id = ?", "jellyfin", "item-10").Update("updated_at", time.Now().Add(-2*mediaServerFreshness)).Error; err != nil {
+		t.Fatal(err)
+	}
+	mediaTitle = "刮削完成后的标题"
+	refreshedPresentation := webhook.Presentation{Title: "Jellyfin · 新增媒体 · Webhook 标题", Data: map[string]interface{}{
+		"category": "media", "event_label": "新增媒体", "media": map[string]interface{}{"id": "item-10", "type": "Episode", "name": "Webhook 标题"},
+	}}
+	if err := metadataService.Enrich(&refreshedPresentation, integration); err != nil {
+		t.Fatal(err)
+	}
+	refreshedMedia := refreshedPresentation.Data["media"].(map[string]interface{})
+	if mediaRequests != 4 || refreshedMedia["name"] != mediaTitle {
+		t.Fatalf("stale media cache was not refreshed: requests=%d media=%+v", mediaRequests, refreshedMedia)
 	}
 }
 

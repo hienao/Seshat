@@ -24,7 +24,7 @@ func setupNotificationTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.SystemSetting{}, &model.NotificationChannel{}, &model.AppIntegration{}, &model.WebhookEvent{}, &model.IntegrationNotificationRule{}, &model.NotificationDelivery{}); err != nil {
+	if err := db.AutoMigrate(&model.SystemSetting{}, &model.MediaMetadataCache{}, &model.NotificationChannel{}, &model.AppIntegration{}, &model.WebhookEvent{}, &model.IntegrationNotificationRule{}, &model.NotificationDelivery{}); err != nil {
 		t.Fatal(err)
 	}
 	database.DB = db
@@ -426,6 +426,50 @@ func TestNotificationTextEndsWithPublicDetailURL(t *testing.T) {
 	rendered := markdownNotificationRenderer{}.Render(buildNotificationDocument(message, true), notificationContentPolicy{})
 	if !strings.HasSuffix(rendered.Body, "[消息详情](https://seshat.example.com/public/events/token)") {
 		t.Fatalf("Markdown rendering missing detail link: %q", rendered.Body)
+	}
+}
+
+func TestNotificationWorkerSendsWithoutPublicBaseURL(t *testing.T) {
+	db := setupNotificationTestDB(t)
+	received := make(chan map[string]interface{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload map[string]interface{}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Errorf("decode notification payload: %v", err)
+		}
+		received <- payload
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	channel, integration := createNotificationFixture(t, db)
+	channel.SecretConfig = []byte(fmt.Sprintf(`{"url":%q}`, server.URL))
+	if err := db.Model(&channel).Update("secret_config", channel.SecretConfig).Error; err != nil {
+		t.Fatal(err)
+	}
+	event := model.WebhookEvent{
+		IntegrationID: integration.ID, AppCode: "jellyfin", SourceEventType: "ItemAdded", DisplayEventType: "media_added",
+		DedupeKey: "without-public-base-url", Status: "processed", RawBody: `{"NotificationType":"ItemAdded","ItemId":"item-1","Name":"Arrival","ItemType":"Movie"}`, ReceivedAt: time.Now(),
+	}
+	if err := db.Create(&event).Error; err != nil {
+		t.Fatal(err)
+	}
+	delivery := model.NotificationDelivery{EventID: event.ID, IntegrationID: integration.ID, ChannelID: channel.ID, ChannelName: channel.Name, ChannelType: channel.Type, EventType: event.DisplayEventType, Status: "sending", AttemptCount: 1}
+	if err := db.Create(&delivery).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	NewNotificationWorker().send(&delivery)
+	if err := db.First(&delivery, delivery.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if delivery.Status != "succeeded" {
+		t.Fatalf("delivery without public base URL = %+v", delivery)
+	}
+	payload := <-received
+	eventPayload, _ := payload["event"].(map[string]interface{})
+	if eventPayload["detail_url"] != "" || strings.Contains(fmt.Sprint(eventPayload["summary"]), "/public/events/") {
+		t.Fatalf("notification unexpectedly included a public detail link: %+v", eventPayload)
 	}
 }
 
