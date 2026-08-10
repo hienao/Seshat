@@ -180,11 +180,12 @@ func (h *WebhookHandler) ListEvents(c *gin.Context) {
 			return
 		}
 	}
-	items, err := h.service.ListEvents(c.GetUint("user_id"), service.EventListFilter{AppCode: c.Query("app_code"), IntegrationID: uint(integrationID), EventType: c.Query("event_type"), Limit: limit, Offset: offset})
+	items, err := h.service.ListEventsContext(c.Request.Context(), c.GetUint("user_id"), service.EventListFilter{AppCode: c.Query("app_code"), IntegrationID: uint(integrationID), EventType: c.Query("event_type"), Limit: limit, Offset: offset})
 	if err != nil {
 		response.InternalError(c, err.Error())
 		return
 	}
+	c.Header("Cache-Control", "private, no-store")
 	response.Success(c, items)
 }
 
@@ -194,11 +195,12 @@ func (h *WebhookHandler) GetEvent(c *gin.Context) {
 		response.BadRequest(c, "消息 ID 无效")
 		return
 	}
-	item, err := h.service.GetEvent(c.GetUint("user_id"), uint(id))
+	item, err := h.service.GetEventContext(c.Request.Context(), c.GetUint("user_id"), uint(id))
 	if err != nil {
 		response.NotFound(c, "消息不存在")
 		return
 	}
+	c.Header("Cache-Control", "private, no-store")
 	response.Success(c, item)
 }
 
@@ -212,7 +214,7 @@ func (h *WebhookHandler) GetEvent(c *gin.Context) {
 // @Failure 404 {object} response.Response
 // @Router /api/public/events/{token} [get]
 func (h *WebhookHandler) GetPublicEvent(c *gin.Context) {
-	item, err := h.service.GetPublicEvent(c.Param("token"))
+	item, err := h.service.GetPublicEventContext(c.Request.Context(), c.Param("token"))
 	if err != nil {
 		if errors.Is(err, service.ErrPublicEventNotFound) {
 			response.NotFound(c, "消息不存在")

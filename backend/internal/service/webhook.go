@@ -287,17 +287,8 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 	if err != nil {
 		return result, newWebhookIngestError("webhook_public_token_failed", http.StatusInternalServerError, "生成消息访问标识失败", err)
 	}
-	presentation := provider.Normalize(displayType, request)
-	presentation.SchemaVersion = 1
-	if displayType != "media_deleted" {
-		if err := s.mediaMetadata.Enrich(&presentation, &integration); err != nil {
-			appLogging.Warn("webhook", "外部媒体信息补充失败", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "error": err})
-		}
-	}
-	presentationJSON, _ := json.Marshal(presentation)
-	title, summary, severity := presentation.Title, presentation.Summary, presentation.Severity
 	now := time.Now()
-	event := &model.WebhookEvent{PublicToken: publicToken, IntegrationID: integration.ID, AppCode: integration.AppCode, SourceEventType: sourceEventType, DisplayEventType: displayType, ExternalEventID: externalID, DedupeKey: dedupeKey, Status: "processed", IsFallback: isFallback, Title: title, Summary: summary, Severity: severity, PresentationVersion: 1, Presentation: datatypes.JSON(presentationJSON), RawBody: string(body), ContentType: contentType, SafeHeaders: datatypes.JSON([]byte(`{}`)), ReceivedAt: now}
+	event := &model.WebhookEvent{PublicToken: publicToken, IntegrationID: integration.ID, AppCode: integration.AppCode, SourceEventType: sourceEventType, DisplayEventType: displayType, ExternalEventID: externalID, DedupeKey: dedupeKey, Status: "processed", IsFallback: isFallback, RawBody: string(body), ContentType: contentType, SafeHeaders: datatypes.JSON([]byte(`{}`)), ReceivedAt: now}
 	if err := database.GetDB().Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(event).Error; err != nil {
 			return err
@@ -311,6 +302,10 @@ func (s *WebhookService) Ingest(endpointKey string, headers map[string]string, b
 }
 
 func (s *WebhookService) ListEvents(ownerID uint, filter EventListFilter) (*EventListResponse, error) {
+	return s.ListEventsContext(context.Background(), ownerID, filter)
+}
+
+func (s *WebhookService) ListEventsContext(ctx context.Context, ownerID uint, filter EventListFilter) (*EventListResponse, error) {
 	if filter.Limit <= 0 || filter.Limit > 100 {
 		filter.Limit = 30
 	}
@@ -335,13 +330,93 @@ func (s *WebhookService) ListEvents(ownerID uint, filter EventListFilter) (*Even
 	if err := query.Order("webhook_events.received_at desc, webhook_events.id desc").Limit(filter.Limit).Offset(filter.Offset).Find(&items).Error; err != nil {
 		return nil, err
 	}
+	if err := s.materializeEvents(ctx, items); err != nil {
+		return nil, err
+	}
 	return &EventListResponse{Items: items, Total: total, Limit: filter.Limit, Offset: filter.Offset, HasMore: int64(filter.Offset+len(items)) < total}, nil
 }
 
 func (s *WebhookService) GetEvent(ownerID, id uint) (*WebhookEventDetail, error) {
+	return s.GetEventContext(context.Background(), ownerID, id)
+}
+
+func (s *WebhookService) GetEventContext(ctx context.Context, ownerID, id uint) (*WebhookEventDetail, error) {
 	var item model.WebhookEvent
 	err := database.GetDB().Joins("JOIN app_integrations ON app_integrations.id = webhook_events.integration_id").Where("webhook_events.id = ? AND app_integrations.owner_id = ?", id, ownerID).First(&item).Error
+	if err != nil {
+		return &WebhookEventDetail{WebhookEvent: item}, err
+	}
+	var integration model.AppIntegration
+	if err := database.GetDB().First(&integration, item.IntegrationID).Error; err != nil {
+		return &WebhookEventDetail{WebhookEvent: item}, err
+	}
+	if err := s.materializeEvent(ctx, &item, &integration); err != nil {
+		return &WebhookEventDetail{WebhookEvent: item}, err
+	}
 	return &WebhookEventDetail{WebhookEvent: item, RawBody: item.RawBody}, err
+}
+
+func (s *WebhookService) materializeEvents(ctx context.Context, items []model.WebhookEvent) error {
+	if len(items) == 0 {
+		return nil
+	}
+	integrationIDs := make([]uint, 0, len(items))
+	seen := make(map[uint]struct{}, len(items))
+	for i := range items {
+		if _, ok := seen[items[i].IntegrationID]; !ok {
+			seen[items[i].IntegrationID] = struct{}{}
+			integrationIDs = append(integrationIDs, items[i].IntegrationID)
+		}
+	}
+	var integrations []model.AppIntegration
+	if err := database.GetDB().Where("id IN ?", integrationIDs).Find(&integrations).Error; err != nil {
+		return err
+	}
+	byID := make(map[uint]*model.AppIntegration, len(integrations))
+	for i := range integrations {
+		byID[integrations[i].ID] = &integrations[i]
+	}
+	for i := range items {
+		integration := byID[items[i].IntegrationID]
+		if integration == nil {
+			return errors.New("Webhook 接入实例不存在")
+		}
+		if err := s.materializeEvent(ctx, &items[i], integration); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *WebhookService) materializeEvent(ctx context.Context, event *model.WebhookEvent, integration *model.AppIntegration) error {
+	if event == nil || integration == nil {
+		return errors.New("Webhook 消息或接入实例不存在")
+	}
+	provider, ok := s.registry.Get(event.AppCode)
+	if !ok {
+		return errors.New("Webhook App 类型不可用")
+	}
+	if len(event.RawBody) == 0 && len(event.Presentation) > 0 {
+		return nil
+	}
+	request := webhook.IncomingRequest{Body: []byte(event.RawBody), SourceEventType: event.SourceEventType}
+	presentation := provider.Normalize(event.DisplayEventType, request)
+	presentation.SchemaVersion = 1
+	if event.DisplayEventType != "media_deleted" {
+		if err := s.mediaMetadata.EnrichContext(ctx, &presentation, integration); err != nil {
+			appLogging.Warn("webhook", "展示媒体信息补充失败", appLogging.Fields{"app_code": integration.AppCode, "integration_id": integration.ID, "event_id": event.ID, "error": err})
+		}
+	}
+	presentationJSON, err := json.Marshal(presentation)
+	if err != nil {
+		return err
+	}
+	event.Title = presentation.Title
+	event.Summary = presentation.Summary
+	event.Severity = presentation.Severity
+	event.PresentationVersion = presentation.SchemaVersion
+	event.Presentation = datatypes.JSON(presentationJSON)
+	return nil
 }
 
 func (s *WebhookService) GetCachedMediaImage(token string) (*model.MediaMetadataCache, error) {

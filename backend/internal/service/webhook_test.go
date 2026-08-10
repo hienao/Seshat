@@ -33,13 +33,19 @@ func setupWebhookTestDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	database.DB = db
-	if err := db.AutoMigrate(&model.AppIntegration{}, &model.WebhookEvent{}); err != nil {
+	if err := db.AutoMigrate(&model.SystemSetting{}, &model.MediaMetadataCache{}, &model.AppIntegration{}, &model.WebhookEvent{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.WebhookEvent{}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.AppIntegration{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.MediaMetadataCache{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.SystemSetting{}).Error; err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { database.DB = nil })
@@ -90,12 +96,8 @@ func TestWebhookUsesAppDefaultEventType(t *testing.T) {
 	if result.AppCode != "generic" || result.IntegrationID != integration.ID || result.EventID != event.ID {
 		t.Fatalf("unexpected ingest result: %+v", result)
 	}
-	var presentation map[string]interface{}
-	if err := json.Unmarshal(event.Presentation, &presentation); err != nil {
-		t.Fatal(err)
-	}
-	if presentation["schema_version"] != float64(1) {
-		t.Fatal("missing presentation schema version")
+	if event.Title != "" || event.Summary != "" || event.Severity != "" || len(event.Presentation) != 0 {
+		t.Fatalf("ingest persisted derived presentation fields: %+v", event)
 	}
 	publicEvent, err := service.GetPublicEvent(event.PublicToken)
 	if err != nil {
@@ -293,6 +295,13 @@ func TestWebhookDeduplicatesExternalEventID(t *testing.T) {
 	if first.EventID == 0 || second.EventID != first.EventID {
 		t.Fatalf("deduplicated event IDs = %d and %d", first.EventID, second.EventID)
 	}
+	displayed, err := service.GetEvent(7, first.EventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if displayed.Title != "GitHub · push · demo/repo" {
+		t.Fatalf("dynamic GitHub title = %q", displayed.Title)
+	}
 }
 
 func TestEmbyWebhookPreservesSourceTypeAndUsesNormalizedDisplayType(t *testing.T) {
@@ -313,8 +322,12 @@ func TestEmbyWebhookPreservesSourceTypeAndUsesNormalizedDisplayType(t *testing.T
 	if event.SourceEventType != "library.new" || event.DisplayEventType != "media_added" || event.IsFallback {
 		t.Fatalf("unexpected event types: source=%q display=%q fallback=%v", event.SourceEventType, event.DisplayEventType, event.IsFallback)
 	}
+	displayed, err := service.GetEvent(7, event.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var presentation map[string]interface{}
-	if err := json.Unmarshal(event.Presentation, &presentation); err != nil {
+	if err := json.Unmarshal(displayed.Presentation, &presentation); err != nil {
 		t.Fatal(err)
 	}
 	data := presentation["data"].(map[string]interface{})
@@ -323,7 +336,7 @@ func TestEmbyWebhookPreservesSourceTypeAndUsesNormalizedDisplayType(t *testing.T
 	}
 }
 
-func TestMediaDeletedSkipsMediaServerWhileMediaAddedStillFetches(t *testing.T) {
+func TestMediaMetadataIsFetchedOnlyWhileDisplayingNonDeletedEvents(t *testing.T) {
 	tests := []struct {
 		name         string
 		appCode      string
@@ -350,10 +363,6 @@ func TestMediaDeletedSkipsMediaServerWhileMediaAddedStillFetches(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			setupWebhookTestDB(t)
-			if err := database.GetDB().AutoMigrate(&model.SystemSetting{}, &model.MediaMetadataCache{}); err != nil {
-				t.Fatal(err)
-			}
-
 			requests := 0
 			mediaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				requests++
@@ -397,8 +406,12 @@ func TestMediaDeletedSkipsMediaServerWhileMediaAddedStillFetches(t *testing.T) {
 			if err := database.GetDB().Where("display_event_type = ?", "media_deleted").First(&deleted).Error; err != nil {
 				t.Fatal(err)
 			}
+			deletedDetail, err := webhookService.GetEvent(7, deleted.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
 			var deletedPresentation webhook.Presentation
-			if err := json.Unmarshal(deleted.Presentation, &deletedPresentation); err != nil {
+			if err := json.Unmarshal(deletedDetail.Presentation, &deletedPresentation); err != nil {
 				t.Fatal(err)
 			}
 			deletedMedia := deletedPresentation.Data["media"].(map[string]interface{})
@@ -409,8 +422,19 @@ func TestMediaDeletedSkipsMediaServerWhileMediaAddedStillFetches(t *testing.T) {
 			if _, err := webhookService.Ingest(created.EndpointKey, headers, []byte(test.addedBody), "application/json"); err != nil {
 				t.Fatal(err)
 			}
-			if requests != 1 {
-				t.Fatalf("added event made %d media server requests, want 1", requests)
+			if requests != 0 {
+				t.Fatalf("ingest made %d media server requests, want 0", requests)
+			}
+			var added model.WebhookEvent
+			if err := database.GetDB().Where("display_event_type = ?", "media_added").First(&added).Error; err != nil {
+				t.Fatal(err)
+			}
+			addedDetail, err := webhookService.GetEvent(7, added.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if requests != 1 || addedDetail.Title != test.name+" · 新增媒体 · API title" {
+				t.Fatalf("dynamic media presentation = %q after %d requests", addedDetail.Title, requests)
 			}
 		})
 	}

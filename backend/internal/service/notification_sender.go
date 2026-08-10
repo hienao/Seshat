@@ -94,12 +94,13 @@ func (s *NotificationService) TestChannel(ownerID, id uint) (*NotificationChanne
 }
 
 type NotificationWorker struct {
-	done chan struct{}
-	wg   sync.WaitGroup
+	done     chan struct{}
+	wg       sync.WaitGroup
+	webhooks *WebhookService
 }
 
 func NewNotificationWorker() *NotificationWorker {
-	return &NotificationWorker{done: make(chan struct{})}
+	return &NotificationWorker{done: make(chan struct{}), webhooks: NewWebhookService()}
 }
 
 func (w *NotificationWorker) Start() {
@@ -193,6 +194,12 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 		w.fail(delivery, 0, errors.New("推送渠道已停用"), false)
 		return
 	}
+	if delivery.ContentVersion == 0 {
+		if err := w.webhooks.materializeEvent(context.Background(), &event, &integration); err != nil {
+			w.fail(delivery, 0, errors.New("生成推送展示内容失败"), true)
+			return
+		}
+	}
 	message := outboundMessage{Title: event.Title, Body: event.Summary, Severity: event.Severity, AppCode: event.AppCode, IntegrationID: integration.ID, IntegrationName: integration.Name, EventID: event.ID, EventType: event.DisplayEventType, ReceivedAt: event.ReceivedAt}
 	if message.Title == "" {
 		message.Title = integration.Name + " · " + event.DisplayEventType
@@ -200,17 +207,15 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 	if message.Body == "" {
 		message.Body = "收到一条新的 Webhook 消息"
 	}
-	if err := ensurePublicEventToken(&event); err != nil {
-		w.fail(delivery, 0, errors.New("生成消息详情链接失败"), true)
-		return
-	}
 	publicBaseURL := NewSettingService().PublicBaseURL()
-	if publicBaseURL == "" {
-		w.fail(delivery, 0, errors.New("系统尚未配置对外访问地址"), false)
-		return
+	if publicBaseURL != "" {
+		if err := ensurePublicEventToken(&event); err != nil {
+			w.fail(delivery, 0, errors.New("生成消息详情链接失败"), true)
+			return
+		}
+		message.DetailURL = publicBaseURL + "/public/events/" + url.PathEscape(event.PublicToken)
+		message.PublicBaseURL = publicBaseURL
 	}
-	message.DetailURL = publicBaseURL + "/public/events/" + url.PathEscape(event.PublicToken)
-	message.PublicBaseURL = publicBaseURL
 	if len(event.Presentation) > 0 {
 		var presentation webhook.Presentation
 		if json.Unmarshal(event.Presentation, &presentation) == nil {
