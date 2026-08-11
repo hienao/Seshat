@@ -281,9 +281,12 @@ func TestJellyfinMetadataTakesPriorityAndCachesProtectedImage(t *testing.T) {
 			t.Errorf("media API key header = %q", request.Header.Get("X-Emby-Token"))
 		}
 		switch request.URL.Path {
-		case "/Items/item-10":
+		case "/Items":
+			if request.URL.Query().Get("Ids") != "item-10" || request.URL.Query().Get("Limit") != "1" || request.URL.Query().Get("EnableImages") != "true" || request.URL.Query().Get("EnableUserData") != "false" {
+				t.Errorf("unexpected Jellyfin item query: %s", request.URL.RawQuery)
+			}
 			writer.Header().Set("Content-Type", "application/json")
-			_, _ = writer.Write([]byte(fmt.Sprintf(`{"Id":"item-10","Name":%q,"Type":"Episode","SeriesName":"服务端剧集","ParentIndexNumber":2,"IndexNumber":3,"ProductionYear":2026,"Overview":"Jellyfin 简介","RunTimeTicks":6000000000,"ProviderIds":{"Tmdb":"88","Tvdb":"99"},"ImageTags":{"Primary":"tag"}}`, mediaTitle)))
+			_, _ = writer.Write([]byte(fmt.Sprintf(`{"Items":[{"Id":"item-10","Name":%q,"Type":"Episode","SeriesName":"服务端剧集","ParentIndexNumber":2,"IndexNumber":3,"ProductionYear":2026,"Overview":"Jellyfin 简介","RunTimeTicks":6000000000,"ProviderIds":{"Tmdb":"88","Tvdb":"99"}}]}`, mediaTitle)))
 		case "/Items/item-10/Images/Primary":
 			writer.Header().Set("Content-Type", "image/png")
 			_, _ = writer.Write([]byte("png-image-data"))
