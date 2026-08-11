@@ -338,25 +338,30 @@ func TestEmbyWebhookPreservesSourceTypeAndUsesNormalizedDisplayType(t *testing.T
 
 func TestMediaMetadataIsFetchedOnlyWhileDisplayingNonDeletedEvents(t *testing.T) {
 	tests := []struct {
-		name         string
-		appCode      string
-		deletedBody  string
-		addedBody    string
-		expectedPath string
+		name             string
+		appCode          string
+		deletedBody      string
+		addedBody        string
+		metadataPath     string
+		imagePath        string
+		expectedRequests int
 	}{
 		{
-			name:         "Jellyfin",
-			appCode:      "jellyfin",
-			deletedBody:  `{"NotificationType":"ItemDeleted","ItemId":"item-1","Name":"Webhook deleted title","ItemType":"Movie"}`,
-			addedBody:    `{"NotificationType":"ItemAdded","ItemId":"item-1","Name":"Webhook added title","ItemType":"Movie"}`,
-			expectedPath: "/Items/item-1",
+			name:             "Jellyfin",
+			appCode:          "jellyfin",
+			deletedBody:      `{"NotificationType":"ItemDeleted","ItemId":"item-1","Name":"Webhook deleted title","ItemType":"Movie"}`,
+			addedBody:        `{"NotificationType":"ItemAdded","ItemId":"item-1","Name":"Webhook added title","ItemType":"Movie"}`,
+			metadataPath:     "/Items",
+			imagePath:        "/Items/item-1/Images/Primary",
+			expectedRequests: 2,
 		},
 		{
-			name:         "Emby",
-			appCode:      "emby",
-			deletedBody:  `{"Event":"library.deleted","Item":{"Id":"item-1","Name":"Webhook deleted title","Type":"Movie"}}`,
-			addedBody:    `{"Event":"library.new","Item":{"Id":"item-1","Name":"Webhook added title","Type":"Movie"}}`,
-			expectedPath: "/emby/Items/item-1",
+			name:             "Emby",
+			appCode:          "emby",
+			deletedBody:      `{"Event":"library.deleted","Item":{"Id":"item-1","Name":"Webhook deleted title","Type":"Movie"}}`,
+			addedBody:        `{"Event":"library.new","Item":{"Id":"item-1","Name":"Webhook added title","Type":"Movie"}}`,
+			metadataPath:     "/emby/Items/item-1",
+			expectedRequests: 1,
 		},
 	}
 
@@ -366,13 +371,26 @@ func TestMediaMetadataIsFetchedOnlyWhileDisplayingNonDeletedEvents(t *testing.T)
 			requests := 0
 			mediaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				requests++
-				if request.URL.Path != test.expectedPath {
-					t.Errorf("unexpected media server request: %s", request.URL.String())
-				}
 				if request.Header.Get("X-Emby-Token") != "media-api-key" {
 					t.Errorf("media API key header = %q", request.Header.Get("X-Emby-Token"))
 				}
+				if request.URL.Path == test.imagePath && test.imagePath != "" {
+					writer.WriteHeader(http.StatusNotFound)
+					return
+				}
+				if request.URL.Path != test.metadataPath {
+					t.Errorf("unexpected media server request: %s", request.URL.String())
+					writer.WriteHeader(http.StatusNotFound)
+					return
+				}
 				writer.Header().Set("Content-Type", "application/json")
+				if test.appCode == "jellyfin" {
+					if request.URL.Query().Get("Ids") != "item-1" || request.URL.Query().Get("EnableUserData") != "false" {
+						t.Errorf("unexpected Jellyfin query: %s", request.URL.RawQuery)
+					}
+					_, _ = writer.Write([]byte(`{"Items":[{"Id":"item-1","Name":"API title","Type":"Movie"}]}`))
+					return
+				}
 				_, _ = writer.Write([]byte(`{"Id":"item-1","Name":"API title","Type":"Movie"}`))
 			}))
 			defer mediaServer.Close()
@@ -433,7 +451,7 @@ func TestMediaMetadataIsFetchedOnlyWhileDisplayingNonDeletedEvents(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if requests != 1 || addedDetail.Title != test.name+" · 新增媒体 · API title" {
+			if requests != test.expectedRequests || addedDetail.Title != test.name+" · 新增媒体 · API title" {
 				t.Fatalf("dynamic media presentation = %q after %d requests", addedDetail.Title, requests)
 			}
 		})
