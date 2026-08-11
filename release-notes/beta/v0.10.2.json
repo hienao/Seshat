@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "channel": "beta",
+  "version": "v0.10.2",
+  "summary": {
+    "en": "Jellyfin 10.10 media details and artwork now load correctly with API key authentication",
+    "zh-CN": "修复 Jellyfin 10.10 使用 API Key 时媒体详情与图片无法加载的问题"
+  },
+  "changes": [
+    {
+      "id": "jellyfin-api-key-media-query",
+      "type": "fix",
+      "text": {
+        "en": "Jellyfin media enrichment now uses the API-key-compatible item collection endpoint without requiring a user context, preventing HTTP 400 responses on Jellyfin 10.10.",
+        "zh-CN": "Jellyfin 媒体补全改用兼容 API Key 且无需用户上下文的媒体集合接口，避免 Jellyfin 10.10 返回 HTTP 400。"
+      }
+    },
+    {
+      "id": "jellyfin-primary-image-fallback",
+      "type": "fix",
+      "text": {
+        "en": "Primary artwork is now requested even when the item response omits ImageTags, while missing artwork continues to fall back cleanly to a text-only display.",
+        "zh-CN": "即使媒体响应未包含 ImageTags 也会尝试获取主图；图片不存在时仍会正常回退为纯文本展示。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [
+      "Deploy the immutable beta-v0.10.2 image and restart the container.",
+      "No database migration or configuration change is required."
+    ],
+    "zh-CN": [
+      "部署不可变镜像 beta-v0.10.2 并重启容器。",
+      "本次无需数据库迁移或配置变更。"
+    ]
+  }
+}
