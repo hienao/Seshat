@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seshat Release"
+  short_description: "执行 Seshat Beta、Release 与 Hotfix 发版流程"
+  default_prompt: "Use $seshat-release to prepare and validate a Seshat Beta release."

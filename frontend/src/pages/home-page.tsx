@@ -1,51 +1,119 @@
 import { Badge } from '@appica/ui-react/badge'
-import { BrandGolang, BrandReact, Check, Database, FileText, Lock, Rocket, Server } from '@appica/icons-react'
+import { Activity, ArrowRight, Bell, FileText, Plug, ShieldCheck, Webhook } from '@appica/icons-react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { api } from '@/api/services'
 import { AppButton } from '@/components/common/app-button'
+import { EmptyState, ErrorState } from '@/components/common/feedback'
+import { PageHeader } from '@/components/common/page-header'
+import { Panel } from '@/components/common/panel'
+import { EventCard } from '@/components/webhook/event-card'
+import { errorMessage } from '@/lib/error-message'
 import { useAuthStore } from '@/stores/auth'
 
-const stacks = [
-  { icon: BrandReact, title: 'React 前端', color: 'text-sky-600', items: ['React 19 + Vite', 'Appica UI + Tailwind CSS 4', 'TanStack Query / Table', 'TypeScript 类型检查'] },
-  { icon: BrandGolang, title: 'Go 后端', color: 'text-cyan-700', items: ['Go + Gin', 'GORM 数据访问', 'Swagger API 文档', '统一响应结构'] },
-  { icon: Database, title: '部署与数据', color: 'text-emerald-700', items: ['默认 SQLite 持久化', '可选 PostgreSQL', 'HttpOnly Cookie 认证', 'Docker 一键部署'] },
-]
-
-export function HomePage() {
-  const user = useAuthStore((state) => state.user)
+function PublicHome() {
+  const { t } = useTranslation()
+  const productFeatures = [
+    { icon: Plug, title: t('home.public.independentTitle'), description: t('home.public.independentDescription') },
+    { icon: Bell, title: t('home.public.typedTitle'), description: t('home.public.typedDescription') },
+    { icon: Activity, title: t('home.public.diagnosticsTitle'), description: t('home.public.diagnosticsDescription') },
+  ]
   return (
     <div className="overflow-hidden px-4 pb-20 pt-14 sm:px-6 sm:pt-20">
       <div className="app-grid pointer-events-none absolute inset-x-0 top-0 -z-10 h-[680px]" />
       <section className="rise-in mx-auto max-w-6xl text-center">
-        <Badge variant="soft" size="md"><Rocket size={15} />全栈模板工程</Badge>
+        <Badge variant="soft" size="md"><Webhook size={15} />{t('home.public.badge')}</Badge>
         <h1 className="mx-auto mt-7 max-w-4xl text-5xl font-black tracking-[-0.055em] text-neutral-950 dark:text-white sm:text-7xl">
-          从可靠的基础出发，<span className="text-emerald-700 dark:text-emerald-400">更快交付产品</span>
+          {t('home.public.headline')} <span className="text-emerald-700 dark:text-emerald-400">{t('home.public.headlineAccent')}</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-neutral-600 dark:text-neutral-400">BaseGoApp 已准备好认证、用户管理、数据库持久化和容器部署，让业务代码成为项目的第一优先级。</p>
+        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-neutral-600 dark:text-neutral-400">
+          {t('home.public.description')}
+        </p>
         <div className="mt-9 flex flex-wrap justify-center gap-3">
-          {user ? <AppButton render={<Link to="/profile" />} size="lg">进入个人中心</AppButton> : <AppButton render={<Link to="/register" />} size="lg"><Rocket size={18} />立即开始</AppButton>}
-          <AppButton render={<a href="/swagger/index.html" target="_blank" rel="noreferrer" />} variant="outline" size="lg"><FileText size={18} />API 文档</AppButton>
-        </div>
-        <div className="mx-auto mt-14 grid max-w-4xl grid-cols-1 gap-px overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-200 text-left shadow-xl shadow-neutral-900/5 dark:border-neutral-800 dark:bg-neutral-800 sm:grid-cols-3">
-          {[['前端', 'React 19'], ['后端', 'Go + Gin'], ['数据库', 'SQLite / PostgreSQL']].map(([label, value]) => <div key={label} className="bg-white/90 px-6 py-5 dark:bg-neutral-950/90"><p className="text-xs font-bold uppercase tracking-widest text-neutral-400">{label}</p><p className="mt-1 font-semibold">{value}</p></div>)}
+          <AppButton render={<Link to="/login" />} size="lg">{t('home.public.console')}<ArrowRight size={18} /></AppButton>
+          <AppButton render={<a href="/swagger/index.html" target="_blank" rel="noreferrer" />} variant="outline" size="lg"><FileText size={18} />{t('home.public.apiDocs')}</AppButton>
         </div>
       </section>
 
-      <section className="mx-auto mt-20 grid max-w-6xl gap-5 md:grid-cols-3">
-        {stacks.map(({ icon: Icon, title, color, items }, index) => (
+      <section className="mx-auto mt-20 grid max-w-6xl gap-5 md:grid-cols-3" aria-label={t('home.public.capabilities')}>
+        {productFeatures.map(({ icon: Icon, title, description }, index) => (
           <article key={title} className="app-panel rise-in p-6" style={{ animationDelay: `${120 + index * 90}ms` }}>
-            <div className={`grid size-12 place-items-center rounded-2xl bg-neutral-100 dark:bg-neutral-800 ${color}`}><Icon size={25} /></div>
+            <span className="grid size-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"><Icon size={24} /></span>
             <h2 className="mt-5 text-xl font-bold tracking-tight">{title}</h2>
-            <ul className="mt-5 space-y-3">
-              {items.map((item) => <li key={item} className="flex items-center gap-2.5 text-sm text-neutral-600 dark:text-neutral-400"><Check size={17} className="shrink-0 text-emerald-600" />{item}</li>)}
-            </ul>
+            <p className="mt-3 text-sm leading-7 text-neutral-600 dark:text-neutral-400">{description}</p>
           </article>
         ))}
       </section>
-
-      <section className="mx-auto mt-16 flex max-w-6xl flex-col items-start justify-between gap-5 rounded-3xl bg-neutral-950 px-7 py-8 text-white shadow-2xl sm:flex-row sm:items-center sm:px-10 dark:bg-emerald-950">
-        <div className="flex items-start gap-4"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-300"><Lock size={22} /></span><div><h2 className="text-xl font-bold">安全默认值已经就位</h2><p className="mt-1 text-sm text-neutral-300">CORS 白名单、强 JWT 密钥、HttpOnly Cookie 与管理员初始化检查。</p></div></div>
-        <a href="/swagger/index.html" className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-300 hover:text-emerald-200"><Server size={17} />查看接口</a>
-      </section>
     </div>
   )
+}
+
+function MetricCard({ label, value, description, icon: Icon }: {
+  label: string
+  value: string | number
+  description: string
+  icon: typeof Plug
+}) {
+  return (
+    <article className="app-panel p-5 sm:p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-neutral-500">{label}</p>
+          <p className="mt-3 font-mono text-3xl font-bold tracking-tight text-neutral-950 dark:text-white">{value}</p>
+        </div>
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300"><Icon size={21} /></span>
+      </div>
+      <p className="mt-3 text-xs text-neutral-500">{description}</p>
+    </article>
+  )
+}
+
+function DashboardHome({ isAdmin }: { isAdmin: boolean }) {
+  const { t } = useTranslation()
+  const integrations = useQuery({ queryKey: ['webhooks', 'integrations'], queryFn: api.integrations })
+  const events = useQuery({ queryKey: ['webhooks', 'events', 'overview'], queryFn: () => api.events() })
+  const apps = useQuery({ queryKey: ['webhooks', 'apps'], queryFn: api.webhookApps })
+  const activeIntegrations = integrations.data?.filter((item) => item.enabled).length ?? 0
+  const failedQuery = integrations.error || events.error || apps.error
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-7 px-4 py-10 sm:px-6">
+      <PageHeader eyebrow={t('home.eyebrow')} title={t('home.title')} description={t('home.description')} action={<AppButton render={<Link to="/integrations" />} size="sm"><Plug size={16} />{t('home.createIntegration')}</AppButton>} />
+
+      {failedQuery && <ErrorState message={errorMessage(failedQuery, t('home.loadFailed'))} onRetry={() => { void integrations.refetch(); void events.refetch(); void apps.refetch() }} />}
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label={t('home.metricsAria')}>
+        <MetricCard label={t('home.integrations')} value={integrations.isPending ? '—' : integrations.data?.length ?? 0} description={t('home.activeIntegrations', { count: activeIntegrations })} icon={Plug} />
+        <MetricCard label={t('home.totalMessages')} value={events.isPending ? '—' : events.data?.total ?? 0} description={t('home.totalMessagesDescription')} icon={Bell} />
+        <MetricCard label={t('home.supportedApps')} value={apps.isPending ? '—' : apps.data?.length ?? 0} description={t('home.supportedAppsDescription')} icon={Webhook} />
+      </section>
+
+      <div className="grid gap-7 lg:grid-cols-[minmax(0,1.45fr)_minmax(260px,.55fr)]">
+        <Panel title={t('home.recentMessages')} description={events.data?.total ? t('home.recentDescription', { count: events.data.total }) : t('home.waitingMessages')} action={<AppButton render={<Link to="/events" />} size="sm" variant="outline">{t('home.viewAll')}<ArrowRight size={15} /></AppButton>}>
+          {events.isPending ? <div className="py-10 text-center text-sm text-neutral-500">{t('home.loadingMessages')}</div> : !events.data?.items.length ? <EmptyState title={t('home.noMessages')} description={t('home.noMessagesDescription')} /> : (
+            <div className="space-y-3">
+              {events.data.items.slice(0, 5).map((event) => (
+                <Link key={event.id} to={`/events/${event.id}`} className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"><EventCard event={event} compact /></Link>
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <Panel title={t('home.quickActions')} description={t('home.quickDescription')}>
+          <div className="space-y-2">
+            <Link to="/integrations" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Plug size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">{t('home.manageIntegrations')}</span><ArrowRight size={16} className="text-neutral-400" /></Link>
+            <Link to="/events" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Bell size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">{t('home.manageChannels')}</span><ArrowRight size={16} className="text-neutral-400" /></Link>
+            {isAdmin && <Link to="/admin/logs" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><ShieldCheck size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">{t('home.viewLogs')}</span><ArrowRight size={16} className="text-neutral-400" /></Link>}
+            {isAdmin && <Link to="/admin/application-logs" className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-sm font-medium transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-800 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40"><Activity size={18} className="text-emerald-700 dark:text-emerald-300" /><span className="flex-1">{t('home.viewApplicationLogs')}</span><ArrowRight size={16} className="text-neutral-400" /></Link>}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  )
+}
+
+export function HomePage() {
+  const user = useAuthStore((state) => state.user)
+  return user ? <DashboardHome isAdmin={user.is_admin} /> : <PublicHome />
 }

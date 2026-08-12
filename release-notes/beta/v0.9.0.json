@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "channel": "beta",
+  "version": "v0.9.0",
+  "summary": {
+    "en": "Channel-aware rich notifications with deterministic retries",
+    "zh-CN": "新增渠道感知的富文本通知与确定性重试"
+  },
+  "changes": [
+    {
+      "id": "notification-content-rendering",
+      "type": "feature",
+      "text": {
+        "en": "Added a channel-neutral notification document with plain-text and Markdown renderers, allowing each channel to select the richest supported format without mixing protocol logic into message generation.",
+        "zh-CN": "新增渠道无关的通知文档及普通文本、Markdown 渲染器，让各渠道选择其支持的最佳格式，同时保持消息生成与渠道协议相互隔离。"
+      }
+    },
+    {
+      "id": "dingtalk-markdown-media",
+      "type": "feature",
+      "text": {
+        "en": "DingTalk channels can now choose automatic, Markdown, or plain-text delivery and optionally include a valid public media image.",
+        "zh-CN": "钉钉渠道现在可以选择自动、Markdown 或普通文本格式，并可按需附带有效的公开媒体图片。"
+      }
+    },
+    {
+      "id": "delivery-content-snapshots",
+      "type": "change",
+      "text": {
+        "en": "Notification deliveries now preserve the selected format, renderer version, and rendered content so retries remain identical after channel settings or templates change.",
+        "zh-CN": "推送任务现在会保存所选格式、渲染器版本和最终内容，确保渠道设置或模板变化后重试内容仍保持一致。"
+      }
+    },
+    {
+      "id": "dingtalk-format-settings",
+      "type": "change",
+      "text": {
+        "en": "Added bilingual DingTalk message-format and media-image settings with adapter-level validation and isolation coverage.",
+        "zh-CN": "新增中英文钉钉消息格式和媒体图片设置，并补充 Adapter 级配置校验与隔离测试。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [
+      "Deploy the immutable beta-v0.9.0 image and restart the container; new delivery snapshot columns are added automatically.",
+      "Existing DingTalk channels default to automatic Markdown delivery with media images enabled. Edit the channel to select plain text or disable images."
+    ],
+    "zh-CN": [
+      "部署不可变镜像 beta-v0.9.0 并重启容器；新的投递快照字段会自动迁移。",
+      "现有钉钉渠道默认自动使用 Markdown 并启用媒体图片；如需普通文本或关闭图片，请编辑渠道设置。"
+    ]
+  }
+}

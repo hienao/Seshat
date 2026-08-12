@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"basegoapp/config"
-	"basegoapp/internal/model"
+	"seshat/config"
+	"seshat/internal/model"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -50,7 +50,7 @@ func Init(cfg *config.Config) {
 	}
 
 	// 自动迁移
-	if err := DB.AutoMigrate(&model.User{}, &model.SystemSetting{}, &model.UserSetting{}); err != nil {
+	if err := DB.AutoMigrate(&model.User{}, &model.SystemSetting{}, &model.UserSetting{}, &model.NotificationChannel{}, &model.AppIntegration{}, &model.WebhookEvent{}, &model.MediaMetadataCache{}, &model.IntegrationNotificationRule{}, &model.NotificationDelivery{}, &model.NotificationRateLimit{}, &model.AdminAuditLog{}); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 

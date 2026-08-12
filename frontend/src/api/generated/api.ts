@@ -17,6 +17,7 @@ export interface HandlerSetUserRoleRequest {
 export interface ResponseResponse {
   code?: number;
   data?: any;
+  error_code?: string;
   message?: string;
 }
 
@@ -26,9 +27,29 @@ export interface ServiceChangePasswordRequest {
   old_password: string;
 }
 
+export interface ServiceIntegrationMediaSettingsResponse {
+  api_key?: string;
+  configured?: boolean;
+  server_url?: string;
+}
+
 export interface ServiceLoginRequest {
   password: string;
   username: string;
+}
+
+export interface ServicePublicEventResponse {
+  app_code?: string;
+  display_event_type?: string;
+  is_fallback?: boolean;
+  occurred_at?: string;
+  presentation?: WebhookPresentation;
+  presentation_version?: number;
+  received_at?: string;
+  severity?: string;
+  source_event_type?: string;
+  summary?: string;
+  title?: string;
 }
 
 export interface ServiceRegisterRequest {
@@ -41,8 +62,35 @@ export interface ServiceRegisterRequest {
   username: string;
 }
 
+export interface ServiceSetupAdminRequest {
+  /** @minLength 6 */
+  password: string;
+  /**
+   * @minLength 3
+   * @maxLength 50
+   */
+  username: string;
+}
+
 export interface ServiceSystemSettingsResponse {
   allow_register?: boolean;
+  api_log_retention_days?: number;
+  http_proxy_configured?: boolean;
+  http_proxy_url?: string;
+  public_base_url?: string;
+  tmdb_api_key?: string;
+  tmdb_configured?: boolean;
+  tmdb_use_proxy?: boolean;
+}
+
+export interface ServiceTestHTTPProxyRequest {
+  http_proxy_url: string;
+}
+
+export interface ServiceTestTMDBConnectionRequest {
+  http_proxy_url?: string;
+  tmdb_api_key: string;
+  use_proxy?: boolean;
 }
 
 export interface ServiceTokenResponse {
@@ -50,15 +98,39 @@ export interface ServiceTokenResponse {
   token?: string;
 }
 
+export interface ServiceUpdateIntegrationMediaSettingsRequest {
+  api_key: string;
+  server_url: string;
+}
+
 export interface ServiceUpdateSystemSettingsRequest {
   allow_register?: boolean;
+  api_log_retention_days?: number;
+  clear_http_proxy?: boolean;
+  clear_tmdb_api_key?: boolean;
+  http_proxy_url?: string;
+  public_base_url?: string;
+  tmdb_api_key?: string;
+  tmdb_use_proxy?: boolean;
 }
 
 export interface ServiceUserResponse {
   created_at?: string;
   id?: number;
   is_admin?: boolean;
+  requires_admin_setup?: boolean;
   username?: string;
+}
+
+export interface WebhookPresentation {
+  data?: Record<string, any>;
+  facts?: Record<string, string>[];
+  links?: Record<string, string>[];
+  schema_version?: number;
+  severity?: string;
+  summary?: string;
+  tags?: string[];
+  title?: string;
 }
 
 export type QueryParamsType = Record<string | number, any>;
@@ -317,12 +389,12 @@ export class HttpClient<SecurityDataType = unknown> {
 }
 
 /**
- * @title BaseGoApp API
+ * @title Seshat API
  * @version 1.0
  * @baseUrl //localhost:8080
  * @contact
  *
- * BaseGoApp 模板工程 API 文档
+ * Seshat Webhook 消息管理 API 文档
  */
 export class Api<
   SecurityDataType extends unknown,
@@ -402,7 +474,7 @@ export class Api<
       }),
 
     /**
-     * @description 用户退出登录（前端清除 Token）
+     * @description 使当前用户已签发的 Bearer Token 立即失效
      *
      * @tags 认证
      * @name AuthLogoutCreate
@@ -442,6 +514,71 @@ export class Api<
         body: request,
         type: ContentType.Json,
         format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description 使用一次性 admin/admin 登录后设置正式管理员用户名和密码
+     *
+     * @tags 认证
+     * @name AuthSetupAdminCreate
+     * @summary 设置正式管理员凭据
+     * @request POST:/api/auth/setup-admin
+     * @secure
+     */
+    authSetupAdminCreate: (
+      request: ServiceSetupAdminRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: ServiceTokenResponse;
+        },
+        ResponseResponse
+      >({
+        path: `/api/auth/setup-admin`,
+        method: "POST",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description 通过不可猜测的访问标识获取标准化展示，不返回原始消息或内部信息
+     *
+     * @tags Webhook
+     * @name PublicEventsDetail
+     * @summary 获取公开消息详情
+     * @request GET:/api/public/events/{token}
+     */
+    publicEventsDetail: (token: string, params: RequestParams = {}) =>
+      this.request<
+        ResponseResponse & {
+          data?: ServicePublicEventResponse;
+        },
+        ResponseResponse
+      >({
+        path: `/api/public/events/${token}`,
+        method: "GET",
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Webhook
+     * @name PublicMediaImagesDetail
+     * @summary 获取缓存媒体图片
+     * @request GET:/api/public/media-images/{token}
+     */
+    publicMediaImagesDetail: (token: string, params: RequestParams = {}) =>
+      this.request<Blob, ResponseResponse>({
+        path: `/api/public/media-images/${token}`,
+        method: "GET",
+        format: "blob",
         ...params,
       }),
 
@@ -513,6 +650,62 @@ export class Api<
       }),
 
     /**
+     * @description 使用当前输入的代理地址访问固定 HTTPS 探测地址（需要管理员权限）
+     *
+     * @tags 设置
+     * @name SettingsSystemTestHttpProxyCreate
+     * @summary 测试 HTTP 代理
+     * @request POST:/api/settings/system/test-http-proxy
+     * @secure
+     */
+    settingsSystemTestHttpProxyCreate: (
+      request: ServiceTestHTTPProxyRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: Record<string, string>;
+        },
+        ResponseResponse
+      >({
+        path: `/api/settings/system/test-http-proxy`,
+        method: "POST",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description 使用当前输入的 API 密钥和代理配置请求 TMDB（需要管理员权限）
+     *
+     * @tags 设置
+     * @name SettingsSystemTestTmdbCreate
+     * @summary 测试 TMDB 连接
+     * @request POST:/api/settings/system/test-tmdb
+     * @secure
+     */
+    settingsSystemTestTmdbCreate: (
+      request: ServiceTestTMDBConnectionRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: Record<string, string>;
+        },
+        ResponseResponse
+      >({
+        path: `/api/settings/system/test-tmdb`,
+        method: "POST",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
      * @description 修改当前用户的密码
      *
      * @tags 用户
@@ -554,6 +747,90 @@ export class Api<
         path: `/api/user/profile`,
         method: "GET",
         secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Webhook
+     * @name WebhooksIntegrationsMediaSettingsList
+     * @summary 获取实例媒体 API 配置
+     * @request GET:/api/webhooks/integrations/{id}/media-settings
+     * @secure
+     */
+    webhooksIntegrationsMediaSettingsList: (
+      id: number,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: ServiceIntegrationMediaSettingsResponse;
+        },
+        ResponseResponse
+      >({
+        path: `/api/webhooks/integrations/${id}/media-settings`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Webhook
+     * @name WebhooksIntegrationsMediaSettingsUpdate
+     * @summary 保存实例媒体 API 配置
+     * @request PUT:/api/webhooks/integrations/{id}/media-settings
+     * @secure
+     */
+    webhooksIntegrationsMediaSettingsUpdate: (
+      id: number,
+      request: ServiceUpdateIntegrationMediaSettingsRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: ServiceIntegrationMediaSettingsResponse;
+        },
+        ResponseResponse
+      >({
+        path: `/api/webhooks/integrations/${id}/media-settings`,
+        method: "PUT",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Webhook
+     * @name WebhooksIntegrationsMediaSettingsTestCreate
+     * @summary 测试实例媒体 API
+     * @request POST:/api/webhooks/integrations/{id}/media-settings/test
+     * @secure
+     */
+    webhooksIntegrationsMediaSettingsTestCreate: (
+      id: number,
+      request: ServiceUpdateIntegrationMediaSettingsRequest,
+      params: RequestParams = {},
+    ) =>
+      this.request<
+        ResponseResponse & {
+          data?: Record<string, string>;
+        },
+        ResponseResponse
+      >({
+        path: `/api/webhooks/integrations/${id}/media-settings/test`,
+        method: "POST",
+        body: request,
+        secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),

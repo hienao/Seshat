@@ -1,18 +1,27 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
-	"basegoapp/config"
-	_ "basegoapp/docs"
-	"basegoapp/internal/router"
-	"basegoapp/pkg/database"
+	"seshat/config"
+	_ "seshat/docs"
+	"seshat/internal/buildinfo"
+	"seshat/internal/logging"
+	"seshat/internal/router"
+	"seshat/internal/service"
+	"seshat/pkg/database"
 )
 
-// @title BaseGoApp API
+// @title Seshat API
 // @version 1.0
-// @description BaseGoApp 模板工程 API 文档
+// @description Seshat Webhook 消息管理 API 文档
 
 // @host localhost:8080
 // @BasePath /
@@ -30,13 +39,41 @@ func main() {
 	// 初始化数据库
 	database.Init(cfg)
 
-	// 设置路由
-	r := router.Setup(cfg)
+	// 设置日志管理器和路由
+	logManager, err := logging.NewManager(cfg)
+	if err != nil {
+		log.Fatalf("Failed to init log manager: %v", err)
+	}
+	defer logManager.Close()
+	logging.SetDefaultManager(logManager)
+	defer logging.SetDefaultManager(nil)
+	r := router.SetupWithLogManager(cfg, logManager)
+	notificationWorker := service.NewNotificationWorker()
+	notificationWorker.Start()
+	defer notificationWorker.Close()
 
 	// 启动服务器
-	log.Printf("Server starting on port %s", cfg.ServerPort)
-	if err := r.Run(":" + cfg.ServerPort); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	build := buildinfo.Current()
+	logging.Info("server", "Seshat 服务启动", logging.Fields{"port": cfg.ServerPort, "version": build.Version, "channel": build.Channel, "commit": build.Commit})
+	server := &http.Server{Addr: ":" + cfg.ServerPort, Handler: r}
+	serverErrors := make(chan error, 1)
+	go func() { serverErrors <- server.ListenAndServe() }()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			logging.Error("server", "HTTP 服务启动失败", logging.Fields{"error": err})
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	case <-stop:
+		logging.Info("server", "收到退出信号，开始优雅关闭", nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			logging.Error("server", "HTTP 服务优雅关闭失败", logging.Fields{"error": err})
+		}
 	}
 }
 

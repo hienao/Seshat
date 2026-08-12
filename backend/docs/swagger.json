@@ -1,14 +1,65 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "BaseGoApp 模板工程 API 文档",
-        "title": "BaseGoApp API",
+        "description": "Seshat Webhook 消息管理 API 文档",
+        "title": "Seshat API",
         "contact": {},
         "version": "1.0"
     },
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
+        "/api/admin/updates": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Beta 只检查 Beta，Release/Hotfix 只检查正式版本（需要管理员权限）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "更新"
+                ],
+                "summary": "检查更新",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "忽略缓存并重新检查",
+                        "name": "refresh",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/service.UpdateStatusResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/users": {
             "get": {
                 "security": [
@@ -172,7 +223,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "用户退出登录（前端清除 Token）",
+                "description": "使当前用户已签发的 Bearer Token 立即失效",
                 "produces": [
                     "application/json"
                 ],
@@ -235,6 +286,144 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/auth/setup-admin": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "使用一次性 admin/admin 登录后设置正式管理员用户名和密码",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "设置正式管理员凭据",
+                "parameters": [
+                    {
+                        "description": "管理员凭据",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.SetupAdminRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/service.TokenResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/public/events/{token}": {
+            "get": {
+                "description": "通过不可猜测的访问标识获取标准化展示，不返回原始消息或内部信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "获取公开消息详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "公开访问标识",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/service.PublicEventResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/public/media-images/{token}": {
+            "get": {
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "获取缓存媒体图片",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "图片访问标识",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/response.Response"
                         }
@@ -369,6 +558,138 @@
                 }
             }
         },
+        "/api/settings/system/test-http-proxy": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "使用当前输入的代理地址访问固定 HTTPS 探测地址（需要管理员权限）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "设置"
+                ],
+                "summary": "测试 HTTP 代理",
+                "parameters": [
+                    {
+                        "description": "HTTP 代理测试配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.TestHTTPProxyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/settings/system/test-tmdb": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "使用当前输入的 API 密钥和代理配置请求 TMDB（需要管理员权限）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "设置"
+                ],
+                "summary": "测试 TMDB 连接",
+                "parameters": [
+                    {
+                        "description": "TMDB 测试配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.TestTMDBConnectionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/api/user/password": {
             "put": {
                 "security": [
@@ -456,14 +777,323 @@
                     }
                 }
             }
+        },
+        "/api/version": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "更新"
+                ],
+                "summary": "获取当前版本",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/buildinfo.Info"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/api/webhooks/integrations/{id}/media-settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "获取实例媒体 API 配置",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "接入实例 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/service.IntegrationMediaSettingsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "保存实例媒体 API 配置",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "接入实例 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "媒体 API 配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.UpdateIntegrationMediaSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/service.IntegrationMediaSettingsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/webhooks/integrations/{id}/media-settings/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "测试实例媒体 API",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "接入实例 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "媒体 API 配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/service.UpdateIntegrationMediaSettingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Response"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "buildinfo.Info": {
+            "type": "object",
+            "properties": {
+                "build_time": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "commit": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
         "handler.SetUserRoleRequest": {
             "type": "object",
             "properties": {
                 "is_admin": {
                     "type": "boolean"
+                }
+            }
+        },
+        "releasenotes.Change": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "text": {
+                    "$ref": "#/definitions/releasenotes.LocalizedText"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "releasenotes.LocalizedList": {
+            "type": "object",
+            "properties": {
+                "en": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "zh-CN": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "releasenotes.LocalizedText": {
+            "type": "object",
+            "properties": {
+                "en": {
+                    "type": "string"
+                },
+                "zh-CN": {
+                    "type": "string"
+                }
+            }
+        },
+        "releasenotes.Release": {
+            "type": "object",
+            "properties": {
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/releasenotes.Change"
+                    }
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "image_tag": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "release_url": {
+                    "type": "string"
+                },
+                "schema_version": {
+                    "type": "integer"
+                },
+                "summary": {
+                    "$ref": "#/definitions/releasenotes.LocalizedText"
+                },
+                "upgrade_notes": {
+                    "$ref": "#/definitions/releasenotes.LocalizedList"
+                },
+                "version": {
+                    "type": "string"
                 }
             }
         },
@@ -474,6 +1104,9 @@
                     "type": "integer"
                 },
                 "data": {},
+                "error_code": {
+                    "type": "string"
+                },
                 "message": {
                     "type": "string"
                 }
@@ -495,6 +1128,20 @@
                 }
             }
         },
+        "service.IntegrationMediaSettingsResponse": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "configured": {
+                    "type": "boolean"
+                },
+                "server_url": {
+                    "type": "string"
+                }
+            }
+        },
         "service.LoginRequest": {
             "type": "object",
             "required": [
@@ -506,6 +1153,44 @@
                     "type": "string"
                 },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.PublicEventResponse": {
+            "type": "object",
+            "properties": {
+                "app_code": {
+                    "type": "string"
+                },
+                "display_event_type": {
+                    "type": "string"
+                },
+                "is_fallback": {
+                    "type": "boolean"
+                },
+                "occurred_at": {
+                    "type": "string"
+                },
+                "presentation": {
+                    "$ref": "#/definitions/webhook.Presentation"
+                },
+                "presentation_version": {
+                    "type": "integer"
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "source_event_type": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "title": {
                     "type": "string"
                 }
             }
@@ -528,10 +1213,77 @@
                 }
             }
         },
+        "service.SetupAdminRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "minLength": 6
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 3
+                }
+            }
+        },
         "service.SystemSettingsResponse": {
             "type": "object",
             "properties": {
                 "allow_register": {
+                    "type": "boolean"
+                },
+                "api_log_retention_days": {
+                    "type": "integer"
+                },
+                "http_proxy_configured": {
+                    "type": "boolean"
+                },
+                "http_proxy_url": {
+                    "type": "string"
+                },
+                "public_base_url": {
+                    "type": "string"
+                },
+                "tmdb_api_key": {
+                    "type": "string"
+                },
+                "tmdb_configured": {
+                    "type": "boolean"
+                },
+                "tmdb_use_proxy": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "service.TestHTTPProxyRequest": {
+            "type": "object",
+            "required": [
+                "http_proxy_url"
+            ],
+            "properties": {
+                "http_proxy_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.TestTMDBConnectionRequest": {
+            "type": "object",
+            "required": [
+                "tmdb_api_key"
+            ],
+            "properties": {
+                "http_proxy_url": {
+                    "type": "string"
+                },
+                "tmdb_api_key": {
+                    "type": "string"
+                },
+                "use_proxy": {
                     "type": "boolean"
                 }
             }
@@ -547,10 +1299,75 @@
                 }
             }
         },
+        "service.UpdateIntegrationMediaSettingsRequest": {
+            "type": "object",
+            "required": [
+                "api_key",
+                "server_url"
+            ],
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "server_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.UpdateStatusResponse": {
+            "type": "object",
+            "properties": {
+                "checked_at": {
+                    "type": "string"
+                },
+                "current": {
+                    "$ref": "#/definitions/buildinfo.Info"
+                },
+                "image_tag": {
+                    "type": "string"
+                },
+                "latest_version": {
+                    "type": "string"
+                },
+                "releases": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/releasenotes.Release"
+                    }
+                },
+                "supported": {
+                    "type": "boolean"
+                },
+                "update_available": {
+                    "type": "boolean"
+                }
+            }
+        },
         "service.UpdateSystemSettingsRequest": {
             "type": "object",
             "properties": {
                 "allow_register": {
+                    "type": "boolean"
+                },
+                "api_log_retention_days": {
+                    "type": "integer"
+                },
+                "clear_http_proxy": {
+                    "type": "boolean"
+                },
+                "clear_tmdb_api_key": {
+                    "type": "boolean"
+                },
+                "http_proxy_url": {
+                    "type": "string"
+                },
+                "public_base_url": {
+                    "type": "string"
+                },
+                "tmdb_api_key": {
+                    "type": "string"
+                },
+                "tmdb_use_proxy": {
                     "type": "boolean"
                 }
             }
@@ -567,7 +1384,55 @@
                 "is_admin": {
                     "type": "boolean"
                 },
+                "requires_admin_setup": {
+                    "type": "boolean"
+                },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhook.Presentation": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "facts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "links": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "schema_version": {
+                    "type": "integer"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
                     "type": "string"
                 }
             }

@@ -1,0 +1,80 @@
+import { Input } from '@appica/ui-react/input'
+import { Dialog, DialogBody, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@appica/ui-react/dialog'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
+import { api } from '@/api/services'
+import type { Integration } from '@/api/types'
+import { AppButton } from '@/components/common/app-button'
+import { FormField } from '@/components/common/form-field'
+import { Message } from '@/components/common/feedback'
+import { SecretInput } from '@/components/notification-channels/secret-input'
+import { errorMessage } from '@/lib/error-message'
+import { mediaSettingsDefinition } from './registry'
+
+export function MediaSettingsDialog({ integration, open, onOpenChange, onSaved }: {
+	integration: Integration | null
+	open: boolean
+	onOpenChange: (open: boolean) => void
+	onSaved: () => void
+}) {
+	const { t } = useTranslation()
+	const definition = integration ? mediaSettingsDefinition(integration.app_code) : undefined
+	const settings = useQuery({
+		queryKey: ['webhooks', 'integrations', integration?.id, 'media-settings'],
+		queryFn: () => api.integrationMediaSettings(integration!.id),
+		enabled: open && Boolean(integration && definition),
+	})
+	const [serverUrl, setServerUrl] = useState('')
+	const [apiKey, setAPIKey] = useState('')
+	const [tested, setTested] = useState(false)
+
+	useEffect(() => {
+		if (!settings.data) return
+		setServerUrl(settings.data.server_url)
+		setAPIKey(settings.data.api_key)
+		setTested(false)
+	}, [settings.data])
+
+	const body = { server_url: serverUrl.trim(), api_key: apiKey.trim() }
+	const test = useMutation({ mutationFn: () => api.testIntegrationMediaSettings(integration!.id, body), onSuccess: () => setTested(true) })
+	const save = useMutation({ mutationFn: () => api.updateIntegrationMediaSettings(integration!.id, body), onSuccess: () => { onSaved(); onOpenChange(false) } })
+
+	if (!integration || !definition) return null
+	function submit(event: FormEvent) {
+		event.preventDefault()
+		if (body.server_url && body.api_key) save.mutate()
+	}
+	const valid = Boolean(body.server_url && body.api_key)
+
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="max-w-xl">
+				<form onSubmit={submit}>
+					<DialogHeader>
+						<DialogTitle>{t('integrations.mediaSettings.title', { app: definition.appName })}</DialogTitle>
+						<DialogDescription>{t('integrations.mediaSettings.description')}</DialogDescription>
+					</DialogHeader>
+					<DialogBody className="space-y-5">
+						{settings.isPending ? <p className="py-6 text-center text-sm text-neutral-500">{t('integrations.mediaSettings.loading')}</p> : settings.error ? <Message variant="error" title={errorMessage(settings.error, t('integrations.mediaSettings.readFailed'))} /> : <>
+							<FormField label={t('integrations.mediaSettings.serverUrl')} description={t(`integrations.mediaSettings.${definition.appCode}ServerHelp`, { defaultValue: definition.serverHelp })}>
+								<Input type="url" value={serverUrl} onChange={(event) => { setServerUrl(event.target.value); setTested(false) }} placeholder={definition.serverPlaceholder} required autoComplete="url" />
+							</FormField>
+							<FormField label={t('integrations.mediaSettings.apiKey')} description={t(`integrations.mediaSettings.${definition.appCode}KeyHelp`, { defaultValue: definition.apiKeyHelp })}>
+								<SecretInput revealLabel={`${definition.appName} API Key`} value={apiKey} onChange={(event) => { setAPIKey(event.target.value); setTested(false) }} required autoComplete="off" />
+							</FormField>
+						</>}
+						{tested && <Message variant="success" title={t('common.feedback.connectionSuccess')} />}
+						{test.error && <Message variant="error" title={errorMessage(test.error, t('integrations.mediaSettings.testFailed'))} />}
+						{save.error && <Message variant="error" title={errorMessage(save.error, t('integrations.mediaSettings.saveFailed'))} />}
+					</DialogBody>
+					<DialogFooter>
+						<DialogClose render={<AppButton type="button" variant="ghost">{t('common.actions.cancel')}</AppButton>} />
+						<AppButton type="button" variant="outline" disabled={!valid || test.isPending || settings.isPending} onClick={() => test.mutate()}>{t(test.isPending ? 'common.states.testing' : 'common.actions.testConnection')}</AppButton>
+						<AppButton type="submit" disabled={!valid || save.isPending || settings.isPending}>{t(save.isPending ? 'common.states.saving' : 'common.actions.save')}</AppButton>
+					</DialogFooter>
+				</form>
+			</DialogContent>
+		</Dialog>
+	)
+}

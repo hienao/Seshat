@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seshat App Integration"
+  short_description: "新增或调整 Seshat Webhook App 的独立解析与展示"
+  default_prompt: "Use $seshat-app-integration to add or modify a Webhook App integration safely."

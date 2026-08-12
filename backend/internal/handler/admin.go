@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"basegoapp/internal/service"
-	"basegoapp/pkg/response"
+	"seshat/internal/service"
+	"seshat/pkg/response"
 	"strconv"
 
 	"github.com/gin-gonic/gin"

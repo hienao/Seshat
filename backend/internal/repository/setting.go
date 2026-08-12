@@ -1,8 +1,10 @@
 package repository
 
 import (
-	"basegoapp/internal/model"
-	"basegoapp/pkg/database"
+	"strings"
+
+	"seshat/internal/model"
+	"seshat/pkg/database"
 
 	"gorm.io/gorm"
 )
@@ -52,7 +54,12 @@ func (r *SettingRepository) GetAllSystemSettings() ([]model.SystemSetting, error
 // InitDefaultSettings 初始化默认设置
 func (r *SettingRepository) InitDefaultSettings() error {
 	defaults := map[string]string{
-		"allow_register": "false",
+		"allow_register":         "false",
+		"api_log_retention_days": "7",
+		"http_proxy_url":         "",
+		"tmdb_api_key":           "",
+		"tmdb_use_proxy":         "false",
+		"public_base_url":        "",
 	}
 
 	for key, value := range defaults {
@@ -64,5 +71,35 @@ func (r *SettingRepository) InitDefaultSettings() error {
 			}
 		}
 	}
-	return nil
+	return r.migrateLegacyTMDBAPIKey()
+}
+
+func (r *SettingRepository) migrateLegacyTMDBAPIKey() error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var legacy model.SystemSetting
+		legacyResult := tx.Where("key = ?", "tmdb_read_access_token").Find(&legacy)
+		if legacyResult.Error != nil {
+			return legacyResult.Error
+		}
+		if legacyResult.RowsAffected == 0 {
+			return nil
+		}
+		legacyValue := strings.TrimSpace(legacy.Value)
+		if legacyValue == "" {
+			return nil
+		}
+
+		var current model.SystemSetting
+		if err := tx.Where("key = ?", "tmdb_api_key").First(&current).Error; err != nil {
+			return err
+		}
+		if strings.TrimSpace(current.Value) == "" {
+			current.Value = legacyValue
+			if err := tx.Save(&current).Error; err != nil {
+				return err
+			}
+		}
+		legacy.Value = ""
+		return tx.Save(&legacy).Error
+	})
 }

@@ -1,29 +1,36 @@
-# 阶段 1: 构建前端
-FROM node:20-alpine AS frontend-builder
+# 阶段 1: 前端产物与目标 CPU 架构无关，固定在构建机原生架构执行，避免 QEMU 下重复运行 npm。
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci \
+    --registry=https://registry.npmjs.org \
+    --replace-registry-host=always \
+    --fetch-retries=5 \
+    --fetch-retry-maxtimeout=120000
 COPY frontend/ ./
 RUN npm run build
 
 # 阶段 2: 构建后端
 FROM golang:1.25-alpine AS backend-builder
 WORKDIR /app/backend
-# 安装依赖
-RUN sed -i 's|https://dl-cdn.alpinelinux.org/alpine|https://mirrors.ustc.edu.cn/alpine|g' /etc/apk/repositories && \
-    apk update && \
-    apk add --no-cache git gcc musl-dev
+ARG APP_VERSION=dev
+ARG APP_CHANNEL=dev
+ARG APP_COMMIT=unknown
+ARG APP_BUILD_TIME=unknown
+# 使用 Alpine 基础镜像自带的官方软件源安装依赖。
+RUN apk add --no-cache git gcc musl-dev
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
-# 构建
-RUN CGO_ENABLED=1 GOOS=linux go build -o main .
+# 构建，并把唯一版本源解析出的信息写入后端二进制。
+RUN CGO_ENABLED=1 GOOS=linux go build -trimpath \
+    -ldflags "-s -w -X seshat/internal/buildinfo.Version=${APP_VERSION} -X seshat/internal/buildinfo.Channel=${APP_CHANNEL} -X seshat/internal/buildinfo.Commit=${APP_COMMIT} -X seshat/internal/buildinfo.BuildTime=${APP_BUILD_TIME}" \
+    -o main .
 
 # 阶段 3: 最终镜像
 FROM alpine:latest
-RUN sed -i 's|https://dl-cdn.alpinelinux.org/alpine|https://mirrors.ustc.edu.cn/alpine|g' /etc/apk/repositories && \
-    apk update && \
-    apk --no-cache add ca-certificates nginx
+ENV TZ=UTC
+RUN apk add --no-cache ca-certificates nginx tzdata
 
 WORKDIR /app
 
@@ -45,6 +52,6 @@ RUN mkdir -p /data/db /cache/logs/nginx /cache/logs/app /cache/tmp && \
     echo 'exec ./main' >> /app/start.sh && \
     chmod +x /app/start.sh
 
-EXPOSE 80
+EXPOSE 3112
 
 CMD ["/app/start.sh"]

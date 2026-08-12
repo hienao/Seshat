@@ -1,6 +1,7 @@
 package response
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -8,9 +9,10 @@ import (
 
 // Response 统一响应结构
 type Response struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Code      int         `json:"code"`
+	ErrorCode string      `json:"error_code,omitempty"`
+	Message   string      `json:"message"`
+	Data      interface{} `json:"data,omitempty"`
 }
 
 // Success 成功响应
@@ -24,9 +26,17 @@ func Success(c *gin.Context, data interface{}) {
 
 // Error 错误响应
 func Error(c *gin.Context, httpCode int, message string) {
+	ErrorWithCode(c, httpCode, fmt.Sprintf("http.%d", httpCode), message)
+}
+
+// ErrorWithCode 返回错误响应，并将稳定的业务错误码写入接口日志上下文。
+func ErrorWithCode(c *gin.Context, httpCode int, errorCode, message string) {
+	c.Set("error_code", errorCode)
+	c.Set("error_message", message)
 	c.JSON(httpCode, Response{
-		Code:    -1,
-		Message: message,
+		Code:      -1,
+		ErrorCode: errorCode,
+		Message:   message,
 	})
 }
 

@@ -1,0 +1,464 @@
+name: Build and publish Docker image
+
+on:
+  pull_request:
+    branches:
+      - beta
+      - main
+    types:
+      - closed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-publish-${{ github.event.pull_request.base.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare ${{ github.event.pull_request.base.ref }} image
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      app_version: ${{ steps.metadata.outputs.app_version }}
+      version_file: ${{ steps.metadata.outputs.version_file }}
+      channel: ${{ steps.metadata.outputs.channel }}
+      build_time: ${{ steps.metadata.outputs.build_time }}
+      exists: ${{ steps.image.outputs.exists }}
+
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Resolve image metadata
+        id: metadata
+        shell: bash
+        env:
+          TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DOCKERHUB_USERNAME}" ]]; then
+            echo "::error::GitHub Secret DOCKERHUB_USERNAME is not configured"
+            exit 1
+          fi
+
+          image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
+          if [[ "${image}" != "${image,,}" ]]; then
+            echo "::error::Docker image name must be lowercase: ${image}"
+            exit 1
+          fi
+
+          case "${TARGET_BRANCH}" in
+            beta)
+              version_file="VERSION_BETA"
+              channel="beta"
+              ;;
+            main)
+              version_file="VERSION_RELEASE"
+              channel="release"
+              ;;
+            *)
+              echo "::error::Unsupported target branch: ${TARGET_BRANCH}"
+              exit 1
+              ;;
+          esac
+
+          if [[ ! -f "${version_file}" ]]; then
+            echo "::error::${version_file} file is missing"
+            exit 1
+          fi
+
+          app_version="$(tr -d '[:space:]' < "${version_file}")"
+          if [[ ! "${app_version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::${version_file} must use semantic version format such as v0.0.1: ${app_version}"
+            exit 1
+          fi
+
+          if [[ "${TARGET_BRANCH}" == "beta" ]]; then
+            version="beta-${app_version}"
+          else
+            version="${app_version}"
+          fi
+
+          {
+            echo "version=${version}"
+            echo "app_version=${app_version}"
+            echo "version_file=${version_file}"
+            echo "channel=${channel}"
+            echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Go for release-note validation
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Validate bilingual release notes
+        shell: bash
+        env:
+          CHANNEL: ${{ steps.metadata.outputs.channel }}
+          APP_VERSION: ${{ steps.metadata.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          cd backend
+          go run ./cmd/release-notes validate "${CHANNEL}" "${APP_VERSION}"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Check whether version exists
+        id: image
+        shell: bash
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
+          inspect_output="$(mktemp)"
+          if docker buildx imagetools inspect "${image}:${VERSION}" >"${inspect_output}" 2>&1; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+            echo "Image ${image}:${VERSION} already exists; skipping build."
+          elif grep -Eiq "manifest unknown|not found|no such manifest" "${inspect_output}"; then
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+            echo "Image ${image}:${VERSION} does not exist; starting build."
+          else
+            cat "${inspect_output}"
+            echo "::error::Unable to determine whether ${image}:${VERSION} exists"
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: prepare
+    if: needs.prepare.outputs.exists != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push platform image by digest
+        id: publish
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.title=Seshat
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.event.pull_request.merge_commit_sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+          build-args: |
+            APP_VERSION=${{ needs.prepare.outputs.app_version }}
+            APP_CHANNEL=${{ needs.prepare.outputs.channel }}
+            APP_COMMIT=${{ github.event.pull_request.merge_commit_sha }}
+            APP_BUILD_TIME=${{ needs.prepare.outputs.build_time }}
+          cache-from: type=gha,scope=${{ github.event.pull_request.base.ref }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ github.event.pull_request.base.ref }}-${{ matrix.arch }}
+
+      - name: Export image digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          digest="${DIGEST#sha256:}"
+          if [[ ! "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Invalid image digest: ${DIGEST}"
+            exit 1
+          fi
+
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${digest}"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish multi-platform image
+    needs:
+      - prepare
+      - build
+    if: needs.prepare.outputs.exists != 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+
+    steps:
+      - name: Download image digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Create and verify multi-platform manifest
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+        run: |
+          set -euo pipefail
+          image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
+
+          mapfile -t digest_files < <(find "${RUNNER_TEMP}/digests" -maxdepth 1 -type f -print | sort)
+          if [[ "${#digest_files[@]}" -ne 2 ]]; then
+            echo "::error::Expected 2 platform digests, found ${#digest_files[@]}"
+            exit 1
+          fi
+
+          sources=()
+          for digest_file in "${digest_files[@]}"; do
+            digest="$(basename "${digest_file}")"
+            if [[ ! "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::Invalid platform digest: ${digest}"
+              exit 1
+            fi
+            sources+=("${image}@sha256:${digest}")
+          done
+
+          tag_args=(
+            "--tag" "${image}:${VERSION}"
+            "--tag" "${image}:${CHANNEL}"
+          )
+          if [[ "${CHANNEL}" == "release" ]]; then
+            tag_args+=("--tag" "${image}:latest")
+          fi
+
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "${image}:${VERSION}"
+
+  release-metadata:
+    name: Publish update metadata
+    needs:
+      - prepare
+      - build
+      - merge
+    if: always() && needs.prepare.result == 'success' && (needs.prepare.outputs.exists == 'true' || needs.merge.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+      CHANNEL: ${{ needs.prepare.outputs.channel }}
+      MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Set up Go for update metadata
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Build bilingual release body
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd backend
+          go run ./cmd/release-notes validate "${CHANNEL}" "${APP_VERSION}"
+          go run ./cmd/release-notes markdown "${CHANNEL}" "${APP_VERSION}" "${RUNNER_TEMP}/release-notes.md"
+
+      - name: Create or recover GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          prerelease_args=()
+          latest_args=(--latest=false)
+          if [[ "${CHANNEL}" == "beta" ]]; then
+            prerelease_args+=(--prerelease)
+          else
+            latest_args=(--latest)
+          fi
+
+          if gh release view "${VERSION}" --json isDraft >/tmp/seshat-release.json 2>/dev/null; then
+            if [[ "$(jq -r '.isDraft' /tmp/seshat-release.json)" != "true" ]]; then
+              echo "Published release ${VERSION} already exists."
+              exit 0
+            fi
+            gh release edit "${VERSION}" --title "${VERSION}" --notes-file "${RUNNER_TEMP}/release-notes.md" "${prerelease_args[@]}" "${latest_args[@]}" --draft=false
+            exit 0
+          fi
+
+          gh release create "${VERSION}" \
+            --target "${MERGE_SHA}" \
+            --title "${VERSION}" \
+            --notes-file "${RUNNER_TEMP}/release-notes.md" \
+            --draft \
+            "${prerelease_args[@]}" \
+            "${latest_args[@]}"
+          gh release edit "${VERSION}" --draft=false
+
+  pages:
+    name: Publish website and update feeds
+    needs:
+      - prepare
+      - release-metadata
+    if: always() && needs.prepare.result == 'success' && needs.release-metadata.result == 'success' && vars.CLOUDFLARE_PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Check out merged commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Set up Go for update feeds
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Set up Node for website build
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Validate Cloudflare Pages configuration
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" || -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required when CLOUDFLARE_PAGES_ENABLED=true"
+            exit 1
+          fi
+
+      - name: Test and build bilingual website
+        working-directory: website
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run build
+
+      - name: Deploy website to Cloudflare Pages
+        id: pages-deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: website
+          command: pages deploy dist --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'seshatapp' }} --branch=main --commit-hash=${{ github.event.pull_request.merge_commit_sha }}
+
+  summary:
+    name: Write publish summary
+    needs:
+      - prepare
+      - build
+      - merge
+      - release-metadata
+      - pages
+    if: always() && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || 'seshat' }}
+
+    steps:
+      - name: Write job summary
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION_FILE: ${{ needs.prepare.outputs.version_file }}
+          EXISTS: ${{ needs.prepare.outputs.exists }}
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          MERGE_RESULT: ${{ needs.merge.result }}
+          RELEASE_METADATA_RESULT: ${{ needs.release-metadata.result }}
+          PAGES_RESULT: ${{ needs.pages.result }}
+          PAGES_ENABLED: ${{ vars.CLOUDFLARE_PAGES_ENABLED || 'false' }}
+        run: |
+          image="${DOCKERHUB_USERNAME}/${DOCKERHUB_REPOSITORY}"
+          {
+            echo "## Docker publish"
+            echo
+            echo "- Image: \`${image}\`"
+            echo "- Version: \`${VERSION}\`"
+            echo "- Version source: \`${VERSION_FILE}\`"
+            echo "- Channel: \`${CHANNEL}\`"
+            echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
+            echo "- Prepare job: \`${PREPARE_RESULT}\`"
+            echo "- Platform build jobs: \`${BUILD_RESULT}\`"
+            echo "- Manifest job: \`${MERGE_RESULT}\`"
+            echo "- Update metadata job: \`${RELEASE_METADATA_RESULT}\`"
+            echo "- Cloudflare Pages enabled: \`${PAGES_ENABLED}\`"
+            echo "- Website and static feeds job: \`${PAGES_RESULT}\`"
+            if [[ "${PREPARE_RESULT}" != "success" ]]; then
+              echo "- Result: metadata resolution or version check failed"
+            elif [[ "${EXISTS}" == "true" ]]; then
+              echo "- Result: skipped because this version already exists"
+            elif [[ "${BUILD_RESULT}" == "success" && "${MERGE_RESULT}" == "success" ]]; then
+              echo "- Result: published successfully"
+            else
+              echo "- Result: publish failed or was interrupted"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"

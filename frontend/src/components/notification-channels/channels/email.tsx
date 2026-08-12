@@ -1,0 +1,71 @@
+import { Input } from '@appica/ui-react/input'
+import { SecretInput } from '../secret-input'
+import type { NotificationChannelAdapter } from '../types'
+import { channelInputClass, channelPayload, credentialTextField, textField } from '../types'
+import { useTranslation } from 'react-i18next'
+
+type SMTPEncryption = 'starttls' | 'tls' | 'none'
+
+function smtpEncryption(value: unknown): SMTPEncryption {
+  return value === 'tls' || value === 'none' ? value : 'starttls'
+}
+
+export const emailChannelAdapter: NotificationChannelAdapter = {
+  type: 'email',
+  label: 'Email',
+  defaultFields: () => ({ host: '', port: '587', encryption: 'starttls', from: '', to: '', username: '', password: '' }),
+  fieldsFromChannel: (channel) => ({
+    host: String(channel.config.smtp_host ?? ''),
+    port: String(channel.config.smtp_port ?? '587'),
+    encryption: smtpEncryption(channel.config.encryption),
+    from: String(channel.config.from ?? ''),
+    to: String(channel.config.to ?? ''),
+    username: credentialTextField(channel, 'username'),
+    password: credentialTextField(channel, 'password'),
+  }),
+  toPayload: (common, fields) => {
+    const username = textField(fields, 'username').trim()
+    const password = textField(fields, 'password')
+    return channelPayload(common, { smtp_host: textField(fields, 'host').trim(), smtp_port: Number(textField(fields, 'port')), encryption: smtpEncryption(fields.encryption), from: textField(fields, 'from').trim(), to: textField(fields, 'to').trim() }, { username, password })
+  },
+  Form: ({ fields, update }) => {
+    const { t } = useTranslation()
+    return <>
+      <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+        <label className="block space-y-2 text-sm font-medium">
+          <span>{t('notifications.forms.smtpHost')}</span>
+          <Input value={textField(fields, 'host')} onChange={(event) => update('host', event.target.value)} required placeholder="smtp.example.com" />
+        </label>
+        <label className="block space-y-2 text-sm font-medium">
+          <span>{t('notifications.forms.port')}</span>
+          <Input type="number" min="1" max="65535" value={textField(fields, 'port')} onChange={(event) => update('port', event.target.value)} required />
+        </label>
+      </div>
+      <label className="block space-y-2 text-sm font-medium">
+        <span>{t('notifications.forms.encryption')}</span>
+        <select className={channelInputClass} value={smtpEncryption(fields.encryption)} onChange={(event) => update('encryption', event.target.value)}>
+          <option value="starttls">{t('notifications.forms.starttls')}</option>
+          <option value="tls">{t('notifications.forms.tls')}</option>
+          <option value="none">{t('notifications.forms.noEncryption')}</option>
+        </select>
+      </label>
+      <label className="block space-y-2 text-sm font-medium">
+        <span>{t('notifications.forms.sender')}</span>
+        <Input type="email" value={textField(fields, 'from')} onChange={(event) => update('from', event.target.value)} required placeholder="notice@example.com" />
+      </label>
+      <label className="block space-y-2 text-sm font-medium">
+        <span>{t('notifications.forms.recipients')}</span>
+        <Input value={textField(fields, 'to')} onChange={(event) => update('to', event.target.value)} required placeholder="a@example.com, b@example.com" />
+        <span className="block text-xs font-normal text-neutral-500">{t('notifications.forms.recipientsHelp')}</span>
+      </label>
+      <label className="block space-y-2 text-sm font-medium">
+        <span>{t('notifications.forms.smtpUsername')}</span>
+        <SecretInput revealLabel={t('notifications.forms.smtpUsername')} value={textField(fields, 'username')} onChange={(event) => update('username', event.target.value)} autoComplete="off" />
+      </label>
+      <label className="block space-y-2 text-sm font-medium">
+        <span>{t('notifications.forms.smtpPassword')}</span>
+        <SecretInput revealLabel={t('notifications.forms.smtpPassword')} value={textField(fields, 'password')} onChange={(event) => update('password', event.target.value)} autoComplete="new-password" />
+      </label>
+    </>
+  },
+}

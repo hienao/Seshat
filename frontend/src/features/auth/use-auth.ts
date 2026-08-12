@@ -8,12 +8,19 @@ export function useAuth() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const setUser = useAuthStore((state) => state.setUser)
-  const clearUser = useAuthStore((state) => state.clearUser)
+  const setAccessToken = useAuthStore((state) => state.setAccessToken)
+  const clearSession = useAuthStore((state) => state.clearSession)
 
   const login = useMutation({
     mutationFn: async (values: { username: string; password: string }) => {
-      await api.login(values.username, values.password)
-      return api.profile()
+      const session = await api.login(values.username, values.password)
+      setAccessToken(session.token)
+      try {
+        return await api.profile()
+      } catch (error) {
+        clearSession()
+        throw error
+      }
     },
     onSuccess: (profile) => {
       setUser(profile)
@@ -24,8 +31,14 @@ export function useAuth() {
   const register = useMutation({
     mutationFn: async (values: { username: string; password: string }) => {
       await api.register(values.username, values.password)
-      await api.login(values.username, values.password)
-      return api.profile()
+      const session = await api.login(values.username, values.password)
+      setAccessToken(session.token)
+      try {
+        return await api.profile()
+      } catch (error) {
+        clearSession()
+        throw error
+      }
     },
     onSuccess: (profile) => {
       setUser(profile)
@@ -36,7 +49,7 @@ export function useAuth() {
   const logout = useMutation({
     mutationFn: api.logout,
     onSettled: () => {
-      clearUser()
+      clearSession()
       queryClient.clear()
       navigate('/login', { replace: true })
     },

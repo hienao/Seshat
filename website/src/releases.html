@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0d0c">
+  <meta name="description" content="{{meta.releasesDescription}}" data-i18n-content="meta.releasesDescription">
+  <title data-i18n="meta.releasesTitle">{{meta.releasesTitle}}</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="releases">
+  <a class="skip-link" href="#main" data-i18n="accessibility.skip">{{accessibility.skip}}</a>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="{{accessibility.home}}" data-i18n-aria="accessibility.home"><span class="brand-mark" aria-hidden="true">S</span><span>Seshat</span></a>
+    <nav class="nav-links" aria-label="{{accessibility.primaryNavigation}}" data-i18n-aria="accessibility.primaryNavigation">
+      <a href="/#product" data-i18n="nav.product">{{nav.product}}</a>
+      <a class="active" href="/releases/" data-i18n="nav.releases">{{nav.releases}}</a>
+      <a href="https://github.com/hienao/Seshat" target="_blank" rel="noreferrer" data-i18n="nav.github">{{nav.github}}</a>
+    </nav>
+    <div class="language-switcher" role="group" aria-label="{{nav.language}}" data-i18n-aria="nav.language">
+      <button type="button" data-language="en" data-i18n="nav.english">{{nav.english}}</button>
+      <button type="button" data-language="zh-CN" data-i18n="nav.chinese">{{nav.chinese}}</button>
+    </div>
+  </header>
+
+  <main id="main" class="release-main section-shell">
+    <header class="release-hero">
+      <p class="eyebrow" data-i18n="releases.eyebrow">{{releases.eyebrow}}</p>
+      <h1 data-i18n="releases.title">{{releases.title}}</h1>
+      <p data-i18n="releases.lead">{{releases.lead}}</p>
+    </header>
+    <div class="release-tabs" role="tablist" aria-label="{{accessibility.releaseChannel}}" data-i18n-aria="accessibility.releaseChannel">
+      <button type="button" role="tab" data-release-filter="all" data-i18n="releases.allChanges">{{releases.allChanges}}</button>
+      <button type="button" role="tab" data-release-filter="beta">Beta</button>
+      <button type="button" role="tab" data-release-filter="release">Release</button>
+    </div>
+    <div id="release-list" class="release-list" aria-live="polite"></div>
+  </main>
+
+  <footer class="site-footer section-shell"><span class="brand">Seshat</span><p data-i18n="home.footer">{{home.footer}}</p><a href="https://github.com/hienao/Seshat">GitHub ↗</a></footer>
+  <script src="/assets/site.js" type="module"></script>
+</body>
+</html>

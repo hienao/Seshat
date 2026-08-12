@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"basegoapp/config"
-	"basegoapp/internal/repository"
+	"seshat/config"
+	"seshat/internal/repository"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -16,29 +16,9 @@ func JWTAuth(cfg *config.Config) gin.HandlerFunc {
 	userRepo := repository.NewUserRepository()
 
 	return func(c *gin.Context) {
-		// 优先从 Authorization Header 获取 Token，兼容 Cookie 模式。
-		tokenString := ""
+		// 仅接受显式的 Bearer Token，不从 Cookie 读取认证信息。
 		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" {
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				c.JSON(http.StatusUnauthorized, gin.H{
-					"code":    -1,
-					"message": "认证令牌格式错误",
-				})
-				c.Abort()
-				return
-			}
-			tokenString = parts[1]
-		}
-
-		if tokenString == "" {
-			if cookieValue, err := c.Cookie(cfg.AuthCookieName); err == nil {
-				tokenString = cookieValue
-			}
-		}
-
-		if tokenString == "" {
+		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"code":    -1,
 				"message": "未提供认证令牌",
@@ -46,6 +26,16 @@ func JWTAuth(cfg *config.Config) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || strings.TrimSpace(parts[1]) == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    -1,
+				"message": "认证令牌格式错误",
+			})
+			c.Abort()
+			return
+		}
+		tokenString := strings.TrimSpace(parts[1])
 
 		// 解析 JWT Token
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -97,6 +87,7 @@ func JWTAuth(cfg *config.Config) gin.HandlerFunc {
 			c.Set("user_id", userID)
 			c.Set("username", user.Username)
 			c.Set("is_admin", user.IsAdmin)
+			c.Set("requires_admin_setup", user.RequiresAdminSetup)
 			c.Set("token_version", user.TokenVersion)
 		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": -1, "message": "认证令牌无效"})
@@ -104,6 +95,18 @@ func JWTAuth(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
+		c.Next()
+	}
+}
+
+// AdminSetupComplete 禁止一次性引导管理员访问初始化以外的受保护接口。
+func AdminSetupComplete() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.GetBool("requires_admin_setup") {
+			c.JSON(http.StatusForbidden, gin.H{"code": -1, "message": "请先完成管理员初始化"})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

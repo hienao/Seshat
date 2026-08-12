@@ -1,0 +1,4 @@
+interface:
+  display_name: "Seshat Notification Channel"
+  short_description: "独立新增或修改 Seshat 推送渠道 Adapter"
+  default_prompt: "Use $seshat-notification-channel to add or modify a Seshat notification channel without coupling other channels."

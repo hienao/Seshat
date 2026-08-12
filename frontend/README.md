@@ -1,4 +1,4 @@
-# BaseGoApp Frontend
+# Seshat Frontend
 
 React 19 + Vite + Appica UI 前端。服务端状态由 TanStack Query 管理，当前用户由 Zustand 管理，路由使用 React Router。
 
@@ -33,4 +33,4 @@ src/
 └── stores/       # Zustand 客户端状态
 ```
 
-认证令牌由后端写入 HttpOnly Cookie，前端不把令牌或用户会话持久化到 LocalStorage。
+认证令牌由前端持久化到 LocalStorage，并在 API 请求中通过 `Authorization: Bearer <token>` 请求头发送。
