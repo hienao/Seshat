@@ -146,6 +146,9 @@ jobs:
     name: Build ${{ matrix.platform }}
     needs: prepare
     if: needs.prepare.outputs.exists != 'true'
+    permissions:
+      actions: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -194,7 +197,7 @@ jobs:
             APP_COMMIT=${{ github.event.pull_request.merge_commit_sha }}
             APP_BUILD_TIME=${{ needs.prepare.outputs.build_time }}
           cache-from: type=gha,scope=${{ github.event.pull_request.base.ref }}-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ github.event.pull_request.base.ref }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,ignore-error=true,scope=${{ github.event.pull_request.base.ref }}-${{ matrix.arch }}
 
       - name: Export image digest
         shell: bash
