@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "channel": "release",
+  "version": "v0.1.1",
+  "summary": {
+    "en": "The first feature release adds bilingual administration, richer media notifications, reliable delivery, and independent update feeds",
+    "zh-CN": "首个功能正式版带来双语管理界面、更丰富的媒体推送、可靠投递和独立更新源"
+  },
+  "changes": [
+    {
+      "id": "bilingual-administration",
+      "type": "feature",
+      "text": {
+        "en": "Added complete English and Chinese interface support with browser-language detection, persistent manual preferences, and localized navigation, forms, validation, logs, and media presentation.",
+        "zh-CN": "新增完整的中英文界面支持，包括浏览器语言识别、持久化手动偏好，以及导航、表单、校验、日志和媒体展示的多语言适配。"
+      }
+    },
+    {
+      "id": "rich-channel-notifications",
+      "type": "feature",
+      "text": {
+        "en": "Added channel-aware plain-text and Markdown rendering, deterministic delivery snapshots, and DingTalk media images while keeping each channel's protocol isolated.",
+        "zh-CN": "新增渠道感知的普通文本与 Markdown 渲染、确定性投递快照和钉钉媒体图片，同时保持各渠道协议相互隔离。"
+      }
+    },
+    {
+      "id": "media-presentation-reliability",
+      "type": "fix",
+      "text": {
+        "en": "Webhook media presentation is now generated on demand, Jellyfin and Emby metadata refreshes safely, Jellyfin 10.10 API-key queries and artwork fallbacks work correctly, and notification delivery no longer requires a public base URL.",
+        "zh-CN": "Webhook 媒体展示现改为按需生成，Jellyfin 与 Emby 元数据可安全刷新，并修复 Jellyfin 10.10 API Key 查询及图片回退；推送也不再强制要求配置对外访问地址。"
+      }
+    },
+    {
+      "id": "dingtalk-rate-limit-recovery",
+      "type": "fix",
+      "text": {
+        "en": "DingTalk deliveries now share a persistent sending window by robot token, honor official 410100 cooldowns, retry transient system-busy responses with bounded backoff, and expose localized throttle status without leaking credentials.",
+        "zh-CN": "钉钉推送现按机器人 Token 共享持久化发送窗口，遵循官方 410100 冷却规则，对临时系统繁忙采用有上限的退避重试，并以双语展示限流状态且不泄露凭据。"
+      }
+    },
+    {
+      "id": "independent-update-delivery",
+      "type": "feature",
+      "text": {
+        "en": "Added independently tracked Beta and Release update checks, cumulative bilingual release notes, embedded build metadata, and fixed Cloudflare Pages feeds that avoid GitHub API rate limits.",
+        "zh-CN": "新增相互独立的 Beta 与 Release 更新检查、累计双语更新记录、内嵌构建元数据，以及不受 GitHub API 限流影响的 Cloudflare Pages 固定更新源。"
+      }
+    },
+    {
+      "id": "non-blocking-build-cache-export",
+      "type": "fix",
+      "text": {
+        "en": "Docker platform builds now receive the required Actions cache permission, and a cache export failure no longer blocks digest collection or multi-platform manifest publishing after the image itself has been pushed successfully.",
+        "zh-CN": "Docker 平台构建现具备所需的 Actions 缓存权限；镜像本身推送成功后，即使缓存导出失败，也不会再阻止摘要收集和多平台 manifest 发布。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [
+      "Deploy the immutable v0.1.1 image and restart the container.",
+      "Database tables and delivery snapshot, rate-limit, and observability fields are migrated automatically at startup; no manual database step is required.",
+      "No new required configuration is introduced. Configure the public base URL only when no-sign-in notification detail links are desired."
+    ],
+    "zh-CN": [
+      "部署不可变镜像 v0.1.1 并重启容器。",
+      "数据库表以及投递快照、限流和可观测性字段会在启动时自动迁移，无需手动操作数据库。",
+      "本次没有新增必填配置；仅在需要推送中的免登录详情链接时配置对外访问地址。"
+    ]
+  }
+}
