@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "channel": "release",
-  "version": "v0.1.0",
+  "version": "v0.1.1",
   "summary": {
     "en": "The first feature release adds bilingual administration, richer media notifications, reliable delivery, and independent update feeds",
     "zh-CN": "首个功能正式版带来双语管理界面、更丰富的媒体推送、可靠投递和独立更新源"
@@ -46,16 +46,24 @@
         "en": "Added independently tracked Beta and Release update checks, cumulative bilingual release notes, embedded build metadata, and fixed Cloudflare Pages feeds that avoid GitHub API rate limits.",
         "zh-CN": "新增相互独立的 Beta 与 Release 更新检查、累计双语更新记录、内嵌构建元数据，以及不受 GitHub API 限流影响的 Cloudflare Pages 固定更新源。"
       }
+    },
+    {
+      "id": "non-blocking-build-cache-export",
+      "type": "fix",
+      "text": {
+        "en": "Docker platform builds now receive the required Actions cache permission, and a cache export failure no longer blocks digest collection or multi-platform manifest publishing after the image itself has been pushed successfully.",
+        "zh-CN": "Docker 平台构建现具备所需的 Actions 缓存权限；镜像本身推送成功后，即使缓存导出失败，也不会再阻止摘要收集和多平台 manifest 发布。"
+      }
     }
   ],
   "upgrade_notes": {
     "en": [
-      "Deploy the immutable v0.1.0 image and restart the container.",
+      "Deploy the immutable v0.1.1 image and restart the container.",
       "Database tables and delivery snapshot, rate-limit, and observability fields are migrated automatically at startup; no manual database step is required.",
       "No new required configuration is introduced. Configure the public base URL only when no-sign-in notification detail links are desired."
     ],
     "zh-CN": [
-      "部署不可变镜像 v0.1.0 并重启容器。",
+      "部署不可变镜像 v0.1.1 并重启容器。",
       "数据库表以及投递快照、限流和可观测性字段会在启动时自动迁移，无需手动操作数据库。",
       "本次没有新增必填配置；仅在需要推送中的免登录详情链接时配置对外访问地址。"
     ]
