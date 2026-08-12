@@ -104,26 +104,40 @@ type IntegrationNotificationRule struct {
 func (IntegrationNotificationRule) TableName() string { return "integration_notification_rules" }
 
 type NotificationDelivery struct {
-	ID             uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	EventID        uint       `gorm:"uniqueIndex:idx_delivery_event_channel;index;not null" json:"event_id"`
-	IntegrationID  uint       `gorm:"index:idx_delivery_integration_created;not null" json:"integration_id"`
-	ChannelID      uint       `gorm:"uniqueIndex:idx_delivery_event_channel;index:idx_delivery_channel_created;not null" json:"channel_id"`
-	ChannelName    string     `gorm:"size:100;not null" json:"channel_name"`
-	ChannelType    string     `gorm:"size:20;not null" json:"channel_type"`
-	EventType      string     `gorm:"size:150;index;not null" json:"event_type"`
-	Status         string     `gorm:"size:20;index:idx_delivery_status_next;not null" json:"status"`
-	AttemptCount   int        `gorm:"not null;default:0" json:"attempt_count"`
-	NextAttemptAt  *time.Time `gorm:"index:idx_delivery_status_next" json:"next_attempt_at,omitempty"`
-	LastStatusCode int        `json:"last_status_code,omitempty"`
-	LastError      string     `gorm:"size:1000" json:"last_error,omitempty"`
-	ContentFormat  string     `gorm:"size:30" json:"content_format,omitempty"`
-	ContentProfile string     `gorm:"size:50" json:"content_profile,omitempty"`
-	ContentVersion int        `gorm:"not null;default:0" json:"content_version,omitempty"`
-	ContentTitle   string     `gorm:"size:500" json:"-"`
-	ContentBody    string     `gorm:"type:text" json:"-"`
-	SentAt         *time.Time `json:"sent_at,omitempty"`
-	CreatedAt      time.Time  `gorm:"index:idx_delivery_integration_created;index:idx_delivery_channel_created" json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID                uint64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	EventID           uint       `gorm:"uniqueIndex:idx_delivery_event_channel;index;not null" json:"event_id"`
+	IntegrationID     uint       `gorm:"index:idx_delivery_integration_created;not null" json:"integration_id"`
+	ChannelID         uint       `gorm:"uniqueIndex:idx_delivery_event_channel;index:idx_delivery_channel_created;not null" json:"channel_id"`
+	ChannelName       string     `gorm:"size:100;not null" json:"channel_name"`
+	ChannelType       string     `gorm:"size:20;not null" json:"channel_type"`
+	EventType         string     `gorm:"size:150;index;not null" json:"event_type"`
+	Status            string     `gorm:"size:20;index:idx_delivery_status_next;not null" json:"status"`
+	AttemptCount      int        `gorm:"not null;default:0" json:"attempt_count"`
+	NextAttemptAt     *time.Time `gorm:"index:idx_delivery_status_next" json:"next_attempt_at,omitempty"`
+	LastStatusCode    int        `json:"last_status_code,omitempty"`
+	ProviderErrorCode string     `gorm:"size:50" json:"provider_error_code,omitempty"`
+	DeferReason       string     `gorm:"size:50" json:"defer_reason,omitempty"`
+	LastError         string     `gorm:"size:1000" json:"last_error,omitempty"`
+	ContentFormat     string     `gorm:"size:30" json:"content_format,omitempty"`
+	ContentProfile    string     `gorm:"size:50" json:"content_profile,omitempty"`
+	ContentVersion    int        `gorm:"not null;default:0" json:"content_version,omitempty"`
+	ContentTitle      string     `gorm:"size:500" json:"-"`
+	ContentBody       string     `gorm:"type:text" json:"-"`
+	SentAt            *time.Time `json:"sent_at,omitempty"`
+	CreatedAt         time.Time  `gorm:"index:idx_delivery_integration_created;index:idx_delivery_channel_created" json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 func (NotificationDelivery) TableName() string { return "notification_deliveries" }
+
+type NotificationRateLimit struct {
+	ID            uint       `gorm:"primarykey"`
+	ScopeType     string     `gorm:"uniqueIndex:idx_notification_rate_limit_scope;size:50;not null"`
+	ScopeKey      string     `gorm:"uniqueIndex:idx_notification_rate_limit_scope;size:64;not null"`
+	NextAllowedAt *time.Time `gorm:"index"`
+	CooldownUntil *time.Time `gorm:"index"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (NotificationRateLimit) TableName() string { return "notification_rate_limits" }

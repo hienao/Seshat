@@ -20,24 +20,28 @@ import (
 	"seshat/pkg/database"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
 	maxNotificationRetries    = 6
-	notificationRetryInterval = 10 * time.Second
 	notificationResponseLimit = 32 << 10
 	staleDeliveryThreshold    = time.Minute
 )
 
 var (
 	errDeliveryAlreadyClaimed = errors.New("推送任务已被其他 Worker 领取")
+	errDeliveryDeferred       = errors.New("推送任务等待渠道发送窗口")
 	errNoDeliveryAvailable    = errors.New("暂无待发送的推送任务")
 )
 
 type deliveryError struct {
-	message    string
-	statusCode int
-	retryable  bool
+	message      string
+	statusCode   int
+	providerCode string
+	retryable    bool
+	retryAfter   time.Duration
+	rateLimited  bool
 }
 
 func (e *deliveryError) Error() string { return e.message }
@@ -143,22 +147,57 @@ func (w *NotificationWorker) loop() {
 func (w *NotificationWorker) processOne() bool {
 	db := database.GetDB()
 	var delivery model.NotificationDelivery
+	deferred := false
 	err := db.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
-		result := tx.Where("status IN ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)", []string{"pending", "retrying"}, now).Order("id ASC").Limit(1).Find(&delivery)
+		result := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("status IN ? AND (next_attempt_at IS NULL OR next_attempt_at <= ?)", []string{"pending", "retrying"}, now).Order("id ASC").Limit(1).Find(&delivery)
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
 			return errNoDeliveryAvailable
 		}
-		result = tx.Model(&model.NotificationDelivery{}).Where("id = ? AND status IN ?", delivery.ID, []string{"pending", "retrying"}).Updates(map[string]interface{}{"status": "sending", "attempt_count": gorm.Expr("attempt_count + 1")})
+		var channel model.NotificationChannel
+		if err := tx.First(&channel, delivery.ChannelID).Error; err == nil {
+			if adapter, ok := defaultNotificationChannelRegistry.Get(channel.Type); ok {
+				if limitedAdapter, ok := adapter.(notificationRateLimitedAdapter); ok {
+					policy, policyErr := limitedAdapter.RateLimitPolicy(&channel)
+					if policyErr == nil {
+						allowed, next, limitErr := reserveNotificationSendSlot(tx, policy, now)
+						if limitErr != nil {
+							return limitErr
+						}
+						if !allowed {
+							updates := map[string]interface{}{"next_attempt_at": next, "defer_reason": "rate_limited"}
+							if err := tx.Model(&model.NotificationDelivery{}).Where("id = ? AND status IN ?", delivery.ID, []string{"pending", "retrying"}).Updates(updates).Error; err != nil {
+								return err
+							}
+							delivery.NextAttemptAt = &next
+							delivery.DeferReason = "rate_limited"
+							deferred = true
+							return nil
+						}
+					}
+				}
+			}
+		}
+		if deferred {
+			return nil
+		}
+		result = tx.Model(&model.NotificationDelivery{}).Where("id = ? AND status IN ?", delivery.ID, []string{"pending", "retrying"}).Updates(map[string]interface{}{"status": "sending", "attempt_count": gorm.Expr("attempt_count + 1"), "defer_reason": ""})
 		if result.Error == nil && result.RowsAffected == 0 {
 			return errDeliveryAlreadyClaimed
 		}
 		return result.Error
 	})
+	if deferred && err == nil {
+		err = errDeliveryDeferred
+	}
 	if errors.Is(err, errDeliveryAlreadyClaimed) {
+		return true
+	}
+	if errors.Is(err, errDeliveryDeferred) {
+		logging.Info("notification", "推送等待渠道发送窗口", logging.Fields{"delivery_id": delivery.ID, "channel_id": delivery.ChannelID, "channel_type": delivery.ChannelType, "next_attempt_at": delivery.NextAttemptAt})
 		return true
 	}
 	if errors.Is(err, errNoDeliveryAvailable) {
@@ -237,7 +276,7 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 	}
 	if err == nil {
 		now := time.Now()
-		if updateErr := db.Model(delivery).Updates(map[string]interface{}{"status": "succeeded", "sent_at": now, "next_attempt_at": nil, "last_error": "", "last_status_code": 0}).Error; updateErr != nil {
+		if updateErr := db.Model(delivery).Updates(map[string]interface{}{"status": "succeeded", "sent_at": now, "next_attempt_at": nil, "last_error": "", "last_status_code": 0, "provider_error_code": "", "defer_reason": ""}).Error; updateErr != nil {
 			logging.Error("notification", "保存推送成功状态失败", logging.Fields{"delivery_id": delivery.ID, "error": updateErr})
 			return
 		}
@@ -246,22 +285,48 @@ func (w *NotificationWorker) send(delivery *model.NotificationDelivery) {
 	}
 	var sendErr *deliveryError
 	if errors.As(err, &sendErr) {
-		w.fail(delivery, sendErr.statusCode, err, sendErr.retryable)
+		if sendErr.rateLimited {
+			if limitedAdapter, ok := defaultNotificationChannelRegistry.adapters[channel.Type].(notificationRateLimitedAdapter); ok {
+				if policy, policyErr := limitedAdapter.RateLimitPolicy(&channel); policyErr == nil {
+					if cooldownErr := applyNotificationRateLimitCooldown(db, policy, time.Now().Add(sendErr.retryAfter)); cooldownErr != nil {
+						logging.Error("notification", "保存渠道限流冷却状态失败", logging.Fields{"channel_id": channel.ID, "channel_type": channel.Type, "error": cooldownErr})
+					}
+				}
+			}
+		}
+		w.failDelivery(delivery, sendErr)
 	} else {
 		w.fail(delivery, 0, err, true)
 	}
 }
 
 func (w *NotificationWorker) fail(delivery *model.NotificationDelivery, statusCode int, err error, retryable bool) {
+	w.failDelivery(delivery, &deliveryError{message: err.Error(), statusCode: statusCode, retryable: retryable})
+}
+
+func (w *NotificationWorker) failDelivery(delivery *model.NotificationDelivery, sendErr *deliveryError) {
 	fields := deliveryFields(delivery)
-	fields["error"] = err
+	fields["error"] = sendErr
 	fields["attempt"] = delivery.AttemptCount
-	updates := map[string]interface{}{"last_error": truncateNotificationError(err.Error()), "last_status_code": statusCode}
-	if retryable && delivery.AttemptCount <= maxNotificationRetries {
-		next := time.Now().Add(notificationRetryInterval)
+	if sendErr.providerCode != "" {
+		fields["provider_error_code"] = sendErr.providerCode
+	}
+	updates := map[string]interface{}{"last_error": truncateNotificationError(sendErr.Error()), "last_status_code": sendErr.statusCode, "provider_error_code": sendErr.providerCode, "defer_reason": ""}
+	if sendErr.retryable && delivery.AttemptCount <= maxNotificationRetries {
+		delay := sendErr.retryAfter
+		if delay <= 0 {
+			delay = notificationRetryDelay(delivery.AttemptCount)
+		}
+		next := time.Now().Add(delay)
 		updates["status"] = "retrying"
 		updates["next_attempt_at"] = next
-		logging.Warn("notification", "推送发送失败，等待重试", fields)
+		if sendErr.rateLimited {
+			updates["defer_reason"] = "provider_rate_limited"
+			fields["next_attempt_at"] = next
+			logging.Warn("notification", "推送渠道触发频率限制", fields)
+		} else {
+			logging.Warn("notification", "推送发送失败，等待重试", fields)
+		}
 	} else {
 		updates["status"] = "failed"
 		updates["next_attempt_at"] = nil
@@ -270,6 +335,66 @@ func (w *NotificationWorker) fail(delivery *model.NotificationDelivery, statusCo
 	if updateErr := database.GetDB().Model(delivery).Updates(updates).Error; updateErr != nil {
 		logging.Error("notification", "保存推送失败状态失败", logging.Fields{"delivery_id": delivery.ID, "error": updateErr})
 	}
+}
+
+func notificationRetryDelay(attempt int) time.Duration {
+	delays := []time.Duration{10 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute}
+	if attempt < 1 {
+		return delays[0]
+	}
+	if attempt > len(delays) {
+		return delays[len(delays)-1]
+	}
+	return delays[attempt-1]
+}
+
+func reserveNotificationSendSlot(tx *gorm.DB, policy *notificationRateLimitPolicy, now time.Time) (bool, time.Time, error) {
+	state := model.NotificationRateLimit{ScopeType: policy.ScopeType, ScopeKey: policy.ScopeKey}
+	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "scope_type"}, {Name: "scope_key"}}, DoNothing: true}).Create(&state).Error; err != nil {
+		return false, time.Time{}, err
+	}
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("scope_type = ? AND scope_key = ?", policy.ScopeType, policy.ScopeKey).First(&state).Error; err != nil {
+		return false, time.Time{}, err
+	}
+	next := now
+	if state.NextAllowedAt != nil && state.NextAllowedAt.After(next) {
+		next = *state.NextAllowedAt
+	}
+	if state.CooldownUntil != nil && state.CooldownUntil.After(next) {
+		next = *state.CooldownUntil
+	}
+	if next.After(now) {
+		return false, next, nil
+	}
+	nextAllowed := now.Add(policy.MinInterval)
+	if err := tx.Model(&state).Updates(map[string]interface{}{"next_allowed_at": nextAllowed}).Error; err != nil {
+		return false, time.Time{}, err
+	}
+	return true, now, nil
+}
+
+func applyNotificationRateLimitCooldown(db *gorm.DB, policy *notificationRateLimitPolicy, until time.Time) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		state := model.NotificationRateLimit{ScopeType: policy.ScopeType, ScopeKey: policy.ScopeKey}
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "scope_type"}, {Name: "scope_key"}}, DoNothing: true}).Create(&state).Error; err != nil {
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("scope_type = ? AND scope_key = ?", policy.ScopeType, policy.ScopeKey).First(&state).Error; err != nil {
+			return err
+		}
+		if state.CooldownUntil != nil && state.CooldownUntil.After(until) {
+			until = *state.CooldownUntil
+		}
+		return tx.Model(&state).Updates(map[string]interface{}{"cooldown_until": until, "next_allowed_at": until}).Error
+	})
+}
+
+func reserveNotificationSendSlotStandalone(db *gorm.DB, policy *notificationRateLimitPolicy, now time.Time) (allowed bool, next time.Time, err error) {
+	err = db.Transaction(func(tx *gorm.DB) error {
+		allowed, next, err = reserveNotificationSendSlot(tx, policy, now)
+		return err
+	})
+	return
 }
 
 func deliveryFields(delivery *model.NotificationDelivery) logging.Fields {
@@ -286,7 +411,33 @@ func sendChannel(ctx context.Context, channel *model.NotificationChannel, messag
 	if err != nil {
 		return err
 	}
-	return adapter.Send(ctx, channel, message, notificationSendOptions{allowPrivate: allowPrivate, proxyURL: proxyURL})
+	if limitedAdapter, ok := adapter.(notificationRateLimitedAdapter); ok {
+		policy, policyErr := limitedAdapter.RateLimitPolicy(channel)
+		if policyErr != nil {
+			return policyErr
+		}
+		allowed, next, reserveErr := reserveNotificationSendSlotStandalone(database.GetDB(), policy, time.Now())
+		if reserveErr != nil {
+			return &deliveryError{message: "检查渠道发送窗口失败", retryable: true}
+		}
+		if !allowed {
+			message := policy.WaitMessage
+			if message == "" {
+				message = "推送渠道正在限速，请稍后重试"
+			}
+			return &deliveryError{message: message, retryable: true, retryAfter: time.Until(next), rateLimited: true}
+		}
+	}
+	err = adapter.Send(ctx, channel, message, notificationSendOptions{allowPrivate: allowPrivate, proxyURL: proxyURL})
+	var sendErr *deliveryError
+	if errors.As(err, &sendErr) && sendErr.rateLimited {
+		if limitedAdapter, ok := adapter.(notificationRateLimitedAdapter); ok {
+			if policy, policyErr := limitedAdapter.RateLimitPolicy(channel); policyErr == nil {
+				_ = applyNotificationRateLimitCooldown(database.GetDB(), policy, time.Now().Add(sendErr.retryAfter))
+			}
+		}
+	}
+	return err
 }
 
 func messageForDelivery(adapter notificationChannelAdapter, channel *model.NotificationChannel, delivery *model.NotificationDelivery, message outboundMessage) (outboundMessage, error) {

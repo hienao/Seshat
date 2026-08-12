@@ -33,7 +33,7 @@ export function EventDetailPage() {
         </dl>
       </Panel>
       <Panel title={t('events.notificationStatus')} description={t('events.notificationStatusDescription')} icon={<Bell size={20} />}>
-        {notificationStatus.isPending ? <p className="text-sm text-neutral-500">{t('events.notificationStatusLoading')}</p> : notificationStatus.error ? <ErrorState message={errorMessage(notificationStatus.error, t('events.notificationStatusUnavailable'))} onRetry={() => void notificationStatus.refetch()} /> : notificationStatus.data && <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><Badge variant={notificationStatus.data.state === 'succeeded' ? 'success' : notificationStatus.data.state === 'failed' ? 'error' : 'outline'}>{notificationStateLabel(notificationStatus.data.state, t)}</Badge><p className="mt-2 text-sm text-neutral-500">{notificationStatus.data.reason || notificationStatus.data.delivery?.last_error || t('events.notificationQueued')}</p></div>{notificationStatus.data.delivery && <div className="text-xs text-neutral-500">{t('events.attemptSummary', { count: notificationStatus.data.delivery.attempt_count })}{notificationStatus.data.delivery.sent_at ? ` · ${formatDateTime(notificationStatus.data.delivery.sent_at)}` : ''}</div>}</div>}
+        {notificationStatus.isPending ? <p className="text-sm text-neutral-500">{t('events.notificationStatusLoading')}</p> : notificationStatus.error ? <ErrorState message={errorMessage(notificationStatus.error, t('events.notificationStatusUnavailable'))} onRetry={() => void notificationStatus.refetch()} /> : notificationStatus.data && <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><Badge variant={notificationStatus.data.state === 'succeeded' ? 'success' : notificationStatus.data.state === 'failed' ? 'error' : 'outline'}>{notificationStateLabel(notificationStatus.data.state, t)}</Badge><p className="mt-2 text-sm text-neutral-500">{notificationStatusDescription(notificationStatus.data.delivery, notificationStatus.data.reason, t)}</p></div>{notificationStatus.data.delivery && <div className="text-xs text-neutral-500">{t('events.attemptSummary', { count: notificationStatus.data.delivery.attempt_count })}{notificationStatus.data.delivery.sent_at ? ` · ${formatDateTime(notificationStatus.data.delivery.sent_at)}` : ''}</div>}</div>}
       </Panel>
       <Panel title={t('events.standardized')} description={t('events.standardizedDescription')}>
         <EventCard event={item} detail />
@@ -47,4 +47,11 @@ export function EventDetailPage() {
 
 function notificationStateLabel(state: string, t: TFunction) {
   return t(`events.notificationStates.${state}`, { defaultValue: state })
+}
+
+function notificationStatusDescription(delivery: import('@/api/types').NotificationDelivery | undefined, reason: string | undefined, t: TFunction) {
+  if (reason) return reason
+  if (delivery?.defer_reason === 'rate_limited' && delivery.next_attempt_at) return t('events.notificationRateLimited', { time: formatDateTime(delivery.next_attempt_at) })
+  if (delivery?.defer_reason === 'provider_rate_limited' && delivery.next_attempt_at) return t('events.notificationProviderRateLimited', { time: formatDateTime(delivery.next_attempt_at) })
+  return delivery?.last_error || t('events.notificationQueued')
 }

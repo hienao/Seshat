@@ -327,6 +327,8 @@ export interface NotificationDelivery {
   attempt_count: number
   next_attempt_at?: string
   last_status_code?: number
+  provider_error_code?: string
+  defer_reason?: 'rate_limited' | 'provider_rate_limited'
   last_error?: string
   content_format?: 'plain_text' | 'markdown'
   content_profile?: string

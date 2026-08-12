@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"seshat/internal/model"
 )
@@ -36,6 +37,17 @@ type notificationHTTPChannelAdapter interface {
 	notificationChannelAdapter
 	BuildRequest(*model.NotificationChannel, outboundMessage) (*notificationRequestSpec, error)
 	ValidateResponse(int, []byte) error
+}
+
+type notificationRateLimitPolicy struct {
+	ScopeType   string
+	ScopeKey    string
+	MinInterval time.Duration
+	WaitMessage string
+}
+
+type notificationRateLimitedAdapter interface {
+	RateLimitPolicy(*model.NotificationChannel) (*notificationRateLimitPolicy, error)
 }
 
 type notificationChannelRegistry struct {
@@ -196,15 +208,23 @@ func parseNotificationResponse(body []byte) (map[string]interface{}, error) {
 }
 
 func notificationResponseNumber(response map[string]interface{}, key string) int64 {
+	value, ok := notificationResponseInteger(response, key)
+	if !ok {
+		return -1
+	}
+	return value
+}
+
+func notificationResponseInteger(response map[string]interface{}, key string) (int64, bool) {
 	switch value := response[key].(type) {
 	case float64:
-		return int64(value)
+		integer := int64(value)
+		return integer, float64(integer) == value
 	case string:
-		var result int64
-		_, _ = fmt.Sscan(value, &result)
-		return result
+		result, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		return result, err == nil
 	default:
-		return -1
+		return 0, false
 	}
 }
 

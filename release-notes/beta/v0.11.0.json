@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "channel": "beta",
+  "version": "v0.11.0",
+  "summary": {
+    "en": "DingTalk deliveries now avoid robot rate limits and recover safely when throttled",
+    "zh-CN": "钉钉推送现可主动避开机器人频率限制，并在触发限流后安全恢复"
+  },
+  "changes": [
+    {
+      "id": "dingtalk-persistent-rate-limit",
+      "type": "feature",
+      "text": {
+        "en": "DingTalk channels now share a persistent sending window by robot token, limiting delivery to one message every four seconds across channels, processes, and restarts.",
+        "zh-CN": "钉钉渠道现按机器人 Token 共享持久化发送窗口，在不同渠道、进程和服务重启之间统一限制为每四秒发送一条消息。"
+      }
+    },
+    {
+      "id": "dingtalk-official-throttle-recovery",
+      "type": "fix",
+      "text": {
+        "en": "Official DingTalk error code 410100 now starts a ten-minute cooldown before retrying, while system-busy responses use bounded exponential backoff and permanent business errors stop retrying.",
+        "zh-CN": "收到钉钉官方错误码 410100 后会冷却十分钟再重试；系统繁忙响应改用有上限的指数退避，永久性业务错误则停止重试。"
+      }
+    },
+    {
+      "id": "notification-throttle-observability",
+      "type": "feature",
+      "text": {
+        "en": "Delivery records and event details now show localized throttle states, the next attempt time, and the provider error code without exposing robot credentials or raw downstream responses.",
+        "zh-CN": "推送记录与消息详情现会显示双语限流状态、下次尝试时间和渠道错误码，同时不会暴露机器人凭据或下游原始响应。"
+      }
+    }
+  ],
+  "upgrade_notes": {
+    "en": [
+      "Deploy the immutable beta-v0.11.0 image and restart the container.",
+      "The notification_rate_limits table and new delivery fields are created automatically at startup; no manual configuration change is required."
+    ],
+    "zh-CN": [
+      "部署不可变镜像 beta-v0.11.0 并重启容器。",
+      "启动时会自动创建 notification_rate_limits 表及新的推送记录字段，无需手动修改配置。"
+    ]
+  }
+}
