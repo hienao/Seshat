@@ -249,6 +249,69 @@ func TestNotificationAPIResponseValidation(t *testing.T) {
 	}
 }
 
+func TestDingTalkResponseUsesOfficialErrorSemantics(t *testing.T) {
+	adapter := dingTalkNotificationAdapter{}
+	tests := []struct {
+		name         string
+		body         string
+		wantError    bool
+		providerCode string
+		retryable    bool
+		rateLimited  bool
+	}{
+		{name: "numeric success", body: `{"errcode":0,"errmsg":"ok"}`},
+		{name: "string success", body: `{"errcode":"0","errmsg":"ok"}`},
+		{name: "official rate limit", body: `{"errcode":410100,"errmsg":"发送速度太快而限流"}`, wantError: true, providerCode: "410100", retryable: true, rateLimited: true},
+		{name: "system busy", body: `{"errcode":-1,"errmsg":"系统繁忙"}`, wantError: true, providerCode: "-1", retryable: true},
+		{name: "permanent business error", body: `{"errcode":310000,"errmsg":"sign not match"}`, wantError: true, providerCode: "310000"},
+		{name: "missing errcode", body: `{"code":0,"StatusCode":0}`, wantError: true},
+		{name: "non integer errcode", body: `{"errcode":"0 trailing"}`, wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := adapter.ValidateResponse(http.StatusOK, []byte(test.body))
+			if !test.wantError {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			var sendErr *deliveryError
+			if err == nil || !errors.As(err, &sendErr) {
+				t.Fatalf("expected delivery error, got %v", err)
+			}
+			if sendErr.providerCode != test.providerCode || sendErr.retryable != test.retryable || sendErr.rateLimited != test.rateLimited || sendErr.statusCode != http.StatusOK {
+				t.Fatalf("unexpected DingTalk error: %+v", sendErr)
+			}
+			if strings.Contains(sendErr.Error(), "sign not match") {
+				t.Fatal("DingTalk response body leaked into the persisted error")
+			}
+		})
+	}
+}
+
+func TestDingTalkRateLimitScopeUsesTokenFingerprint(t *testing.T) {
+	adapter := dingTalkNotificationAdapter{}
+	first, err := adapter.RateLimitPolicy(&model.NotificationChannel{SecretConfig: []byte(`{"token":"shared-secret-token"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := adapter.RateLimitPolicy(&model.NotificationChannel{SecretConfig: []byte(`{"webhook_url":"https://oapi.dingtalk.com/robot/send?access_token=shared-secret-token"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := adapter.RateLimitPolicy(&model.NotificationChannel{SecretConfig: []byte(`{"token":"other-token"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ScopeType != "dingtalk_robot" || first.ScopeKey != legacy.ScopeKey || first.ScopeKey == other.ScopeKey || first.MinInterval != 4*time.Second {
+		t.Fatalf("unexpected DingTalk limiter scopes: first=%+v legacy=%+v other=%+v", first, legacy, other)
+	}
+	if strings.Contains(first.ScopeKey, "shared-secret-token") || len(first.ScopeKey) != 64 {
+		t.Fatalf("DingTalk token was not safely fingerprinted: %q", first.ScopeKey)
+	}
+}
+
 func TestNotificationChannelRegistryKeepsAdaptersIndependent(t *testing.T) {
 	expected := []string{"apprise", "bark", "dingtalk", "email", "feishu", "serverchan", "telegram", "webhook", "whatsapp", "wxpusher"}
 	actual := defaultNotificationChannelRegistry.Types()

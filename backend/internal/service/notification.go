@@ -182,7 +182,7 @@ func (s *NotificationService) RetryDelivery(ownerID uint, id uint64) error {
 		return errors.New("原推送渠道已停用，请先启用后再重试")
 	}
 	now := time.Now()
-	return database.GetDB().Model(&model.NotificationDelivery{}).Where("id = ?", delivery.ID).Updates(map[string]interface{}{"status": "retrying", "attempt_count": 0, "next_attempt_at": now, "last_error": ""}).Error
+	return database.GetDB().Model(&model.NotificationDelivery{}).Where("id = ?", delivery.ID).Updates(map[string]interface{}{"status": "retrying", "attempt_count": 0, "next_attempt_at": now, "last_error": "", "last_status_code": 0, "provider_error_code": "", "defer_reason": ""}).Error
 }
 
 func (s *NotificationService) GetEventNotificationStatus(ownerID, eventID uint) (*EventNotificationStatus, error) {

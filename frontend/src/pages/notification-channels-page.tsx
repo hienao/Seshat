@@ -266,8 +266,10 @@ export function NotificationChannelsPage() {
                     <td className="whitespace-nowrap px-2 py-3 text-xs text-neutral-500">{formatDateTime(item.created_at)}</td>
                     <td className="px-2 py-3">
                       <Badge variant={item.status === 'succeeded' ? 'success' : item.status === 'failed' ? 'error' : 'outline'} size="sm">
-                        {item.status}
+                        {t(`events.notificationStates.${item.status}`, { defaultValue: item.status })}
                       </Badge>
+                      {item.next_attempt_at && item.status !== 'succeeded' && <p className="mt-1 whitespace-nowrap text-xs text-neutral-500">{t('notifications.deferredUntil', { time: formatDateTime(item.next_attempt_at) })}</p>}
+                      {item.provider_error_code && <p className="mt-1 whitespace-nowrap text-xs text-neutral-500">{t('notifications.providerCode', { code: item.provider_error_code })}</p>}
                     </td>
                     <td className="px-2 py-3">{item.integration_name}</td>
                     <td className="px-2 py-3">{item.channel_name}</td>
