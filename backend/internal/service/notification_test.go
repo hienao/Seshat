@@ -24,7 +24,7 @@ func setupNotificationTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.SystemSetting{}, &model.MediaMetadataCache{}, &model.NotificationChannel{}, &model.AppIntegration{}, &model.WebhookEvent{}, &model.IntegrationNotificationRule{}, &model.NotificationDelivery{}); err != nil {
+	if err := db.AutoMigrate(&model.SystemSetting{}, &model.MediaMetadataCache{}, &model.NotificationChannel{}, &model.AppIntegration{}, &model.WebhookEvent{}, &model.IntegrationNotificationRule{}, &model.NotificationDelivery{}, &model.NotificationRateLimit{}); err != nil {
 		t.Fatal(err)
 	}
 	database.DB = db
@@ -537,7 +537,7 @@ func TestNotificationWorkerRecoversSendingDeliveries(t *testing.T) {
 	}
 }
 
-func TestNotificationWorkerRetriesSixTimesAtTenSecondIntervals(t *testing.T) {
+func TestNotificationWorkerUsesBoundedExponentialRetryIntervals(t *testing.T) {
 	db := setupNotificationTestDB(t)
 	delivery := model.NotificationDelivery{ChannelName: "test", ChannelType: "webhook", Status: "sending", AttemptCount: maxNotificationRetries}
 	if err := db.Create(&delivery).Error; err != nil {
@@ -552,8 +552,8 @@ func TestNotificationWorkerRetriesSixTimesAtTenSecondIntervals(t *testing.T) {
 		t.Fatalf("sixth retry was not scheduled: %+v", delivery)
 	}
 	delay := delivery.NextAttemptAt.Sub(before)
-	if delay < notificationRetryInterval-time.Second || delay > notificationRetryInterval+time.Second {
-		t.Fatalf("retry delay = %v, want %v", delay, notificationRetryInterval)
+	if delay < 10*time.Minute-time.Second || delay > 10*time.Minute+time.Second {
+		t.Fatalf("retry delay = %v, want 10m", delay)
 	}
 
 	delivery.AttemptCount = maxNotificationRetries + 1
@@ -566,6 +566,51 @@ func TestNotificationWorkerRetriesSixTimesAtTenSecondIntervals(t *testing.T) {
 	}
 	if delivery.Status != "failed" || delivery.NextAttemptAt != nil {
 		t.Fatalf("delivery did not stop after six retries: %+v", delivery)
+	}
+}
+
+func TestNotificationRateLimitPersistsSlotsAndCooldown(t *testing.T) {
+	db := setupNotificationTestDB(t)
+	policy := &notificationRateLimitPolicy{ScopeType: "dingtalk_robot", ScopeKey: strings.Repeat("a", 64), MinInterval: 4 * time.Second}
+	now := time.Now().Truncate(time.Millisecond)
+	allowed, _, err := reserveNotificationSendSlotStandalone(db, policy, now)
+	if err != nil || !allowed {
+		t.Fatalf("first slot = %v, %v", allowed, err)
+	}
+	allowed, next, err := reserveNotificationSendSlotStandalone(db, policy, now.Add(time.Second))
+	if err != nil || allowed || next.Before(now.Add(4*time.Second)) {
+		t.Fatalf("second slot = %v, %v, %v", allowed, next, err)
+	}
+	cooldown := now.Add(dingTalkCooldown)
+	if err := applyNotificationRateLimitCooldown(db, policy, cooldown); err != nil {
+		t.Fatal(err)
+	}
+	allowed, next, err = reserveNotificationSendSlotStandalone(db, policy, now.Add(5*time.Second))
+	if err != nil || allowed || next.Before(cooldown) {
+		t.Fatalf("cooldown slot = %v, %v, %v", allowed, next, err)
+	}
+	var stored model.NotificationRateLimit
+	if err := db.Where("scope_type = ? AND scope_key = ?", policy.ScopeType, policy.ScopeKey).First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.CooldownUntil == nil || stored.NextAllowedAt == nil {
+		t.Fatalf("rate limit state was not persisted: %+v", stored)
+	}
+}
+
+func TestNotificationRateLimitFailureStoresProviderCodeAndCooldown(t *testing.T) {
+	db := setupNotificationTestDB(t)
+	delivery := model.NotificationDelivery{ChannelName: "DingTalk", ChannelType: "dingtalk", Status: "sending", AttemptCount: 1}
+	if err := db.Create(&delivery).Error; err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now()
+	NewNotificationWorker().failDelivery(&delivery, &deliveryError{message: "钉钉机器人触发发送频率限制", statusCode: http.StatusOK, providerCode: "410100", retryable: true, retryAfter: dingTalkCooldown, rateLimited: true})
+	if err := db.First(&delivery, delivery.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if delivery.Status != "retrying" || delivery.ProviderErrorCode != "410100" || delivery.LastStatusCode != http.StatusOK || delivery.DeferReason != "provider_rate_limited" || delivery.NextAttemptAt == nil || delivery.NextAttemptAt.Before(before.Add(dingTalkCooldown-time.Second)) {
+		t.Fatalf("unexpected rate limited delivery: %+v", delivery)
 	}
 }
 
